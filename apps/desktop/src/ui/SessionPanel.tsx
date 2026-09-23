@@ -102,22 +102,6 @@ export function SessionPanel(p: Props) {
     <>
       <header className="session-panel__header">
         <h1>{p.session.title}</h1>
-        {p.heldElsewhere && (
-          <button
-            type="button"
-            className={confirmingTakeOver ? 'btn-takeover btn-takeover--confirm' : 'btn-takeover'}
-            onClick={() => {
-              if (!confirmingTakeOver) {
-                setConfirmingTakeOver(true);
-                return;
-              }
-              setConfirmingTakeOver(false);
-              p.onTakeOver();
-            }}
-          >
-            {confirmingTakeOver ? 'Confirm: stop the other Claude' : 'Take over'}
-          </button>
-        )}
         <p>
           <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
           <span className={`state state--${state}`}>{state}</span> <code>{p.session.cwd}</code>{' '}
@@ -159,6 +143,28 @@ export function SessionPanel(p: Props) {
         <p role="alert" className="error">
           {p.notice}
         </p>
+      )}
+      {p.heldElsewhere && (
+        <div className="held-elsewhere">
+          <span>
+            Another Claude has this session open{p.heldElsewhere === 'busy' ? ' and is working in it' : ''}. Relay cannot
+            send to it until that one stops.
+          </span>
+          <button
+            type="button"
+            className={confirmingTakeOver ? 'btn-takeover btn-takeover--confirm' : 'btn-takeover'}
+            onClick={() => {
+              if (!confirmingTakeOver) {
+                setConfirmingTakeOver(true);
+                return;
+              }
+              setConfirmingTakeOver(false);
+              p.onTakeOver();
+            }}
+          >
+            {confirmingTakeOver ? 'Confirm: stop the other Claude' : 'Take over'}
+          </button>
+        </div>
       )}
       {p.devTools && (
         <form

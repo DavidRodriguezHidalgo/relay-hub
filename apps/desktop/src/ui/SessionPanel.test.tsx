@@ -323,4 +323,8 @@ describe('SessionPanel', () => {
     renderPanel({ heldElsewhere: null });
     expect(screen.queryByRole('button', { name: 'Take over' })).not.toBeInTheDocument();
   });
+  it('offers to take over even without the send box, since that is the only way through', () => {
+    renderPanel({ heldElsewhere: 'idle', devTools: false });
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
+  });
 });

@@ -124,6 +124,7 @@
   .slash-menu__hint { @apply text-muted; }
   .slash-menu__desc { @apply truncate text-[12px] text-muted; }
   .slash-menu__item--active .slash-menu__desc, .slash-menu__item--active .slash-menu__hint { @apply text-on-accent; }
+  .held-elsewhere { @apply sticky bottom-0 flex items-center gap-3 border-t border-line bg-surface px-1 py-2 text-[13px] text-muted; }
   .btn-takeover { @apply ml-2 align-middle text-[12px]; }
   .btn-takeover--confirm { @apply border-danger text-danger; }
   .dev-send { @apply relative sticky bottom-0 -mr-4 -ml-6 mt-auto border-t border-line bg-surface pr-4 pl-6 pt-3 pb-4; }
