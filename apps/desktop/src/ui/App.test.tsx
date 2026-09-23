@@ -38,6 +38,7 @@ describe('App', () => {
       listProjects: vi.fn().mockResolvedValue([{ name: 'factorial', root: '/code/factorial', sessions: 2 }]),
       createSession: vi.fn().mockResolvedValue({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' }),
       listCommands: vi.fn().mockResolvedValue([{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }]),
+      takeOver: vi.fn().mockResolvedValue([4242]),
     };
     Object.assign(window, { relay });
   });

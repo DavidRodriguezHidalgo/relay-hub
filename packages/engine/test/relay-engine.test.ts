@@ -49,7 +49,7 @@ describe('RelayEngine', () => {
     now = () => new Date('2026-09-23T00:00:00.000Z'),
     extra: {
       idleTimeoutMs?: number;
-      registry?: { foreignHolders(id: string): Promise<number[]>; openSessions?(): Promise<Record<string, 'busy' | 'idle'>> };
+      registry?: { foreignHolders(id: string): Promise<number[]>; openSessions?(): Promise<Record<string, 'busy' | 'idle'>>; release?(id: string): Promise<number[]> };
       externalPollMs?: number;
       more?: boolean;
       noPr?: boolean;
@@ -799,5 +799,27 @@ describe('RelayEngine', () => {
     await new Promise((r) => setTimeout(r, 80));
     expect(engine!.runState().external).toEqual({ "s-basic": "busy" });
     expect(events.filter((e) => e.type === "external")).toEqual([{ type: "external", external: { "s-basic": "busy" } }]);
+  });
+  it('takes a session over by stopping what holds it, and stops showing it as held', async () => {
+    const released: string[] = [];
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      externalPollMs: 60_000,
+      registry: {
+        foreignHolders: async () => (released.length > 0 ? [] : [4242]),
+        openSessions: async (): Promise<Record<string, 'busy' | 'idle'>> =>
+          released.length > 0 ? {} : { 's-basic': 'busy' },
+        release: async (id: string) => {
+          released.push(id);
+          return [4242];
+        },
+      },
+    });
+    const seen: RunnerEvent[] = [];
+    engine!.onEvent((e) => seen.push(e));
+    expect(await engine!.takeOver('s-basic')).toEqual([4242]);
+    expect(released).toEqual(['s-basic']);
+    expect(seen).toContainEqual({ type: 'external', external: {} });
+    await expect(engine!.takeOver('nope')).rejects.toThrow('Unknown session nope');
   });
 });

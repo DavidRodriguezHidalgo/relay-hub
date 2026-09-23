@@ -26,6 +26,7 @@ const api: RelayApi = {
   listProjects: () => ipcRenderer.invoke(IPC.listProjects),
   createSession: (req) => ipcRenderer.invoke(IPC.createSession, req),
   listCommands: (sessionId) => ipcRenderer.invoke(IPC.listCommands, sessionId),
+  takeOver: (sessionId) => ipcRenderer.invoke(IPC.takeOver, sessionId),
 };
 
 contextBridge.exposeInMainWorld('relay', api);

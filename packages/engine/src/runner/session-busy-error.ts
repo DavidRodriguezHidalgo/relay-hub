@@ -6,7 +6,7 @@ export class SessionBusyError extends Error {
   ) {
     super(
       holderPids.length > 0
-        ? `Session ${sessionId} is open in another Claude process (pid ${holderPids.join(', ')})`
+        ? `Session ${sessionId} is open in another Claude process (pid ${holderPids.join(', ')}). Close it there, or take it over.`
         : `Session ${sessionId} is being written by another process`,
     );
     this.name = 'SessionBusyError';

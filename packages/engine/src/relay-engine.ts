@@ -269,6 +269,20 @@ export class RelayEngine {
     return runner.send(opts.prompt, { mode: opts.mode, origin: opts.origin });
   }
 
+  /**
+   * Stops whatever Claude process holds this session, so Relay can drive it, and returns the
+   * pids stopped. The session itself is untouched: it is resumed from its transcript as usual.
+   */
+  async takeOver(sessionId: string): Promise<number[]> {
+    const session = this.listSessions().find((x) => x.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const release = this.registry.release?.bind(this.registry);
+    if (!release) throw new Error('Taking a session over is not available here');
+    const pids = await release(sessionId);
+    await this.refreshExternal();
+    return pids;
+  }
+
   orchestratorSend(prompt: string): Promise<string> {
     return this.orchestrator.send(prompt);
   }
@@ -540,17 +554,19 @@ export class RelayEngine {
   }
 
   /** Polls Claude Code's process registry so sessions busy in a terminal show as running too. */
-  private watchExternal(intervalMs: number): void {
+  private async refreshExternal(): Promise<void> {
     const read = this.registry.openSessions?.bind(this.registry);
     if (!read) return;
-    const tick = async () => {
-      const next = await read().catch(() => this.external);
-      if (JSON.stringify(next) === JSON.stringify(this.external)) return;
-      this.external = next;
-      this.publish({ type: 'external', external: next });
-    };
-    void tick();
-    this.externalTimer = setInterval(() => void tick(), intervalMs);
+    const next = await read().catch(() => this.external);
+    if (JSON.stringify(next) === JSON.stringify(this.external)) return;
+    this.external = next;
+    this.publish({ type: 'external', external: next });
+  }
+
+  private watchExternal(intervalMs: number): void {
+    if (!this.registry.openSessions) return;
+    void this.refreshExternal();
+    this.externalTimer = setInterval(() => void this.refreshExternal(), intervalMs);
     this.externalTimer.unref?.();
   }
 

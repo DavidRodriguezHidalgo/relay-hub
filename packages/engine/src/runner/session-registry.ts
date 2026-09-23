@@ -12,6 +12,8 @@ export interface SessionRegistry {
   foreignHolders(sessionId: string): Promise<number[]>;
   /** Every session held by a live Claude process Relay did not start, with that process's status. */
   openSessions?(): Promise<Record<string, 'busy' | 'idle'>>;
+  /** Stops the processes holding a session so Relay can drive it; returns the pids stopped. */
+  release?(sessionId: string): Promise<number[]>;
 }
 
 /**
@@ -29,6 +31,12 @@ export interface ClaudeSessionRegistryOptions {
   isOwnDescendant?: (pid: number) => Promise<boolean>;
   /** A live process's environment; used to recognise drivers Relay started. */
   readEnv?: (pid: number) => Promise<string>;
+  /** True for a process Relay is running inside, which must never be stopped. */
+  isOwnAncestor?: (pid: number) => Promise<boolean>;
+  terminate?: (pid: number) => void;
+  sleep?: (ms: number) => Promise<void>;
+  /** How long a stopped process is given to exit. */
+  releaseTimeoutMs?: number;
 }
 
 function processAlive(pid: number): boolean {
@@ -59,6 +67,15 @@ async function descendsFromSelf(pid: number): Promise<boolean> {
   return false;
 }
 
+async function ancestorOfSelf(pid: number): Promise<boolean> {
+  let current: number | null = process.pid;
+  for (let hops = 0; current !== null && current > 1 && hops < 16; hops += 1) {
+    current = await parentOf(current);
+    if (current === pid) return true;
+  }
+  return false;
+}
+
 async function environmentOf(pid: number): Promise<string> {
   const { stdout } = await run('ps', ['-Eww', '-p', String(pid)]);
   return stdout;
@@ -70,12 +87,51 @@ export class ClaudeSessionRegistry implements SessionRegistry {
   private readonly isAlive: (pid: number) => boolean;
   private readonly isOwnDescendant: (pid: number) => Promise<boolean>;
   private readonly readEnv: (pid: number) => Promise<string>;
+  private readonly isOwnAncestor: (pid: number) => Promise<boolean>;
+  private readonly terminate: (pid: number) => void;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly releaseTimeoutMs: number;
 
   constructor(opts: ClaudeSessionRegistryOptions = {}) {
     this.dir = opts.dir ?? join(homedir(), '.claude', 'sessions');
     this.isAlive = opts.isAlive ?? processAlive;
     this.isOwnDescendant = opts.isOwnDescendant ?? descendsFromSelf;
     this.readEnv = opts.readEnv ?? environmentOf;
+    this.isOwnAncestor = opts.isOwnAncestor ?? ancestorOfSelf;
+    this.terminate = opts.terminate ?? ((pid) => process.kill(pid, 'SIGTERM'));
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.releaseTimeoutMs = opts.releaseTimeoutMs ?? 10_000;
+  }
+
+  /**
+   * Asks the Claude processes holding a session to exit, and waits until they have.
+   *
+   * Claude Code shuts down on SIGTERM and removes its own registry entry, so the session is
+   * free afterwards. A process Relay is running inside is refused: stopping it would stop Relay.
+   */
+  async release(sessionId: string): Promise<number[]> {
+    const pids = await this.foreignHolders(sessionId);
+    for (const pid of pids) {
+      if (await this.isOwnAncestor(pid)) {
+        throw new Error(`Session ${sessionId} is held by pid ${pid}, which Relay runs inside; close it there instead`);
+      }
+    }
+    for (const pid of pids) {
+      try {
+        this.terminate(pid);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+      }
+    }
+    const step = 200;
+    for (let waited = 0; pids.some((pid) => this.isAlive(pid)); waited += step) {
+      if (waited >= this.releaseTimeoutMs) {
+        const left = pids.filter((pid) => this.isAlive(pid)).join(', ');
+        throw new Error(`Claude process ${left} did not exit; close it there instead`);
+      }
+      await this.sleep(step);
+    }
+    return pids;
   }
 
   /** A process Relay started, now or in an earlier run; never a terminal the user is using. */

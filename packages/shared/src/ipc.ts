@@ -22,6 +22,7 @@ export const IPC = {
   listProjects: 'relay:listProjects',
   createSession: 'relay:createSession',
   listCommands: 'relay:listCommands',
+  takeOver: 'relay:takeOver',
 } as const;
 
 export interface SendRequest {
@@ -51,4 +52,5 @@ export interface RelayApi {
   listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
+  takeOver(sessionId: string): Promise<number[]>;
 }

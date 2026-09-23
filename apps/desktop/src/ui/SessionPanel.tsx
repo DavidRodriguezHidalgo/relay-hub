@@ -31,6 +31,9 @@ interface Props {
   watch: PrWatch | null;
   onWatch: () => void;
   onUnwatch: (watchId: string) => void;
+  /** Set when another Claude process has this session open, so it can be taken over. */
+  heldElsewhere: 'busy' | 'idle' | null;
+  onTakeOver: () => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
   /** Commands, skills and plugins this session can be asked to run. */
@@ -42,6 +45,8 @@ interface Props {
 export function SessionPanel(p: Props) {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<DeliveryMode>('steer');
+  /** Taking over stops someone else's Claude, so it takes two presses. */
+  const [confirmingTakeOver, setConfirmingTakeOver] = useState(false);
   const [caret, setCaret] = useState(0);
   const [active, setActive] = useState(0);
   /** Escape shuts the menu for this command; it opens again only once a new one is started. */
@@ -97,6 +102,22 @@ export function SessionPanel(p: Props) {
     <>
       <header className="session-panel__header">
         <h1>{p.session.title}</h1>
+        {p.heldElsewhere && (
+          <button
+            type="button"
+            className={confirmingTakeOver ? 'btn-takeover btn-takeover--confirm' : 'btn-takeover'}
+            onClick={() => {
+              if (!confirmingTakeOver) {
+                setConfirmingTakeOver(true);
+                return;
+              }
+              setConfirmingTakeOver(false);
+              p.onTakeOver();
+            }}
+          >
+            {confirmingTakeOver ? 'Confirm: stop the other Claude' : 'Take over'}
+          </button>
+        )}
         <p>
           <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
           <span className={`state state--${state}`}>{state}</span> <code>{p.session.cwd}</code>{' '}

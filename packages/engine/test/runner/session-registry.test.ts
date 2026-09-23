@@ -87,3 +87,61 @@ describe('ClaudeSessionRegistry and Relay’s own drivers', () => {
     expect(await registry.foreignHolders('s1')).toEqual([100]);
   });
 });
+
+describe('ClaudeSessionRegistry.release', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'relay-registry-release-'));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  const write = (pid: number, sessionId: string) =>
+    writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, status: 'busy' }));
+
+  const base = { isOwnDescendant: async () => false, readEnv: async () => '', sleep: async () => undefined };
+
+  it('stops every process holding the session and waits until they are gone', async () => {
+    await write(100, 's1');
+    await write(200, 's1');
+    await write(300, 's2');
+    const stopped: number[] = [];
+    const dead = new Set<number>();
+    const registry = new ClaudeSessionRegistry({
+      ...base,
+      dir,
+      isAlive: (pid) => !dead.has(pid),
+      terminate: (pid) => {
+        stopped.push(pid);
+        dead.add(pid);
+      },
+    });
+    expect(await registry.release('s1')).toEqual([100, 200]);
+    expect(stopped).toEqual([100, 200]);
+  });
+
+  it('refuses to stop a process Relay itself is running inside', async () => {
+    await write(100, 's1');
+    const registry = new ClaudeSessionRegistry({
+      ...base,
+      dir,
+      isAlive: () => true,
+      isOwnAncestor: async (pid) => pid === 100,
+      terminate: () => {
+        throw new Error('must not be stopped');
+      },
+    });
+    await expect(registry.release('s1')).rejects.toThrow(/runs inside/);
+  });
+
+  it('gives up when a process will not exit', async () => {
+    await write(100, 's1');
+    const registry = new ClaudeSessionRegistry({
+      ...base,
+      dir,
+      isAlive: () => true,
+      terminate: () => undefined,
+      releaseTimeoutMs: 400,
+    });
+    await expect(registry.release('s1')).rejects.toThrow(/did not exit/);
+  });
+});

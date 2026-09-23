@@ -137,6 +137,13 @@ export function App() {
                 .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
+            heldElsewhere={run.external[selected.id] ?? null}
+            onTakeOver={() =>
+              void window.relay
+                .takeOver(selected.id)
+                .then(() => setSendError(null))
+                .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
+            }
             notice={sendError}
             commands={commands}
             dot={dotState(selected.id, run.states, run.external)}

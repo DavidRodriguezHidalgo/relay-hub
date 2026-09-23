@@ -21,7 +21,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[],
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [], heldElsewhere: null, onTakeOver: vi.fn() as Invocable[],
 };
 
 const commands = [
@@ -309,5 +309,18 @@ describe('SessionPanel', () => {
     await userEvent.keyboard('/rev{Enter}');
     expect(onSend).not.toHaveBeenCalled();
     expect(box).toHaveValue('/review ');
+  });
+  it('offers to take over a session another Claude has open, and only acts on the second press', async () => {
+    const onTakeOver = vi.fn();
+    renderPanel({ heldElsewhere: 'busy', onTakeOver });
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(onTakeOver).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /^Confirm/ }));
+    expect(onTakeOver).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing about taking over when nobody else has the session', () => {
+    renderPanel({ heldElsewhere: null });
+    expect(screen.queryByRole('button', { name: 'Take over' })).not.toBeInTheDocument();
   });
 });
