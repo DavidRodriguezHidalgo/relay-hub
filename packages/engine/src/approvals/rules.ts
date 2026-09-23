@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import type { ApprovalReason } from '@relay/shared';
+import { repoRootOf } from './repo-root';
 
 export type Verdict =
   | { outcome: 'allow' }
@@ -237,6 +238,7 @@ export function classifyToolUse(
   input: Record<string, unknown>,
   cwd: string,
   blockedPath?: string,
+  repoRoot: (path: string) => string | null = repoRootOf,
 ): Verdict {
   if (blockedPath) {
     return { outcome: 'ask', reason: 'blocked-path', summary: blockedPath, patternKey: `${toolName} blocked ${dirname(blockedPath)}` };
@@ -253,7 +255,7 @@ export function classifyToolUse(
       for (const token of tokens) {
         const p = pathOf(token, cwd);
         if (p && outsideCwd(p, cwd)) {
-          return { outcome: 'ask', reason: 'outside-cwd', summary: command, patternKey: `Bash path ${dirname(p)}` };
+          return { outcome: 'ask', reason: 'outside-cwd', summary: command, patternKey: `Bash path ${repoRoot(p) ?? dirname(p)}` };
         }
       }
     }
@@ -266,7 +268,7 @@ export function classifyToolUse(
       if (typeof raw !== 'string') continue;
       const p = resolve(cwd, raw);
       if (outsideCwd(p, cwd)) {
-        return { outcome: 'ask', reason: 'outside-cwd', summary: raw, patternKey: `${toolName} ${dirname(p)}` };
+        return { outcome: 'ask', reason: 'outside-cwd', summary: raw, patternKey: `${toolName} ${repoRoot(p) ?? dirname(p)}` };
       }
     }
   }

@@ -49,3 +49,41 @@ describe('ClaudeSessionRegistry', () => {
     expect(await registry.openSessions()).toEqual({ s1: "busy", s2: "idle" });
   });
 });
+
+describe('ClaudeSessionRegistry and Relay’s own drivers', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'relay-registry-own-'));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  const write = (pid: number, sessionId: string) =>
+    writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, status: 'idle' }));
+
+  it('does not count a driver Relay started as a foreign holder, even one left by an earlier run', async () => {
+    await write(100, 's1'); // a terminal
+    await write(200, 's1'); // a driver this Relay started: reachable by ancestry
+    await write(300, 's1'); // a driver an EARLIER Relay left behind: only the env marker identifies it
+    const registry = new ClaudeSessionRegistry({
+      dir,
+      isAlive: () => true,
+      isOwnDescendant: async (pid) => pid === 200,
+      readEnv: async (pid) => (pid === 300 ? 'PATH=/usr/bin RELAY_HUB_DRIVER=1\n' : 'PATH=/usr/bin\n'),
+    });
+    expect(await registry.foreignHolders('s1')).toEqual([100]);
+    expect(await registry.openSessions()).toEqual({ s1: 'idle' });
+  });
+
+  it('treats a process whose environment cannot be read as somebody else’s', async () => {
+    await write(100, 's1');
+    const registry = new ClaudeSessionRegistry({
+      dir,
+      isAlive: () => true,
+      isOwnDescendant: async () => false,
+      readEnv: async () => {
+        throw new Error('not permitted');
+      },
+    });
+    expect(await registry.foreignHolders('s1')).toEqual([100]);
+  });
+});

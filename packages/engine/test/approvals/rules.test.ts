@@ -121,3 +121,30 @@ describe('classifyToolUse', () => {
     });
   });
 });
+
+describe('classifyToolUse pattern keys', () => {
+  // one approval should cover a project, not each of its folders in turn
+  const inRepo = (p: string) => (p.startsWith('/work/relay-hub') ? '/work/relay-hub' : null);
+
+  it('keys an out-of-cwd command on the repository it touches, so subfolders do not ask again', () => {
+    const key = (command: string) =>
+      classifyToolUse('Bash', { command }, '/work/other', undefined, inRepo);
+    const first = key('pnpm --dir /work/relay-hub/apps/desktop test');
+    expect(first).toMatchObject({ outcome: 'ask', reason: 'outside-cwd', patternKey: 'Bash path /work/relay-hub' });
+    expect(key('cat /work/relay-hub/packages/engine/src/index.ts')).toMatchObject({
+      patternKey: 'Bash path /work/relay-hub',
+    });
+  });
+
+  it('keys a file outside the cwd on its repository too', () => {
+    expect(
+      classifyToolUse('Edit', { file_path: '/work/relay-hub/packages/shared/src/ipc.ts' }, '/work/other', undefined, inRepo),
+    ).toMatchObject({ outcome: 'ask', patternKey: 'Edit /work/relay-hub' });
+  });
+
+  it('falls back to the directory when the path is in no repository', () => {
+    expect(classifyToolUse('Bash', { command: 'cat /etc/hosts/x/y' }, '/work/other', undefined, () => null)).toMatchObject({
+      patternKey: 'Bash path /etc/hosts/x',
+    });
+  });
+});

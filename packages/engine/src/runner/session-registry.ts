@@ -14,12 +14,21 @@ export interface SessionRegistry {
   openSessions?(): Promise<Record<string, 'busy' | 'idle'>>;
 }
 
+/**
+ * Set in every process Relay starts a session from, and inherited by the agent it spawns.
+ * A driver left behind by an earlier Relay is no longer reachable by parentage, so this is
+ * what still identifies it as ours rather than as a terminal holding the session.
+ */
+export const RELAY_DRIVER_ENV = 'RELAY_HUB_DRIVER';
+
 export interface ClaudeSessionRegistryOptions {
   /** Claude Code writes one `<pid>.json` per running process here. */
   dir?: string;
   isAlive?: (pid: number) => boolean;
   /** True for processes Relay spawned (its SDK children). */
   isOwnDescendant?: (pid: number) => Promise<boolean>;
+  /** A live process's environment; used to recognise drivers Relay started. */
+  readEnv?: (pid: number) => Promise<string>;
 }
 
 function processAlive(pid: number): boolean {
@@ -50,16 +59,33 @@ async function descendsFromSelf(pid: number): Promise<boolean> {
   return false;
 }
 
+async function environmentOf(pid: number): Promise<string> {
+  const { stdout } = await run('ps', ['-Eww', '-p', String(pid)]);
+  return stdout;
+}
+
 /** Reads Claude Code's live-process registry (`~/.claude/sessions`). */
 export class ClaudeSessionRegistry implements SessionRegistry {
   private readonly dir: string;
   private readonly isAlive: (pid: number) => boolean;
   private readonly isOwnDescendant: (pid: number) => Promise<boolean>;
+  private readonly readEnv: (pid: number) => Promise<string>;
 
   constructor(opts: ClaudeSessionRegistryOptions = {}) {
     this.dir = opts.dir ?? join(homedir(), '.claude', 'sessions');
     this.isAlive = opts.isAlive ?? processAlive;
     this.isOwnDescendant = opts.isOwnDescendant ?? descendsFromSelf;
+    this.readEnv = opts.readEnv ?? environmentOf;
+  }
+
+  /** A process Relay started, now or in an earlier run; never a terminal the user is using. */
+  private async isRelayDriver(pid: number): Promise<boolean> {
+    try {
+      return (await this.readEnv(pid)).includes(`${RELAY_DRIVER_ENV}=`);
+    } catch {
+      // an environment we cannot read belongs to somebody else as far as we know
+      return false;
+    }
   }
 
   async openSessions(): Promise<Record<string, 'busy' | 'idle'>> {
@@ -93,6 +119,7 @@ export class ClaudeSessionRegistry implements SessionRegistry {
       }
       if (typeof entry.pid !== 'number') continue;
       if (!this.isAlive(entry.pid) || (await this.isOwnDescendant(entry.pid))) continue;
+      if (await this.isRelayDriver(entry.pid)) continue;
       found.push({ ...entry, pid: entry.pid });
     }
     return found;
