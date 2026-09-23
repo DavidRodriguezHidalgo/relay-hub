@@ -41,6 +41,7 @@ async function start(): Promise<void> {
   engine = await RelayEngine.start({
     projectsDir: process.env.RELAY_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects'),
     dbPath: join(app.getPath('userData'), 'relay.db'),
+    orchestratorDir: join(app.getPath('userData'), 'orchestrator'),
   });
   engine.onError((err) => console.error('[relay] indexing problem:', err.message));
   registerEngineIpc(engine);

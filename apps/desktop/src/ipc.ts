@@ -24,6 +24,9 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.interrupt, (id: string) => engine.interrupt(id));
   handle(IPC.decide, (id: string, decision: ApprovalDecision) => engine.decide(id, decision));
   handle(IPC.runState, () => engine.runState());
+  handle(IPC.orchestratorSend, (prompt: string) => engine.orchestratorSend(prompt));
+  handle(IPC.orchestratorInterrupt, () => engine.orchestratorInterrupt());
+  handle(IPC.orchestratorHistory, () => engine.orchestratorHistory());
 
   const broadcast = (channel: string, payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload);
@@ -32,7 +35,17 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     engine.onSessionsChanged((sessions) => broadcast(IPC.sessionsChanged, sessions)),
     engine.onEvent((event) => broadcast(IPC.runnerEvent, event)),
   ];
-  const channels = [IPC.listSessions, IPC.getTranscript, IPC.send, IPC.interrupt, IPC.decide, IPC.runState];
+  const channels = [
+    IPC.listSessions,
+    IPC.getTranscript,
+    IPC.send,
+    IPC.interrupt,
+    IPC.decide,
+    IPC.runState,
+    IPC.orchestratorSend,
+    IPC.orchestratorInterrupt,
+    IPC.orchestratorHistory,
+  ];
   return () => {
     for (const u of unsubs) u();
     for (const c of channels) ipcMain.removeHandler(c);
