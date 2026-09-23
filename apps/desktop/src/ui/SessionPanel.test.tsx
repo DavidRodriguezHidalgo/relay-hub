@@ -42,7 +42,11 @@ describe('SessionPanel', () => {
     expect(screen.getByText('orchestrator')).toBeInTheDocument();
   });
 
-  it('renders pending approvals with three decisions', async () => {
+  it.each([
+    ['Allow once', { kind: 'allow-once' }],
+    ['Deny', { kind: 'deny' }],
+    ['Allow this kind for this run', { kind: 'allow-pattern' }],
+  ])('a pending approval offers "%s"', async (label, decision) => {
     const onDecide = vi.fn();
     render(
       <SessionPanel
@@ -55,14 +59,8 @@ describe('SessionPanel', () => {
       />,
     );
     expect(screen.getByText('git push --force')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Allow once' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Deny' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Allow this kind for this run' }));
-    expect(onDecide.mock.calls).toEqual([
-      ['ap1', { kind: 'allow-once' }],
-      ['ap1', { kind: 'deny' }],
-      ['ap1', { kind: 'allow-pattern' }],
-    ]);
+    await userEvent.click(screen.getByRole('button', { name: label }));
+    expect(onDecide.mock.calls).toEqual([['ap1', decision]]);
   });
 
   it('dev send box sends with the chosen mode and can interrupt', async () => {
@@ -131,5 +129,13 @@ describe('SessionPanel', () => {
     expect(screen.queryByRole('button', { name: 'Watch PR' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Stop watching' }));
     expect(onUnwatch).toHaveBeenCalledWith('w1');
+  });
+
+  it("an approval card decides once, even when double-clicked", async () => {
+    const onDecide = vi.fn();
+    render(<SessionPanel {...base} onDecide={onDecide} entries={[]} liveEntries={[]} state={{ state: "waiting-approval", error: null }} approvals={[approval]} />);
+    await userEvent.dblClick(screen.getByRole("button", { name: "Allow once" }));
+    expect(onDecide).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
   });
 });

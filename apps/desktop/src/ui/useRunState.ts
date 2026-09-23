@@ -14,9 +14,28 @@ export interface RunView {
 export function useRunState(): RunView {
   const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' } });
   useEffect(() => {
-    void window.relay.runState().then((s) => setView((v) => ({ ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns, watches: s.watches, gh: s.gh })));
+    // events that arrive before the snapshot are replayed on top of it, so the snapshot never undoes them
+    let early: RunnerEvent[] | null = [];
+    void window.relay.runState().then((s) => {
+      const replay = early ?? [];
+      early = null;
+      setView((v) =>
+        replay.reduce(apply, { ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns, watches: s.watches, gh: s.gh }),
+      );
+    });
     return window.relay.onRunnerEvent((event: RunnerEvent) => {
-      setView((v) => {
+      early?.push(event);
+      setView((v) => apply(v, event));
+    });
+  }, []);
+  return view;
+}
+
+/** Live entries kept per session; the transcript file holds the full history. */
+const LIVE_MAX = 500;
+
+function apply(v: RunView, event: RunnerEvent): RunView {
+      {
         switch (event.type) {
           case 'state':
             return { ...v, states: { ...v.states, [event.sessionId]: { state: event.state, error: event.error } } };
@@ -25,7 +44,7 @@ export function useRunState(): RunView {
               ...v,
               liveEntries: {
                 ...v.liveEntries,
-                [event.sessionId]: [...(v.liveEntries[event.sessionId] ?? []), event.entry],
+                [event.sessionId]: [...(v.liveEntries[event.sessionId] ?? []), event.entry].slice(-LIVE_MAX),
               },
             };
           case 'approval':
@@ -45,8 +64,5 @@ export function useRunState(): RunView {
             return { ...v, bulkRuns: [event.run, ...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };
           }
         }
-      });
-    });
-  }, []);
-  return view;
+      }
 }

@@ -34,6 +34,15 @@ const PAIRS: [fg: string, bg: string][] = [
   ['on-accent', 'accent'],
 ];
 
+/** text-X / bg-Y used together in one app.css rule: those pairs must pass too. */
+const APP = readFileSync(fileURLToPath(new URL('./app.css', import.meta.url)), 'utf8');
+const TOKEN: Record<string, string> = { fg: 'text', 'accent-fg': 'accent-text' };
+const usedPairs: [string, string][] = APP.split('\n').flatMap((line) => {
+  const fgs = [...line.matchAll(/(?<![\w:-])text-(fg|muted|accent-fg|on-accent|danger|success|waiting|running)\b/g)].map((m) => TOKEN[m[1]!] ?? m[1]!);
+  const bgs = [...line.matchAll(/(?<![\w:-])bg-(bg|surface-2|surface|accent)\b/g)].map((m) => m[1]!);
+  return fgs.flatMap((fg) => bgs.map((bg) => [fg, bg] as [string, string]));
+});
+
 describe.each([
   ['dark', ':root'],
   ['light', '@media (prefers-color-scheme: light)'],
@@ -44,7 +53,11 @@ describe.each([
     expect(contrast(t['focus']!, t[bg]!)).toBeGreaterThanOrEqual(3);
   });
 
-  it.each(PAIRS)('%s on %s reaches WCAG AA (4.5:1)', (fg, bg) => {
+  it('finds the pairs app.css actually uses', () => {
+    expect(usedPairs.length).toBeGreaterThan(3);
+  });
+
+  it.each([...PAIRS, ...usedPairs])('%s on %s reaches WCAG AA (4.5:1)', (fg, bg) => {
     expect(t[fg], `missing --${fg}`).toBeDefined();
     expect(t[bg], `missing --${bg}`).toBeDefined();
     expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);

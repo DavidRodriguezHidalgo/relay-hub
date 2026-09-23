@@ -39,7 +39,11 @@
 }
 
 @layer components {
-  .btn-primary { @apply border-accent bg-accent font-semibold text-on-accent hover:brightness-95; }
+  /* disabled: a readable muted button, not a dimmed yellow one */
+  .btn-primary {
+    @apply border-accent bg-accent font-semibold text-on-accent hover:brightness-95
+      disabled:border-line disabled:bg-surface-2 disabled:text-muted disabled:opacity-100 disabled:hover:brightness-100;
+  }
 
   .app { @apply grid h-screen grid-cols-[300px_1fr_440px] bg-bg; }
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-10 pb-2; }
@@ -83,8 +87,9 @@
   .state--done, .state--finished { @apply border-success text-success; }
   .dot { @apply mr-1.5 inline-block size-2 rounded-full bg-line align-middle; }
   .dot--running { @apply bg-running; }
-  .dot--waiting-approval { @apply bg-waiting; }
-  .dot--error { @apply bg-danger; }
+  /* shapes as well as colours: waiting is a ring, error a square */
+  .dot--waiting-approval { @apply bg-transparent ring-2 ring-waiting ring-inset; }
+  .dot--error { @apply rounded-[1px] bg-danger; }
 
   .approval { @apply mb-2.5 rounded-lg border border-waiting bg-surface-2 px-3 py-2; }
   .approval__reason { @apply mb-1 font-semibold text-waiting; }

@@ -138,6 +138,42 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Watch PR' })).toBeInTheDocument();
   });
 
+  it('an event that arrives before the initial snapshot is not overwritten by it', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    let resolveSnapshot!: (v: unknown) => void;
+    relay.runState.mockReturnValue(new Promise((r) => (resolveSnapshot = r)));
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    await act(async () => {
+      emit!({ type: 'state', sessionId: 'a', state: 'running', error: null });
+    });
+    await act(async () => {
+      resolveSnapshot({ states: { a: { state: 'idle', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } });
+    });
+    expect(screen.getByLabelText('Session panel')).toHaveTextContent('running');
+  });
+
+  it('keeps at most 500 live entries per session', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    await act(async () => {
+      for (let i = 0; i < 520; i += 1) {
+        emit!({ type: 'entry', sessionId: 'a', entry: { uuid: 'l' + i, role: 'assistant', timestamp: '2026-09-23T00:00:00.000Z', isSidechain: false, isMeta: false, blocks: [{ kind: 'text', text: 'line ' + i }], origin: 'user' } });
+      }
+    });
+    expect(screen.queryByText('line 0')).not.toBeInTheDocument();
+    expect(screen.getByText('line 519')).toBeInTheDocument();
+  });
+
   it('re-fetches the transcript only when the selected session itself changed', async () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));

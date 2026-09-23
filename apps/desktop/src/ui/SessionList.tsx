@@ -2,6 +2,13 @@ import { useState } from 'react';
 import type { RunState, SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
 
+const DOT_LABEL: Record<string, string> = {
+  idle: 'idle',
+  running: 'running',
+  'waiting-approval': 'waiting for approval',
+  error: 'error',
+};
+
 interface Props {
   sessions: SessionSummary[];
   selectedId: string | null;
@@ -44,7 +51,10 @@ export function SessionList({ sessions, selectedId, onSelect, states }: Props) {
                   onClick={() => onSelect(s.id)}
                 >
                   <span className="session-row__title">
-                    <span className={`dot dot--${states?.[s.id]?.state ?? 'idle'}`} />
+                    <span
+                      className={`dot dot--${states?.[s.id]?.state ?? 'idle'}`}
+                      aria-label={DOT_LABEL[states?.[s.id]?.state ?? 'idle']}
+                    />
                     {s.title}
                   </span>
                   <span className="session-row__meta">

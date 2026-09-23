@@ -31,4 +31,13 @@ describe('SessionList', () => {
     await userEvent.click(screen.getByText('Mileage'));
     expect(onSelect).toHaveBeenCalledWith('a');
   });
+
+  it("waiting and error look different in shape, not only colour", () => {
+    const { container } = render(
+      <SessionList sessions={[s({ id: "w", title: "W" }), s({ id: "e", title: "E" })]} selectedId={null} onSelect={vi.fn()}
+        states={{ w: { state: "waiting-approval", error: null }, e: { state: "error", error: "x" } }} />,
+    );
+    expect(container.querySelector(".dot--waiting-approval")?.getAttribute("aria-label")).toBe("waiting for approval");
+    expect(container.querySelector(".dot--error")?.getAttribute("aria-label")).toBe("error");
+  });
 });

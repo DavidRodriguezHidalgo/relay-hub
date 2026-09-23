@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ApprovalDecision, PendingApproval } from '@relay/shared';
 
 interface Props {
@@ -12,6 +13,13 @@ const REASONS: Record<PendingApproval['reason'], string> = {
 };
 
 export function ApprovalCard({ approval, onDecide }: Props) {
+  /** One decision per approval: a second click would be refused by the engine anyway. */
+  const [decided, setDecided] = useState(false);
+  const decide = (d: ApprovalDecision) => {
+    if (decided) return;
+    setDecided(true);
+    onDecide(approval.id, d);
+  };
   return (
     <div className="approval" role="group" aria-label="Approval">
       <div className="approval__reason">{REASONS[approval.reason]}</div>
@@ -20,13 +28,13 @@ export function ApprovalCard({ approval, onDecide }: Props) {
         {approval.toolName} · {approval.cwd}
       </div>
       <div className="approval__actions">
-        <button type="button" className="btn-primary" onClick={() => onDecide(approval.id, { kind: 'allow-once' })}>
+        <button type="button" className="btn-primary" disabled={decided} onClick={() => decide({ kind: 'allow-once' })}>
           Allow once
         </button>
-        <button type="button" onClick={() => onDecide(approval.id, { kind: 'deny' })}>
+        <button type="button" disabled={decided} onClick={() => decide({ kind: 'deny' })}>
           Deny
         </button>
-        <button type="button" onClick={() => onDecide(approval.id, { kind: 'allow-pattern' })}>
+        <button type="button" disabled={decided} onClick={() => decide({ kind: 'allow-pattern' })}>
           Allow this kind for this run
         </button>
       </div>
