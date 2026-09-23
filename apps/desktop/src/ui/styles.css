@@ -15,3 +15,14 @@ body { margin: 0; }
 .orchestrator, .session-panel { overflow: auto; padding: 40px 16px 16px; }
 .session-panel { border-left: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
 .placeholder { opacity: .5; }
+.transcript { list-style: none; margin: 0; padding: 0; }
+.entry { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; }
+.entry--user { background: color-mix(in srgb, currentColor 6%, transparent); }
+.entry--sidechain { opacity: .6; }
+.entry header { display: flex; justify-content: space-between; font-size: 11px; opacity: .6; margin-bottom: 4px; }
+.block-text { white-space: pre-wrap; margin: 0 0 6px; }
+.block-tool { font-family: ui-monospace, monospace; font-size: 12px; opacity: .8; }
+.block-result summary { font-family: ui-monospace, monospace; font-size: 12px; cursor: pointer; }
+.block-result pre { font-size: 12px; max-height: 240px; overflow: auto; }
+.block-result--error summary { color: #c0392b; }
+.session-panel__header h1 { font-size: 15px; margin: 0 0 4px; }
