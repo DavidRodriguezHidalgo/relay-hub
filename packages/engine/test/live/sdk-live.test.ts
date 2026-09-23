@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { copyFile, mkdir, mkdtemp, readdir, rm, utimes } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { RunnerEvent } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type RunnerEvent } from '@relay/shared';
 import { RelayEngine } from '../../src/relay-engine';
 
 /**
@@ -108,4 +108,24 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
     await waitFor(idle);
     expect(events.some((e) => e.type === 'approval-resolved')).toBe(true);
   }, 150_000);
+
+  it('the orchestrator finds the scratch session, sends to it and reports the turn end', async () => {
+    events.length = 0;
+    await engine.orchestratorSend(
+      'Send the session in repo relay-scratch this instruction: "Reply with exactly the word: relayed". Do not ask me to confirm.',
+    );
+    const said = (id: string, word: string) =>
+      events.some(
+        (e) =>
+          e.type === 'entry' &&
+          e.sessionId === id &&
+          e.entry.role === 'assistant' &&
+          e.entry.blocks.some((b) => b.kind === 'text' && b.text.toLowerCase().includes(word)),
+      );
+    await waitFor(() => said(sessionId, 'relayed'), 180_000);
+    await waitFor(
+      () => events.some((e) => e.type === 'entry' && e.sessionId === ORCHESTRATOR_KEY && e.entry.origin === 'watch:turn-end'),
+      180_000,
+    );
+  }, 600_000);
 });
