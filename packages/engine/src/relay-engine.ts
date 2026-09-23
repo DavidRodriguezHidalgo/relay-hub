@@ -151,6 +151,11 @@ export class RelayEngine {
           this.refuseRelayOnly();
           return this.watchCreate(sessionId);
         },
+        listProjects: () => this.listProjects(),
+        createSession: async (req) => {
+          this.refuseRelayOnly();
+          return this.createSession({ ...req, origin: 'orchestrator' });
+        },
         deleteWatch: async (sessionId) => {
           const w = this.watcher.forSession(sessionId);
           if (!w) throw new Error('Not watching a PR for that session');

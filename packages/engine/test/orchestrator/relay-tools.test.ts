@@ -32,6 +32,8 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
       id: 'w1', sessionId: id, repo: 'o/r', prNumber: 7, prUrl: 'u', active: true, createdAt: 'x', lastPolledAt: 'x', lastError: null,
     })),
     deleteWatch: vi.fn(async () => undefined),
+    listProjects: vi.fn(async () => [{ name: 'factorial', root: '/code/factorial', sessions: 3 }]),
+    createSession: vi.fn(async () => ({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' })),
     ...over,
   };
 }
@@ -45,7 +47,7 @@ describe('relay tools', () => {
   it('exposes exactly the M3 tools', () => {
     expect(createRelayTools(deps()).map((t) => t.name)).toEqual([
       'list_sessions', 'get_session', 'send_to_session', 'interrupt_session', 'propose_bulk_action',
-      'list_prs', 'create_watch', 'delete_watch',
+      'list_prs', 'create_watch', 'delete_watch', 'list_projects', 'create_session',
     ]);
   });
 
@@ -149,5 +151,19 @@ describe('relay tools', () => {
     expect(await call(bad, 'create_watch', { id: 'a' })).toEqual({
       text: 'No pull request found for session "A" (branch none)', isError: true,
     });
+  });
+
+  it('list_projects and create_session call through; failures are tool errors', async () => {
+    const d = deps();
+    expect(JSON.parse((await call(d, 'list_projects', {})).text)).toEqual([{ name: 'factorial', root: '/code/factorial', sessions: 3 }]);
+    const r = await call(d, 'create_session', { project: 'factorial', branch: 'feat/x', prompt: 'Add tests' });
+    expect(d.createSession).toHaveBeenCalledWith({ project: 'factorial', branch: 'feat/x', prompt: 'Add tests' });
+    expect(JSON.parse(r.text)).toEqual({ created: true, sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' });
+    const bad = deps({
+      createSession: async () => {
+        throw new Error('The branch feat/x already exists; pick another name or use its worktree');
+      },
+    });
+    expect(await call(bad, 'create_session', { project: 'factorial', branch: 'feat/x', prompt: 'x' })).toMatchObject({ isError: true });
   });
 });

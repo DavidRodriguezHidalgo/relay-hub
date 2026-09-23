@@ -18,6 +18,8 @@ export interface RelayToolDeps {
   createWatch(sessionId: string): Promise<PrWatch>;
   /** By session id: stops that session's active watch. */
   deleteWatch(sessionId: string): Promise<void>;
+  listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
+  createSession(req: { project: string; branch?: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
 }
 
 /** One of the user's open PRs, joined to the session working on its branch. */
@@ -233,6 +235,40 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     },
   };
 
+  const listProjects: AgentTool<Record<string, never>> = {
+    name: 'list_projects',
+    description: 'Repositories the user has sessions in: name, root path and how many sessions.',
+    input: {},
+    handler: async () => {
+      try {
+        return ok(await deps.listProjects());
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
+  const createSession: AgentTool<{
+    project: z.ZodString;
+    branch: z.ZodOptional<z.ZodString>;
+    prompt: z.ZodString;
+  }> = {
+    name: 'create_session',
+    description:
+      'Start a new Claude session. project: a name from list_projects or an absolute directory. ' +
+      'branch: a new branch to create a fresh git worktree for (normal case); without it the session starts ' +
+      'in the project directory itself. prompt: its first instruction, complete on its own.',
+    input: { project: z.string(), branch: z.string().optional(), prompt: z.string() },
+    handler: async ({ project, branch, prompt }) => {
+      try {
+        const created = await deps.createSession({ project, ...(branch ? { branch } : {}), prompt });
+        return ok({ created: true, ...created });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
   return [
     listSessions,
     getSession,
@@ -242,5 +278,7 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     listPrs,
     createWatch,
     deleteWatch,
+    listProjects,
+    createSession,
   ] as AgentTool[];
 }
