@@ -47,7 +47,11 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
     await copyFile(join(source, files[0]!), copy);
     const old = new Date(Date.now() - 60_000);
     await utimes(copy, old, old);
-    engine = await RelayEngine.start({ projectsDir: join(root, 'projects'), dbPath: join(root, 'relay.db') });
+    engine = await RelayEngine.start({
+      projectsDir: join(root, 'projects'),
+      dbPath: join(root, 'relay.db'),
+      orchestratorDir: join(root, 'orch'),
+    });
     engine.onEvent((e) => events.push(e));
     sessionId = engine.listSessions()[0]!.id;
   }, 60_000);

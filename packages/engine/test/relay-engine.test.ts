@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunnerEvent } from '@relay/shared';
 import { RelayEngine } from '../src/relay-engine';
+import type { AgentClient } from '../src/runner/agent-client';
 import { SessionBusyError } from '../src/runner/session-busy-error';
 import { FakeAgentClient, tick } from './runner/fake-agent-client';
 
@@ -20,7 +21,7 @@ describe('RelayEngine', () => {
   });
 
   async function startWithBasic(
-    client: FakeAgentClient,
+    client: AgentClient,
     now = () => new Date('2026-09-23T00:00:00.000Z'),
     extra: { idleTimeoutMs?: number; registry?: { foreignHolders(id: string): Promise<number[]> } } = {},
   ) {
@@ -39,6 +40,7 @@ describe('RelayEngine', () => {
       git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
       agent: client,
       now,
+      orchestratorDir: join(root, 'orch'),
       ...extra,
     });
     return { cwd, file };
@@ -52,6 +54,7 @@ describe('RelayEngine', () => {
       projectsDir: join(root, 'projects'),
       dbPath: join(root, 'relay.db'),
       git: { inspect: async () => ({ branch: null, repo: null }) },
+      orchestratorDir: join(root, 'orch'),
     });
     expect(engine.listSessions().map((s) => s.id)).toEqual(['s-noprompt']);
     expect(await engine.getTranscript('s-noprompt')).toHaveLength(2);
@@ -174,5 +177,61 @@ describe('RelayEngine', () => {
     await engine!.close();
     expect(client.interrupts).toBe(1);
     engine = null;
+  });
+
+  it("hides the orchestrator's own sessions from the list and from send", async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const orchDir = join(root, 'orch');
+    const own = join(root, 'projects', 'orch-proj');
+    await mkdir(own, { recursive: true });
+    const src = await readFile(fixture('basic.jsonl'), 'utf8');
+    await writeFile(join(own, 'o-1.jsonl'), src.replaceAll('/repo/wt-a', orchDir).replaceAll('s-basic', 'o-1'));
+    await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
+    expect(engine!.listSessions().map((x) => x.id)).toEqual(['s-basic']);
+    await expect(
+      engine!.send({ sessionId: 'o-1', prompt: 'x', mode: 'steer', origin: 'user' }),
+    ).rejects.toThrow(/unknown session/i);
+  });
+
+  it('routes orchestrator messages and publishes its events under the orchestrator key', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    await engine!.orchestratorSend('what is running?');
+    await tick();
+    expect(client.starts[0]).toMatchObject({ sessionId: null, cwd: join(root, 'orch'), profile: { kind: 'orchestrator' } });
+    expect(events[0]).toMatchObject({ type: 'entry', sessionId: 'orchestrator', entry: { role: 'user' } });
+    expect(await engine!.orchestratorHistory()).toEqual([]);
+  });
+
+  it('relays the end of a turn the orchestrator started, and only those', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    await startWithBasic(router);
+    await engine!.orchestratorSend('tell s-basic to add tests');
+    await tick();
+    const r = await orchClient.callTool('send_to_session', { id: 's-basic', prompt: 'add tests' });
+    expect(r.isError).toBeFalsy();
+    await tick();
+    sessionClient.assistant('a1', 'Added 3 tests.');
+    sessionClient.result();
+    await tick();
+    const relayed = orchClient.received.filter((m) => m.origin === 'watch:turn-end');
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0]).toMatchObject({ priority: 'next' });
+    expect(relayed[0]!.text).toBe(
+      '[turn-end] session "Add tests for the zero-rate case" (s-basic, feat/a) finished. Last reply: Added 3 tests.',
+    );
+    // a user dev-box send to the same session does not wake the orchestrator
+    await engine!.send({ sessionId: 's-basic', prompt: 'more', mode: 'steer', origin: 'user' });
+    await tick();
+    sessionClient.result();
+    await tick();
+    expect(orchClient.received.filter((m) => m.origin === 'watch:turn-end')).toHaveLength(1);
   });
 });
