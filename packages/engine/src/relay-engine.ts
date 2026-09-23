@@ -279,6 +279,7 @@ export class RelayEngine {
     const release = this.registry.release?.bind(this.registry);
     if (!release) throw new Error('Taking a session over is not available here');
     const pids = await release(sessionId);
+    this.takenOverAt.set(sessionId, this.now().getTime());
     await this.refreshExternal();
     return pids;
   }
@@ -511,7 +512,8 @@ export class RelayEngine {
     if (holders.length > 0) throw new SessionBusyError(sessionId, holders);
     const { mtimeMs } = await stat(session.filePath);
     const recent = this.now().getTime() - mtimeMs < BUSY_WINDOW_MS;
-    if (recent && mtimeMs > ownWritesUntil) throw new SessionBusyError(sessionId);
+    const tookOver = this.takenOverAt.get(sessionId) ?? 0;
+    if (recent && mtimeMs > ownWritesUntil && mtimeMs > tookOver) throw new SessionBusyError(sessionId);
   }
 
   private scheduleIdleClose(sessionId: string, state: SessionRunner['state']): void {
@@ -554,6 +556,9 @@ export class RelayEngine {
   }
 
   /** Polls Claude Code's process registry so sessions busy in a terminal show as running too. */
+  /** When each session was last taken over; writes older than that were the stopped process's. */
+  private readonly takenOverAt = new Map<string, number>();
+
   private async refreshExternal(): Promise<void> {
     const read = this.registry.openSessions?.bind(this.registry);
     if (!read) return;

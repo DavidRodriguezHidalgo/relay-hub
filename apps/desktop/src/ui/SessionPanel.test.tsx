@@ -327,4 +327,12 @@ describe('SessionPanel', () => {
     renderPanel({ heldElsewhere: 'idle', devTools: false });
     expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
   });
+  it('says it is working while the session runs, and stops when it is idle', () => {
+    const { rerender } = render(
+      <SessionPanel {...base} entries={[]} liveEntries={[]} approvals={[]} state={{ state: 'running', error: null }} />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('still thinking');
+    rerender(<SessionPanel {...base} entries={[]} liveEntries={[]} approvals={[]} state={{ state: 'idle', error: null }} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });

@@ -822,4 +822,22 @@ describe('RelayEngine', () => {
     expect(seen).toContainEqual({ type: 'external', external: {} });
     await expect(engine!.takeOver('nope')).rejects.toThrow('Unknown session nope');
   });
+  it('sends straight after a take over, though the stopped process had only just written', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      externalPollMs: 60_000,
+      registry: {
+        foreignHolders: async () => [],
+        openSessions: async (): Promise<Record<string, 'busy' | 'idle'>> => ({}),
+        release: async () => [4242],
+      },
+    });
+    const file = join(root, 'projects', 'p', 's-basic.jsonl');
+    const asItDied = new Date('2026-09-22T23:59:55.000Z');
+    await utimes(file, asItDied, asItDied);
+    const send = () => engine!.send({ sessionId: 's-basic', prompt: 'hi', mode: 'steer', origin: 'user' });
+    await expect(send()).rejects.toThrow(/being written by another process/);
+    await engine!.takeOver('s-basic');
+    await expect(send()).resolves.toBeTruthy();
+  });
 });

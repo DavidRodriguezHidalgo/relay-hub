@@ -15,6 +15,7 @@ import { DOT_LABEL, dotState } from './sessionDot';
 import { applyCommand, matchCommands, SlashMenu, slashQuery } from './SlashMenu';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
+import { WorkingLine } from './WorkingLine';
 
 interface Props {
   session: SessionSummary;
@@ -144,6 +145,7 @@ export function SessionPanel(p: Props) {
           {p.notice}
         </p>
       )}
+      {state === 'running' && <WorkingLine />}
       {p.heldElsewhere && (
         <div className="held-elsewhere">
           <span>
