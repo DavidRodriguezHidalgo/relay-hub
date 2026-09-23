@@ -31,7 +31,8 @@ describe('SessionRunner', () => {
     client.assistant('a1', 'working');
     client.result();
     await tick();
-    expect(entries).toEqual([expect.objectContaining({ uuid: 'a1', role: 'assistant', origin: 'orchestrator' })]);
+    expect(entries.map((e) => e.role)).toEqual(['user', 'assistant']);
+    expect(entries[1]).toMatchObject({ uuid: 'a1', role: 'assistant', origin: 'orchestrator' });
     expect(runner.state).toBe('idle');
     expect(states).toEqual(['running', 'idle']);
   });
@@ -203,5 +204,66 @@ describe('SessionRunner', () => {
     const started = Date.now();
     await runner.close();
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('with resume null starts fresh, reports the new session id and resumes it after an error', async () => {
+    const client = new FakeAgentClient();
+    const approvals = new ApprovalQueue();
+    const runner = new SessionRunner({ sessionId: 'orchestrator', resume: null, cwd: '/o', client, approvals });
+    const ids: string[] = [];
+    runner.on('session-id', (id) => ids.push(id));
+    await runner.send('hi', { mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts[0]?.sessionId).toBeNull();
+    client.init('new-123');
+    client.result('boom');
+    await tick();
+    expect(ids).toEqual(['new-123']);
+    await runner.send('again', { mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts[1]?.sessionId).toBe('new-123');
+  });
+
+  it('resetSession makes the next run start fresh', async () => {
+    const client = new FakeAgentClient();
+    const runner = new SessionRunner({ sessionId: 'orchestrator', resume: 'old', cwd: '/o', client, approvals: new ApprovalQueue() });
+    await runner.send('hi', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.result('gone');
+    await tick();
+    runner.resetSession();
+    await runner.send('again', { mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts.map((s) => s.sessionId)).toEqual(['old', null]);
+  });
+
+  it('emits the user prompt as a live entry at once', async () => {
+    const { runner, entries } = setup();
+    const id = await runner.send('do x', { mode: 'steer', origin: 'orchestrator' });
+    expect(entries[0]).toMatchObject({ uuid: id, role: 'user', origin: 'orchestrator', blocks: [{ kind: 'text', text: 'do x' }] });
+  });
+
+  it('turn-end carries the settled origins and the last assistant text', async () => {
+    const { client, runner } = setup();
+    const ends: unknown[] = [];
+    runner.on('turn-end', (e) => ends.push(e));
+    await runner.send('a', { mode: 'steer', origin: 'orchestrator' });
+    await tick();
+    client.assistant('a1', 'first');
+    client.assistant('a2', 'final answer');
+    client.result();
+    await tick();
+    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: 'final answer', error: null }]);
+  });
+
+  it('turn-end on error carries the reason', async () => {
+    const { client, runner } = setup();
+    const ends: unknown[] = [];
+    runner.on('turn-end', (e) => ends.push(e));
+    await runner.send('a', { mode: 'steer', origin: 'orchestrator' });
+    await tick();
+    client.result('api error');
+    await tick();
+    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: null, error: 'api error' }]);
   });
 });

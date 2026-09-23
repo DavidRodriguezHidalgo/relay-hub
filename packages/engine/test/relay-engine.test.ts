@@ -68,7 +68,7 @@ describe('RelayEngine', () => {
     client.assistant('a9', 'hello');
     client.result();
     await tick();
-    expect(events.map((e) => e.type)).toEqual(['state', 'entry', 'state']);
+    expect(events.map((e) => e.type)).toEqual(['entry', 'state', 'entry', 'state']); // the prompt itself, then the reply
     expect(engine!.runState().states['s-basic']).toEqual({ state: 'idle', error: null });
   });
 

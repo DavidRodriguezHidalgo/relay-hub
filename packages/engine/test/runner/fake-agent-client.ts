@@ -59,6 +59,10 @@ export class FakeAgentClient implements AgentClient {
     return t.handler(args as never);
   }
 
+  init(sessionId: string) {
+    this.out.push({ type: 'init', sessionId });
+  }
+
   assistant(uuid: string, text: string) {
     this.out.push({ type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }] });
   }
