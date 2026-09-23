@@ -64,4 +64,12 @@ describe('readTranscript', () => {
     expect(t.title).toBe("Add tests for the zero-rate case");
     expect(t.lastActivity).toBe("2026-09-20T10:01:00.000Z");
   });
+
+  it("titles a session from a first prompt sent as blocks (text plus a pasted image)", () => {
+    const line = JSON.stringify({
+      type: "user", uuid: "u", isSidechain: false, timestamp: "2026-01-01T00:00:00.000Z", cwd: "/c", sessionId: "s",
+      message: { role: "user", content: [{ type: "text", text: "Fix the layout in this screenshot" }, { type: "image" }] },
+    });
+    expect(parseTranscriptLines([line]).title).toBe("Fix the layout in this screenshot");
+  });
 });

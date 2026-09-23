@@ -152,12 +152,17 @@ export class TranscriptParser {
         const isSidechain = raw.isSidechain === true;
         const isMeta = raw.isMeta === true;
         const content = raw.message?.content;
+        // a typed prompt is a string; one with a pasted image arrives as blocks (text + image, no tool results)
+        const typedBlocks =
+          Array.isArray(content) &&
+          content.some((b) => b.type === 'text') &&
+          !content.some((b) => b.type === 'tool_result');
         const wantsTitle =
           this.promptTitle === null &&
           raw.type === 'user' &&
           !isSidechain &&
           !isMeta &&
-          typeof content === 'string';
+          (typeof content === 'string' || typedBlocks);
         if (this.keepEntries) {
           out.entries.push({
             uuid: raw.uuid,
@@ -173,7 +178,12 @@ export class TranscriptParser {
           out.lastActivity = raw.timestamp;
           if (raw.cwd) out.cwd = raw.cwd;
           if (raw.gitBranch) out.gitBranch = raw.gitBranch;
-          if (wantsTitle) this.promptTitle = content;
+          if (wantsTitle) {
+            this.promptTitle =
+              typeof content === 'string'
+                ? content
+                : ((content as RawBlock[]).find((x) => x.type === 'text')?.text ?? null);
+          }
         }
         break;
       }

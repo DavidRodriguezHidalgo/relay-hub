@@ -48,8 +48,8 @@ describe('SessionIndex', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  const make = (now = new Date('2026-09-23T00:00:00.000Z')) =>
-    (index = new SessionIndex({ projectsDir, store, git, now: () => now, debounceMs: 20 }));
+  const make = (now = new Date('2026-09-23T00:00:00.000Z'), extra: Partial<ConstructorParameters<typeof SessionIndex>[0]> = {}) =>
+    (index = new SessionIndex({ projectsDir, store, git, now: () => now, debounceMs: 20, ...extra }));
 
   it('indexes only session transcripts and ignores stray files', async () => {
     const sessions = await make().scan();
@@ -140,5 +140,68 @@ describe('SessionIndex', () => {
     }
     await new Promise((r) => setTimeout(r, 300));
     expect(events).toEqual([2]);
+  });
+
+  it('two transcripts with the same session id keep the newest, deterministically', async () => {
+    await mkdir(join(projectsDir, 'proj-b'));
+    const basic = await readFile(fixture('basic.jsonl'), 'utf8');
+    // proj-b is listed after proj-a; it holds an OLDER copy, so "last file wins" would pick the wrong one
+    const older = basic.replaceAll('/repo/wt-a', cwdA).replaceAll('2026-09-20T', '2026-09-19T');
+    await writeFile(join(projectsDir, 'proj-b', 's-basic.jsonl'), older);
+    const sessions = await make().scan();
+    const basics = sessions.filter((x) => x.id === 's-basic');
+    expect(basics).toHaveLength(1);
+    expect(basics[0]!.filePath).toBe(join(projectsDir, 'proj-a', 's-basic.jsonl'));
+  });
+
+  it('does not re-read a transcript it already found unusable (no cwd) until it changes', async () => {
+    const reads: string[] = [];
+    const idx = make(undefined, {
+      read: async (file: string, opts?: { entries?: boolean }) => {
+        reads.push(file);
+        return (await import('../../src/transcript/parse-transcript')).readTranscript(file, opts);
+      },
+    });
+    await writeFile(join(projectsDir, 'proj-a', 's-empty.jsonl'), '{"type":"mode","mode":"normal","sessionId":"s-empty"}\n');
+    await idx.scan();
+    expect(reads.filter((f) => f.endsWith('s-empty.jsonl'))).toHaveLength(1);
+    reads.length = 0;
+    await idx.scan();
+    expect(reads.filter((f) => f.endsWith('s-empty.jsonl'))).toEqual([]);
+  });
+
+  it('overlapping scans run one after another, and close waits for the one in flight', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const idx = make(undefined, {
+      read: async (file: string, opts?: { entries?: boolean }) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 20));
+        active -= 1;
+        return (await import('../../src/transcript/parse-transcript')).readTranscript(file, opts);
+      },
+    });
+    const both = Promise.all([idx.scan(), idx.scan()]);
+    await new Promise((r) => setTimeout(r, 5)); // let the first scan start reading
+    await idx.close();
+    await both;
+    expect(maxActive).toBe(1);
+    expect(active).toBe(0); // close waited for the read in flight
+  });
+
+  it('a session writing continuously still produces change events (max wait), not only when it pauses', async () => {
+    const idx = make(undefined, { debounceMs: 100, maxWaitMs: 250 });
+    await idx.scan();
+    const events: number[] = [];
+    idx.on('changed', (s) => events.push(s.length));
+    idx.watch();
+    await new Promise((r) => setTimeout(r, 300));
+    const file = join(projectsDir, 'proj-a', 's-basic.jsonl');
+    for (let i = 0; i < 30; i += 1) {
+      await appendFile(file, '\n{"type":"mode","mode":"normal","sessionId":"s-basic"}');
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    expect(events.length).toBeGreaterThanOrEqual(2);
   });
 });
