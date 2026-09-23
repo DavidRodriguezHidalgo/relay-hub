@@ -22,3 +22,5 @@ export { SessionRunner } from './runner/session-runner';
 export type { SessionRunnerOptions } from './runner/session-runner';
 export { SessionBusyError } from './runner/session-busy-error';
 export type { SendOptions } from './relay-engine';
+export { ClaudeSessionRegistry } from './runner/session-registry';
+export type { SessionRegistry } from './runner/session-registry';

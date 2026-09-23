@@ -14,6 +14,7 @@ import { SessionIndex } from './index/session-index';
 import type { AgentClient } from './runner/agent-client';
 import { SdkAgentClient } from './runner/sdk-agent-client';
 import { SessionBusyError } from './runner/session-busy-error';
+import { ClaudeSessionRegistry, type SessionRegistry } from './runner/session-registry';
 import { SessionRunner } from './runner/session-runner';
 import { SessionStore } from './store/session-store';
 
@@ -31,6 +32,7 @@ export interface RelayEngineOptions {
   agent?: AgentClient;
   now?: () => Date;
   idleTimeoutMs?: number;
+  registry?: SessionRegistry;
 }
 
 export interface SendOptions {
@@ -54,6 +56,7 @@ export class RelayEngine {
     private readonly approvals: ApprovalQueue,
     private readonly now: () => Date,
     private readonly idleTimeoutMs: number,
+    private readonly registry: SessionRegistry,
   ) {
     approvals.on('pending', (approval) => this.publish({ type: 'approval', approval }));
     approvals.on('resolved', (approvalId, decision) =>
@@ -77,6 +80,7 @@ export class RelayEngine {
       new ApprovalQueue(),
       opts.now ?? (() => new Date()),
       opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
+      opts.registry ?? new ClaudeSessionRegistry(),
     );
   }
 
@@ -164,10 +168,15 @@ export class RelayEngine {
     return runner;
   }
 
-  /** Throws when the transcript was written recently by someone other than Relay's own run. */
+  /**
+   * Throws when another live Claude process holds the session (Claude Code's own registry),
+   * or, as a fallback, when its transcript was written recently by someone other than Relay.
+   */
   private async assertNotBusy(sessionId: string, ownWritesUntil: number): Promise<void> {
     const session = this.index.list().find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const holders = await this.registry.foreignHolders(sessionId);
+    if (holders.length > 0) throw new SessionBusyError(sessionId, holders);
     const { mtimeMs } = await stat(session.filePath);
     const recent = this.now().getTime() - mtimeMs < BUSY_WINDOW_MS;
     if (recent && mtimeMs > ownWritesUntil) throw new SessionBusyError(sessionId);

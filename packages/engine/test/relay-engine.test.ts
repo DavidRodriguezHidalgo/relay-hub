@@ -22,7 +22,7 @@ describe('RelayEngine', () => {
   async function startWithBasic(
     client: FakeAgentClient,
     now = () => new Date('2026-09-23T00:00:00.000Z'),
-    extra: { idleTimeoutMs?: number } = {},
+    extra: { idleTimeoutMs?: number; registry?: { foreignHolders(id: string): Promise<number[]> } } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
     const cwd = join(root, 'wt-a');
@@ -80,6 +80,17 @@ describe('RelayEngine', () => {
     await expect(
       engine!.send({ sessionId: 's-basic', prompt: 'hi', mode: 'steer', origin: 'user' }),
     ).rejects.toBeInstanceOf(SessionBusyError);
+    expect(client.starts).toHaveLength(0);
+  });
+
+  it('send refuses a session another live Claude process holds, even when its transcript is quiet', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      registry: { foreignHolders: async (id: string) => (id === 's-basic' ? [4242] : []) },
+    });
+    await expect(
+      engine!.send({ sessionId: 's-basic', prompt: 'hi', mode: 'steer', origin: 'user' }),
+    ).rejects.toThrow(/open in another Claude process \(pid 4242\)/);
     expect(client.starts).toHaveLength(0);
   });
 
