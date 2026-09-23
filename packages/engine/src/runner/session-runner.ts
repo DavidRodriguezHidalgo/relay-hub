@@ -35,7 +35,7 @@ type RunnerEvents = {
 
 /** Drives one session: owns the agent run, tracks its state and relays its output. */
 export class SessionRunner extends EventEmitter<RunnerEvents> {
-  readonly sessionId: string;
+  private _sessionId: string;
   private readonly cwd: string;
   private readonly client: AgentClient;
   private readonly approvals: ApprovalQueue;
@@ -72,7 +72,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
 
   constructor(opts: SessionRunnerOptions) {
     super();
-    this.sessionId = opts.sessionId;
+    this._sessionId = opts.sessionId;
     this.cwd = opts.cwd;
     this.client = opts.client;
     this.approvals = opts.approvals;
@@ -81,6 +81,15 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.resumeId = opts.resume === undefined ? opts.sessionId : opts.resume;
     this.approvals.on('pending', this.onPending);
     this.approvals.on('resolved', this.onResolved);
+  }
+
+  get sessionId(): string {
+    return this._sessionId;
+  }
+
+  /** A runner started for a new session gets its real id once the agent reports it. */
+  rekey(sessionId: string): void {
+    this._sessionId = sessionId;
   }
 
   get state(): SessionState {

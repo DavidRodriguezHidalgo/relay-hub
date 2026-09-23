@@ -41,3 +41,5 @@ export { BOT_LOGINS, diffSnapshots, toSnapshot } from './pr/snapshot';
 export type { PrSnapshot } from './pr/snapshot';
 export type { PrListing } from './orchestrator/relay-tools';
 export { carryForward } from './pr/snapshot';
+export { createWorktree, repoRoot, worktreePath } from './git/worktrees';
+export type { Project, Worktrees } from './relay-engine';

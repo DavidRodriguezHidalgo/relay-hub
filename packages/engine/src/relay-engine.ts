@@ -1,5 +1,6 @@
-import { mkdir, stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, stat } from 'node:fs/promises';
+import { basename, isAbsolute, resolve } from 'node:path';
 import {
   ORCHESTRATOR_KEY,
   type ApprovalDecision,
@@ -20,6 +21,7 @@ import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
+import { createWorktree, repoRoot } from './git/worktrees';
 import { ExecGhClient, repoFromPrUrl, type GhClient, type PrRef } from './pr/gh-client';
 import { PrWatcher } from './pr/pr-watcher';
 import { createRelayTools, type PrListing } from './orchestrator/relay-tools';
@@ -60,7 +62,26 @@ export interface RelayEngineOptions {
   bulkConcurrency?: number;
   gh?: GhClient;
   prPollIntervalMs?: number;
+  worktrees?: Worktrees;
+  /** How long createSession waits for a new session to report its id. */
+  createTimeoutMs?: number;
 }
+
+/** Git operations createSession needs; injectable for tests. */
+export interface Worktrees {
+  repoRoot(cwd: string): Promise<string | null>;
+  createWorktree(root: string, branch: string): Promise<string>;
+}
+
+export interface Project {
+  name: string;
+  root: string;
+  sessions: number;
+}
+
+const DEFAULT_CREATE_TIMEOUT_MS = 60_000;
+/** A new session's title until its transcript is indexed: its first prompt, shortened. */
+const NEW_TITLE_MAX = 80;
 
 export interface SendOptions {
   sessionId: string;
@@ -94,6 +115,8 @@ export class RelayEngine {
     bulkConcurrency: number | undefined,
     private readonly gh: GhClient,
     prPollIntervalMs: number | undefined,
+    private readonly worktrees: Worktrees,
+    private readonly createTimeoutMs: number,
   ) {
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
@@ -171,6 +194,8 @@ export class RelayEngine {
       opts.bulkConcurrency,
       opts.gh ?? new ExecGhClient(),
       opts.prPollIntervalMs,
+      opts.worktrees ?? { repoRoot, createWorktree },
+      opts.createTimeoutMs ?? DEFAULT_CREATE_TIMEOUT_MS,
     );
     engine.watcher.start();
     return engine;
@@ -273,6 +298,74 @@ export class RelayEngine {
       .map(([id, r]) => ({ id, title: titles.get(id) ?? id, state: r.state }));
   }
 
+  /** Main-repo roots of the sessions on this machine, with how many sessions each has. */
+  async listProjects(): Promise<Project[]> {
+    const cwds = [...new Set(this.listSessions().filter((s) => s.cwdExists).map((s) => s.cwd))];
+    const counts = new Map<string, number>();
+    const perCwd = new Map(this.listSessions().map((s) => [s.cwd, 0]));
+    for (const s of this.listSessions()) perCwd.set(s.cwd, (perCwd.get(s.cwd) ?? 0) + 1);
+    const roots = await Promise.all(cwds.map((cwd) => this.worktrees.repoRoot(cwd)));
+    cwds.forEach((cwd, i) => {
+      const root = roots[i];
+      if (root) counts.set(root, (counts.get(root) ?? 0) + (perCwd.get(cwd) ?? 0));
+    });
+    return [...counts.entries()]
+      .map(([root, sessions]) => ({ name: basename(root), root, sessions }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.root.localeCompare(b.root));
+  }
+
+  /**
+   * Starts a fresh Claude session: in a new worktree on `branch` when given, else in the project
+   * directory itself. Resolves once the session reports its id.
+   */
+  async createSession(req: {
+    project: string;
+    branch?: string;
+    prompt: string;
+    origin: MessageOrigin;
+  }): Promise<{ sessionId: string; cwd: string }> {
+    const dir = await this.resolveProject(req.project);
+    // a new branch gets a worktree of the main repo; without one the session runs exactly where asked
+    const cwd = req.branch
+      ? await this.worktrees.createWorktree((await this.worktrees.repoRoot(dir)) ?? dir, req.branch)
+      : dir;
+    const runner = new SessionRunner({
+      sessionId: `new:${randomUUID()}`,
+      resume: null,
+      cwd,
+      client: this.agent,
+      approvals: this.approvals,
+      profile: { kind: 'session' },
+    });
+    let sessionId: string;
+    try {
+      sessionId = await new Promise<string>((resolveId, reject) => {
+        const done = (err: Error | null, id?: string) => {
+          clearTimeout(timer);
+          runner.off('session-id', onId);
+          runner.off('state', onState);
+          if (err) reject(err);
+          else resolveId(id!);
+        };
+        const onId = (id: string) => done(null, id);
+        const onState = (state: SessionState, error: string | null) => {
+          if (state === 'error') done(new Error(error ?? 'unknown error'));
+        };
+        const timer = setTimeout(() => done(new Error('timed out waiting for the session to start')), this.createTimeoutMs);
+        runner.on('session-id', onId);
+        runner.on('state', onState);
+        runner.send(req.prompt, { mode: 'steer', origin: req.origin }).catch((err: unknown) => done(err as Error));
+      });
+    } catch (err) {
+      await runner.close();
+      throw new Error(`Could not start a session in ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    runner.rekey(sessionId);
+    this.wire(runner, { id: sessionId, title: req.prompt.trim().slice(0, NEW_TITLE_MAX), branch: req.branch ?? null });
+    this.publish({ type: 'state', sessionId, state: runner.state, error: runner.error });
+    return { sessionId, cwd };
+  }
+
   bulkConfirm(runId: string, sessionIds: string[]): void {
     this.bulk.confirm(runId, sessionIds);
   }
@@ -327,6 +420,13 @@ export class RelayEngine {
     if (!session) throw new Error(`Unknown session ${sessionId}`);
     await this.assertNotBusy(sessionId, 0);
     const runner = new SessionRunner({ sessionId, cwd: session.cwd, client: this.agent, approvals: this.approvals });
+    this.wire(runner, session);
+    return runner;
+  }
+
+  /** Registers a runner under its session id and connects it to events, bulk runs, the relay and the idle reaper. */
+  private wire(runner: SessionRunner, session: Pick<SessionSummary, 'id' | 'title' | 'branch'>): void {
+    const sessionId = session.id;
     runner.on('state', (state, error) => {
       this.publish({ type: 'state', sessionId, state, error });
       this.scheduleIdleClose(sessionId, state);
@@ -335,7 +435,6 @@ export class RelayEngine {
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));
     this.runners.set(sessionId, runner);
-    return runner;
   }
 
   /**
@@ -369,7 +468,7 @@ export class RelayEngine {
   }
 
   /** Tells the orchestrator how a turn it started ended; turns the user started stay quiet. */
-  private relayTurnEnd(session: SessionSummary, end: TurnEnd): void {
+  private relayTurnEnd(session: Pick<SessionSummary, 'id' | 'title' | 'branch'>, end: TurnEnd): void {
     if (this.closing || !end.origins.includes('orchestrator')) return;
     const where = `session "${session.title}" (${session.id}${session.branch ? `, ${session.branch}` : ''})`;
     const reply = end.lastText ? clip(end.lastText, RELAY_TEXT_MAX) : '(no text)';
@@ -405,6 +504,21 @@ export class RelayEngine {
         watched: watches.some((w) => w.repo === p.repo && w.prNumber === p.number),
       };
     });
+  }
+
+  /** An existing absolute directory as given, or a project name that must match exactly one known repo root. */
+  private async resolveProject(project: string): Promise<string> {
+    if (isAbsolute(project)) {
+      const found = await access(project).then(() => true, () => false);
+      if (!found) throw new Error(`No such directory: ${project}`);
+      return project;
+    }
+    const matches = (await this.listProjects()).filter((p) => p.name === project);
+    if (matches.length === 0) throw new Error(`Unknown project ${project}`);
+    if (matches.length > 1) {
+      throw new Error(`Several projects are called ${project}: ${matches.map((m) => m.root).join(', ')}`);
+    }
+    return matches[0]!.root;
   }
 
   /** The orchestrator must not act on its own after a relay: only the user starts sends. */

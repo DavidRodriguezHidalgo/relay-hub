@@ -53,6 +53,8 @@ describe('RelayEngine', () => {
       noPr?: boolean;
       bulkConcurrency?: number;
       gh?: GhClient;
+      worktrees?: { repoRoot(cwd: string): Promise<string | null>; createWorktree(root: string, branch: string): Promise<string> };
+      createTimeoutMs?: number;
     } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
@@ -577,5 +579,107 @@ describe('RelayEngine', () => {
     const w = await engine!.watchCreate('s-basic');
     engine!.watchDelete(w.id);
     expect(events.at(-1)).toEqual({ type: 'watch-removed', watchId: w.id });
+  });
+
+  function fakeWorktrees(roots: Record<string, string>) {
+    const created: string[] = [];
+    return {
+      created,
+      repoRoot: async (cwd: string) => roots[cwd] ?? null,
+      createWorktree: async (root: string, branch: string) => {
+        const dir = join(root + '-worktrees', branch.replaceAll('/', '-'));
+        await mkdir(dir, { recursive: true });
+        created.push(dir);
+        return dir;
+      },
+    };
+  }
+
+  it('lists projects as the distinct repo roots of existing sessions', async () => {
+    const wt = fakeWorktrees({});
+    await startWithBasic(new FakeAgentClient(), undefined, { more: true, worktrees: wt });
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') || cwd.endsWith('wt-b') ? join(root, 'myrepo') : null);
+    expect(await engine!.listProjects()).toEqual([{ name: 'myrepo', root: join(root, 'myrepo'), sessions: 2 }]);
+  });
+
+  it('creates a worktree session, registers it under its real id, and relays its turn end to the orchestrator', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    await engine!.orchestratorSend('make a session');
+    await tick();
+    const creating = engine!.createSession({ project: 'myrepo', branch: 'feat/new', prompt: 'Add a README', origin: 'orchestrator' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts).toMatchObject({ sessionId: null, cwd: join(repo + '-worktrees', 'feat-new'), profile: { kind: 'session' } });
+    sessionClient.init('new-session-1');
+    const created = await creating;
+    expect(created).toEqual({ sessionId: 'new-session-1', cwd: join(repo + '-worktrees', 'feat-new') });
+    expect(engine!.runState().states['new-session-1']).toEqual({ state: 'running', error: null });
+    sessionClient.assistant('a1', 'README added.');
+    sessionClient.result();
+    await tick();
+    expect(orchClient.received.filter((m) => m.origin === 'watch:turn-end').map((m) => m.text)).toEqual([
+      '[turn-end] session "Add a README" (new-session-1, feat/new) finished. Last reply: README added.',
+    ]);
+  });
+
+  it('refuses an ambiguous or unknown project name', async () => {
+    const wt = fakeWorktrees({});
+    await startWithBasic(new FakeAgentClient(), undefined, { more: true, worktrees: wt });
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? join(root, 'a', 'factorial') : cwd.endsWith('wt-b') ? join(root, 'b', 'factorial') : null);
+    await expect(engine!.createSession({ project: 'factorial', prompt: 'x', origin: 'user' })).rejects.toThrow(
+      /Several projects are called factorial: .*a\/factorial, .*b\/factorial/,
+    );
+    await expect(engine!.createSession({ project: 'nope', prompt: 'x', origin: 'user' })).rejects.toThrow(/Unknown project nope/);
+  });
+
+  it('rejects with the reason when the new session fails before it has an id, leaving nothing registered', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt, createTimeoutMs: 2_000 });
+    const dir = join(root, 'plain');
+    await mkdir(dir);
+    const creating = engine!.createSession({ project: dir, prompt: 'x', origin: 'user' });
+    for (let i = 0; !client.lastOpts && i < 100; i += 1) await tick();
+    client.result('error_during_execution: boom');
+    await expect(creating).rejects.toThrow(`Could not start a session in ${dir}: error_during_execution: boom`);
+    expect(Object.keys(engine!.runState().states)).toEqual([]);
+  });
+
+  it('approvals a created session asks for carry its real session id', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const dir = join(root, 'plain2');
+    await mkdir(dir);
+    const creating = engine!.createSession({ project: dir, prompt: 'x', origin: 'user' });
+    for (let i = 0; !client.lastOpts && i < 100; i += 1) await tick();
+    client.init('born-1');
+    await creating;
+    void client.askTool('Bash', { command: 'git push --force' });
+    await tick();
+    expect(engine!.runState().approvals.map((a) => a.sessionId)).toEqual(['born-1']);
+  });
+
+  it('an absolute worktree path without a branch starts the session in that exact directory, never the main clone', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const main = join(root, 'repo');
+    const worktree = join(root, 'repo-worktrees', 'feat-a');
+    await mkdir(worktree, { recursive: true });
+    wt.repoRoot = async (cwd: string) => (cwd === worktree ? main : null);
+    const creating = engine!.createSession({ project: worktree, prompt: 'x', origin: 'user' });
+    for (let i = 0; !client.lastOpts && i < 100; i += 1) await tick();
+    expect(client.lastOpts?.cwd).toBe(worktree);
+    client.init('w-1');
+    expect(await creating).toEqual({ sessionId: 'w-1', cwd: worktree });
   });
 });
