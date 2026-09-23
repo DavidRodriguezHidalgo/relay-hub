@@ -27,6 +27,8 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.orchestratorSend, (prompt: string) => engine.orchestratorSend(prompt));
   handle(IPC.orchestratorInterrupt, () => engine.orchestratorInterrupt());
   handle(IPC.orchestratorHistory, () => engine.orchestratorHistory());
+  handle(IPC.bulkConfirm, (runId: string, sessionIds: string[]) => engine.bulkConfirm(runId, sessionIds));
+  handle(IPC.bulkCancel, (runId: string) => engine.bulkCancel(runId));
 
   const broadcast = (channel: string, payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload);
@@ -45,6 +47,8 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.orchestratorSend,
     IPC.orchestratorInterrupt,
     IPC.orchestratorHistory,
+    IPC.bulkConfirm,
+    IPC.bulkCancel,
   ];
   return () => {
     for (const u of unsubs) u();
