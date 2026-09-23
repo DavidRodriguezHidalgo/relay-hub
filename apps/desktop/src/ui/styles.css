@@ -50,3 +50,10 @@ body { margin: 0; }
 .relay-update { font-size: 12px; opacity: .65; margin: 4px 0 10px; padding-left: 8px; border-left: 2px solid currentColor; }
 .chat-input { background: Canvas; padding: 8px 0; }
 .chat-input textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.bulk-card { border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 8px; padding: 8px 10px; margin: 0 0 12px; }
+.bulk-card h3 { font-size: 13px; margin: 0 0 6px; }
+.bulk-card ul { list-style: none; margin: 0; padding: 0; }
+.bulk-card li { margin: 0 0 6px; }
+.bulk-card__prompt, .bulk-card__detail { margin: 2px 0 0 22px; font-size: 12px; opacity: .75; white-space: pre-wrap; }
+.bulk-card__actions { display: flex; gap: 6px; margin-top: 8px; }
+.state--done { color: #2e9d57; } .state--queued, .state--skipped, .state--proposed { opacity: .6; }

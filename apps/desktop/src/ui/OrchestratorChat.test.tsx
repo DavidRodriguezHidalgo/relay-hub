@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { LiveEntry, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, LiveEntry, TranscriptEntry } from '@relay/shared';
 import { OrchestratorChat } from './OrchestratorChat';
 
 const text = (uuid: string, role: 'user' | 'assistant', t: string): TranscriptEntry => ({
@@ -23,6 +23,9 @@ describe('OrchestratorChat', () => {
         state={undefined}
         onSend={vi.fn()}
         onInterrupt={vi.fn()}
+        bulkRuns={[]}
+        onBulkConfirm={vi.fn()}
+        onBulkCancel={vi.fn()}
       />,
     );
     expect(screen.getByText('hi')).toBeInTheDocument();
@@ -40,6 +43,9 @@ describe('OrchestratorChat', () => {
         state={undefined}
         onSend={vi.fn()}
         onInterrupt={vi.fn()}
+        bulkRuns={[]}
+        onBulkConfirm={vi.fn()}
+        onBulkCancel={vi.fn()}
       />,
     );
     expect(screen.getByRole('status', { name: 'Relay update' })).toHaveTextContent('session "B" finished');
@@ -49,7 +55,7 @@ describe('OrchestratorChat', () => {
     const onSend = vi.fn();
     const onInterrupt = vi.fn();
     const { rerender } = render(
-      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'idle', error: null }} onSend={onSend} onInterrupt={onInterrupt} />,
+      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'idle', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />,
     );
     const box = screen.getByPlaceholderText('Ask Relay…');
     await userEvent.type(box, 'line one{Shift>}{Enter}{/Shift}line two{Enter}');
@@ -57,7 +63,7 @@ describe('OrchestratorChat', () => {
     expect(box).toHaveValue('');
     expect(screen.queryByRole('button', { name: 'Interrupt' })).not.toBeInTheDocument();
     rerender(
-      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'running', error: null }} onSend={onSend} onInterrupt={onInterrupt} />,
+      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'running', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />,
     );
     await userEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
     expect(onInterrupt).toHaveBeenCalled();
@@ -65,7 +71,7 @@ describe('OrchestratorChat', () => {
 
   it('does not send an empty message', async () => {
     const onSend = vi.fn();
-    render(<OrchestratorChat history={[]} liveEntries={[]} state={undefined} onSend={onSend} onInterrupt={vi.fn()} />);
+    render(<OrchestratorChat history={[]} liveEntries={[]} state={undefined} onSend={onSend} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />);
     await userEvent.type(screen.getByPlaceholderText('Ask Relay…'), '   {Enter}');
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -76,8 +82,37 @@ describe('OrchestratorChat', () => {
       blocks: [{ kind: "tool_result", toolUseId: "x", text: "[{\"id\":\"a\"}]", isError: false }],
       origin: "watch:turn-end",
     };
-    render(<OrchestratorChat history={[]} liveEntries={[toolResult]} state={undefined} onSend={vi.fn()} onInterrupt={vi.fn()} />);
+    render(<OrchestratorChat history={[]} liveEntries={[toolResult]} state={undefined} onSend={vi.fn()} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />);
     expect(screen.queryByRole("status", { name: "Relay update" })).not.toBeInTheDocument();
     expect(screen.getByText("[{\"id\":\"a\"}]")).toBeInTheDocument();
+  });
+
+  it("places a plan card between the entries around its creation time, and shows [bulk-end] as an update", () => {
+    const run: BulkRun = {
+      id: "r1", createdAt: "2026-09-23T10:00:30.000Z", mode: "steer", status: "proposed",
+      rows: [
+        { sessionId: "a", title: "Mileage", branch: null, prompt: "p", status: "proposed", detail: null },
+        { sessionId: "b", title: "OCR", branch: null, prompt: "p", status: "proposed", detail: null },
+      ],
+    };
+    const later = { ...text("h3", "user", "[bulk-end] run r1: 2 done, 0 error, 0 skipped."), timestamp: "2026-09-23T10:05:00.000Z" };
+    render(
+      <OrchestratorChat
+        history={[text("h1", "user", "rebase both"), later]}
+        liveEntries={[]}
+        state={undefined}
+        onSend={vi.fn()}
+        onInterrupt={vi.fn()}
+        bulkRuns={[run]}
+        onBulkConfirm={vi.fn()}
+        onBulkCancel={vi.fn()}
+      />,
+    );
+    const before = screen.getByText("rebase both");
+    const card = screen.getByText("Plan: 2 sessions");
+    const after = screen.getByRole("status", { name: "Relay update" });
+    expect(after).toHaveTextContent("run r1: 2 done");
+    expect(before.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -56,6 +56,9 @@ export function App() {
           state={run.states[ORCHESTRATOR_KEY]}
           onSend={(p) => void window.relay.orchestratorSend(p)}
           onInterrupt={() => void window.relay.orchestratorInterrupt()}
+          bulkRuns={run.bulkRuns}
+          onBulkConfirm={(id, ids) => void window.relay.bulkConfirm(id, ids)}
+          onBulkCancel={(id) => void window.relay.bulkCancel(id)}
         />
         <ApprovalsDrawer
           approvals={run.approvals}

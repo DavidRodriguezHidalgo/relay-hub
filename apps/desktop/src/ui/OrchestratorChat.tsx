@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import type { LiveEntry, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, LiveEntry, TranscriptEntry } from '@relay/shared';
+import { BulkRunCard } from './BulkRunCard';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView, type ViewEntry } from './TranscriptView';
 import { useFollowBottom } from './useFollowBottom';
@@ -10,9 +11,15 @@ interface Props {
   state: { state: string; error: string | null } | undefined;
   onSend: (prompt: string) => void;
   onInterrupt: () => void;
+  bulkRuns: BulkRun[];
+  onBulkConfirm: (runId: string, sessionIds: string[]) => void;
+  onBulkCancel: (runId: string) => void;
 }
 
-const RELAY_PREFIX = '[turn-end] ';
+type Item = { kind: 'entry'; at: string; entry: ViewEntry } | { kind: 'bulk'; at: string; run: BulkRun };
+
+/** Messages Relay itself feeds the orchestrator; shown as compact update lines. */
+const RELAY_PREFIXES = ['[turn-end] ', '[bulk-end] '];
 
 /** A message Relay itself fed the orchestrator (a finished turn), not something the user typed. */
 function relayUpdate(e: ViewEntry): string | null {
@@ -21,17 +28,30 @@ function relayUpdate(e: ViewEntry): string | null {
   // tool results in a relay-started turn carry its origin too, but have no text
   if (!first || first.kind !== 'text') return null;
   const text = first.text;
-  if (e.origin?.startsWith('watch:') || text.startsWith(RELAY_PREFIX)) {
-    return text.startsWith(RELAY_PREFIX) ? text.slice(RELAY_PREFIX.length) : text;
-  }
+  const prefix = RELAY_PREFIXES.find((p) => text.startsWith(p));
+  if (e.origin?.startsWith('watch:') || prefix) return prefix ? text.slice(prefix.length) : text;
   return null;
 }
 
-export function OrchestratorChat({ history, liveEntries, state, onSend, onInterrupt }: Props) {
+export function OrchestratorChat({
+  history,
+  liveEntries,
+  state,
+  onSend,
+  onInterrupt,
+  bulkRuns,
+  onBulkConfirm,
+  onBulkCancel,
+}: Props) {
   const [draft, setDraft] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const entries = mergeEntries(history, liveEntries);
-  const onScroll = useFollowBottom(listRef, [entries.length]);
+  // one timeline: plan cards sit among the messages by time (stable sort keeps equal-time order)
+  const timeline: Item[] = [
+    ...entries.map((entry): Item => ({ kind: 'entry', at: entry.timestamp, entry })),
+    ...bulkRuns.map((run): Item => ({ kind: 'bulk', at: run.createdAt, run })),
+  ].sort((a, b) => a.at.localeCompare(b.at) || (a.kind === 'entry' ? -1 : 1));
+  const onScroll = useFollowBottom(listRef, [timeline.length, bulkRuns]);
   const running = state?.state === 'running' || state?.state === 'waiting-approval';
 
   const submit = () => {
@@ -53,7 +73,19 @@ export function OrchestratorChat({ history, liveEntries, state, onSend, onInterr
       </header>
       {state?.error && <p className="error">{state.error}</p>}
       <div className="chat" ref={listRef} onScroll={onScroll}>
-        {entries.map((e) => {
+        {timeline.map((item) => {
+          if (item.kind === 'bulk') {
+            const { run } = item;
+            return (
+              <BulkRunCard
+                key={run.id}
+                run={run}
+                onConfirm={(ids) => onBulkConfirm(run.id, ids)}
+                onCancel={() => onBulkCancel(run.id)}
+              />
+            );
+          }
+          const e = item.entry;
           const update = relayUpdate(e);
           return update !== null ? (
             <div key={e.uuid} role="status" aria-label="Relay update" className="relay-update">

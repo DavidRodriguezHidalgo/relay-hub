@@ -66,6 +66,31 @@ describe('App', () => {
     expect(screen.getByLabelText('Session panel')).not.toHaveTextContent('Two sessions are running.');
   });
 
+  it('shows a proposed bulk run as a plan card and confirms it', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await screen.findByText('Alpha');
+    await act(async () => {
+      emit!({
+        type: 'bulk',
+        run: {
+          id: 'r1', createdAt: '2026-09-23T12:00:00.000Z', mode: 'steer', status: 'proposed',
+          rows: [
+            { sessionId: 'a', title: 'Alpha', branch: null, prompt: 'rebase', status: 'proposed', detail: null },
+            { sessionId: 'b', title: 'Beta', branch: null, prompt: 'rebase', status: 'proposed', detail: null },
+          ],
+        },
+      });
+    });
+    expect(screen.getByLabelText('Orchestrator')).toHaveTextContent('Plan: 2 sessions');
+    await userEvent.click(screen.getByRole('button', { name: 'Run on 2 sessions' }));
+    expect(relay.bulkConfirm).toHaveBeenCalledWith('r1', ['a', 'b']);
+  });
+
   it('re-fetches the transcript only when the selected session itself changed', async () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));

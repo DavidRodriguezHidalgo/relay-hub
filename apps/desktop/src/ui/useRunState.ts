@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
-import type { LiveEntry, PendingApproval, RunState, RunnerEvent } from '@relay/shared';
+import type { BulkRun, LiveEntry, PendingApproval, RunState, RunnerEvent } from '@relay/shared';
 
 export interface RunView {
   states: RunState['states'];
   approvals: PendingApproval[];
   liveEntries: Record<string, LiveEntry[]>;
+  bulkRuns: BulkRun[];
 }
 
 /** Mirrors the engine's run state in the renderer: initial snapshot, then events. */
 export function useRunState(): RunView {
-  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {} });
+  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [] });
   useEffect(() => {
-    void window.relay.runState().then((s) => setView((v) => ({ ...v, states: s.states, approvals: s.approvals })));
+    void window.relay.runState().then((s) => setView((v) => ({ ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns })));
     return window.relay.onRunnerEvent((event: RunnerEvent) => {
       setView((v) => {
         switch (event.type) {
@@ -29,8 +30,10 @@ export function useRunState(): RunView {
             return { ...v, approvals: [...v.approvals, event.approval] };
           case 'approval-resolved':
             return { ...v, approvals: v.approvals.filter((a) => a.id !== event.approvalId) };
-          case 'bulk':
-            return v;
+          case 'bulk': {
+            const others = v.bulkRuns.filter((r) => r.id !== event.run.id);
+            return { ...v, bulkRuns: [event.run, ...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };
+          }
         }
       });
     });
