@@ -1,0 +1,93 @@
+import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
+import type { ApprovalDecision, PendingApproval } from '@relay/shared';
+import { classifyToolUse, patternKey } from './rules';
+
+export type PermissionOutcome = { behavior: 'allow' } | { behavior: 'deny'; message: string };
+
+export interface ApprovalRequest {
+  sessionId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  cwd: string;
+  blockedPath?: string;
+  signal: AbortSignal;
+}
+
+type Waiting = { approval: PendingApproval; resolve: (o: PermissionOutcome) => void; onAbort: () => void };
+
+type QueueEvents = { pending: [PendingApproval]; resolved: [string, ApprovalDecision['kind']] };
+
+/** Turns `canUseTool` callbacks into pending decisions; safe calls pass straight through. */
+export class ApprovalQueue extends EventEmitter<QueueEvents> {
+  private readonly waiting = new Map<string, Waiting>();
+  private readonly allowed = new Map<string, Set<string>>();
+
+  request(req: ApprovalRequest): Promise<PermissionOutcome> {
+    const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
+    if (verdict.outcome === 'allow') return Promise.resolve({ behavior: 'allow' });
+    if (this.allowed.get(req.sessionId)?.has(patternKey(req.toolName, req.input))) {
+      return Promise.resolve({ behavior: 'allow' });
+    }
+    const approval: PendingApproval = {
+      id: randomUUID(),
+      sessionId: req.sessionId,
+      toolName: req.toolName,
+      input: req.input,
+      summary: verdict.summary,
+      reason: verdict.reason,
+      cwd: req.cwd,
+      createdAt: new Date().toISOString(),
+    };
+    return new Promise((resolve) => {
+      const onAbort = () => this.settle(approval.id, { behavior: 'deny', message: 'aborted' }, 'deny');
+      req.signal.addEventListener('abort', onAbort, { once: true });
+      this.waiting.set(approval.id, { approval, resolve, onAbort });
+      this.emit('pending', approval);
+    });
+  }
+
+  decide(approvalId: string, decision: ApprovalDecision): void {
+    const w = this.waiting.get(approvalId);
+    if (!w) throw new Error(`Unknown approval ${approvalId}`);
+    switch (decision.kind) {
+      case 'allow-once':
+        this.settle(approvalId, { behavior: 'allow' }, 'allow-once');
+        break;
+      case 'allow-pattern': {
+        const set = this.allowed.get(w.approval.sessionId) ?? new Set<string>();
+        set.add(patternKey(w.approval.toolName, w.approval.input));
+        this.allowed.set(w.approval.sessionId, set);
+        this.settle(approvalId, { behavior: 'allow' }, 'allow-pattern');
+        break;
+      }
+      case 'deny':
+        this.settle(approvalId, { behavior: 'deny', message: decision.message ?? 'denied by user' }, 'deny');
+        break;
+    }
+  }
+
+  pending(): PendingApproval[] {
+    return [...this.waiting.values()].map((w) => w.approval);
+  }
+
+  /** Denies every pending item of a session, e.g. on interrupt or when its run dies. */
+  cancelSession(sessionId: string, message: string): void {
+    for (const [id, w] of this.waiting) {
+      if (w.approval.sessionId === sessionId) this.settle(id, { behavior: 'deny', message }, 'deny');
+    }
+  }
+
+  /** Drops a session's allow-patterns; they live only as long as its runner. */
+  forgetSession(sessionId: string): void {
+    this.allowed.delete(sessionId);
+  }
+
+  private settle(id: string, outcome: PermissionOutcome, kind: ApprovalDecision['kind']): void {
+    const w = this.waiting.get(id);
+    if (!w) return;
+    this.waiting.delete(id);
+    w.resolve(outcome);
+    this.emit('resolved', id, kind);
+  }
+}
