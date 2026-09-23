@@ -1,15 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { ExternalSessions, RunState, SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
-
-const DOT_LABEL: Record<string, string> = {
-  idle: 'idle',
-  running: 'running',
-  'waiting-approval': 'waiting for approval',
-  error: 'error',
-  elsewhere: 'running elsewhere',
-  open: 'open elsewhere',
-};
+import { DOT_LABEL, dotState, isActive } from './sessionDot';
 
 const COLLAPSED_KEY = 'relay.collapsedRepos';
 
@@ -40,15 +32,6 @@ interface Props {
   onNewSession?: () => void;
   /** Shown under the controls, e.g. the new-session form. */
   panel?: ReactNode;
-}
-
-/** Relay's own state wins; otherwise another process holding the session shows as elsewhere. */
-function dotState(id: string, states?: RunState['states'], external?: ExternalSessions): string {
-  const own = states?.[id]?.state;
-  if (own && own !== 'idle') return own;
-  if (external?.[id] === 'busy') return 'elsewhere';
-  if (external?.[id] === 'idle') return 'open';
-  return own ?? 'idle';
 }
 
 export function SessionList({ sessions, selectedId, onSelect, states, external, onNewSession, panel }: Props) {
@@ -86,6 +69,8 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
       </div>
       {groups.map((g) => {
         const isCollapsed = collapsed.has(g.repo);
+        // collapsing a group must not hide that something inside it is working
+        const busy = g.sessions.map((x) => dotState(x.id, states, external)).find(isActive);
         return (
           <section key={g.repo}>
             <h2>
@@ -95,7 +80,11 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
                 aria-expanded={!isCollapsed}
                 onClick={() => toggle(g.repo)}
               >
-                <span aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span> {g.repo}
+                <span className="session-list__caret" aria-hidden="true">
+                  {isCollapsed ? '▶' : '▼'}
+                </span>{' '}
+                {g.repo}
+                {isCollapsed && busy && <span className={`dot dot--${busy}`} aria-label={DOT_LABEL[busy]} />}
                 {isCollapsed && <span className="session-list__count">{g.sessions.length}</span>}
               </button>
             </h2>

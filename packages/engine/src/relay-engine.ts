@@ -10,6 +10,7 @@ import {
   type SessionState,
   type BulkRun,
   type DeliveryMode,
+  type Invocable,
   type MessageOrigin,
   type RunnerEvent,
   type RunState,
@@ -29,6 +30,7 @@ import type { AgentClient } from './runner/agent-client';
 import { SdkAgentClient } from './runner/sdk-agent-client';
 import { SessionBusyError } from './runner/session-busy-error';
 import { ClaudeSessionRegistry, type SessionRegistry } from './runner/session-registry';
+import { CommandCatalog } from './commands/command-catalog';
 import { SessionRunner, type TurnEnd } from './runner/session-runner';
 import { SessionStore } from './store/session-store';
 
@@ -105,6 +107,7 @@ export class RelayEngine {
   private readonly orchestratorCwds: Set<string>;
   private closing = false;
   private external: Record<string, 'busy' | 'idle'> = {};
+  private readonly commands: CommandCatalog;
   private externalTimer: NodeJS.Timeout | null = null;
 
   private constructor(
@@ -124,6 +127,7 @@ export class RelayEngine {
     private readonly worktrees: Worktrees,
     private readonly createTimeoutMs: number,
   ) {
+    this.commands = new CommandCatalog(agent.describe?.bind(agent));
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
     this.watcher.on('event', (watch, event) => this.onPrEvent(watch, event));
@@ -309,6 +313,13 @@ export class RelayEngine {
       );
     }
     return this.watcher.add({ sessionId, repo: ref.repo, prNumber: ref.number, prUrl: ref.url });
+  }
+
+  /** What this session can be asked to run: its slash commands, skills and plugin commands. */
+  async listCommands(sessionId: string): Promise<Invocable[]> {
+    const session = this.listSessions().find((x) => x.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    return this.commands.list(session.cwd);
   }
 
   watchDelete(watchId: string): void {

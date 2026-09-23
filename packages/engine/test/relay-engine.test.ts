@@ -112,6 +112,17 @@ describe('RelayEngine', () => {
     expect(await engine.getTranscript('s-noprompt')).toHaveLength(2);
   });
 
+  it("lists what a session can be asked to run, from that session's own directory", async () => {
+    const client = new FakeAgentClient();
+    client.invocables = [{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }];
+    const { cwd } = await startWithBasic(client);
+    expect(await engine!.listCommands('s-basic')).toEqual([
+      { name: 'review', description: 'Review the diff', argumentHint: '[pr]' },
+    ]);
+    expect(client.described).toEqual([cwd]);
+    await expect(engine!.listCommands('nope')).rejects.toThrow('Unknown session nope');
+  });
+
   it('send starts a runner for a listed session and relays events', async () => {
     const client = new FakeAgentClient();
     const { cwd } = await startWithBasic(client);

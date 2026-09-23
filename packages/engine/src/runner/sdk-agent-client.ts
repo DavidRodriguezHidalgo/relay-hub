@@ -7,6 +7,7 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { blocksFromContent } from '../transcript/parse-transcript';
+import type { Invocable } from '@relay/shared';
 import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
 
 /** Tools on Relay's in-process MCP server; the orchestrator may use nothing else. */
@@ -16,7 +17,11 @@ const RELAY_TOOL_PREFIX = 'mcp__relay__';
 export type SdkQueryFn = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
   options?: Options;
-}) => AsyncGenerator<SDKMessage, void> & { interrupt(): Promise<unknown> };
+}) => AsyncGenerator<SDKMessage, void> & {
+  interrupt(): Promise<unknown>;
+  close?(): void;
+  supportedCommands?(): Promise<Invocable[]>;
+};
 
 async function* toSdkInput(input: AsyncIterable<AgentInput>): AsyncIterable<SDKUserMessage> {
   for await (const m of input) {
@@ -162,6 +167,26 @@ function profileOptions(opts: AgentStartOptions): Options {
 /** Drives one Claude Code session through the Agent SDK in streaming-input mode. */
 export class SdkAgentClient implements AgentClient {
   constructor(private readonly queryFn: SdkQueryFn = sdkQuery as unknown as SdkQueryFn) {}
+
+  /**
+   * Reads the command list without running a turn: the input stream never yields, so the
+   * session connects, answers, and is shut down again without spending tokens.
+   */
+  async describe(cwd: string): Promise<Invocable[]> {
+    async function* never(): AsyncIterable<SDKUserMessage> {
+      await new Promise<never>(() => undefined);
+    }
+    const q = this.queryFn({
+      prompt: never(),
+      options: { cwd, settingSources: ['user', 'project', 'local'] },
+    });
+    try {
+      const commands = (await q.supportedCommands?.()) ?? [];
+      return commands.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint ?? '' }));
+    } finally {
+      q.close?.();
+    }
+  }
 
   start(opts: AgentStartOptions): AgentRun {
     const q = this.queryFn({

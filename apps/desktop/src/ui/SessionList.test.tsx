@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SessionSummary } from '@relay/shared';
 import { SessionList } from './SessionList';
@@ -71,5 +71,20 @@ describe('SessionList', () => {
     expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /factorial/ }));
     expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+
+  it('shows on a collapsed group that something inside is running, so nothing is hidden by collapsing it', async () => {
+    const user = userEvent.setup();
+    render(
+      <SessionList
+        sessions={[s({ id: 'a', title: 'Alpha' }), s({ id: 'b', title: 'Beta' })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        states={{ b: { state: 'running', error: null } }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /repo/i }));
+    const header = screen.getByRole('button', { name: /repo/i });
+    expect(within(header).getByLabelText('running')).toBeInTheDocument();
   });
 });

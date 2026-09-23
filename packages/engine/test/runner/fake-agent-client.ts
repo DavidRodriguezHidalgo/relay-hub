@@ -1,3 +1,4 @@
+import type { Invocable } from '@relay/shared';
 import { AsyncQueue } from '../../src/runner/async-queue';
 import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from '../../src/runner/agent-client';
 
@@ -17,6 +18,14 @@ export class FakeAgentClient implements AgentClient {
   hangInterrupt = false;
   /** Ids of sends the fake has received and not yet settled with a result. */
   private unsettled: string[] = [];
+  /** What describe() reports, and the directories it was asked about. */
+  invocables: Invocable[] = [];
+  described: string[] = [];
+
+  async describe(cwd: string): Promise<Invocable[]> {
+    this.described.push(cwd);
+    return this.invocables;
+  }
 
   start(opts: AgentStartOptions): AgentRun {
     this.starts.push(opts);

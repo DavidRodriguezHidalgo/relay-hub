@@ -37,12 +37,27 @@ describe('App', () => {
       watchDelete: vi.fn().mockResolvedValue(undefined),
       listProjects: vi.fn().mockResolvedValue([{ name: 'factorial', root: '/code/factorial', sessions: 2 }]),
       createSession: vi.fn().mockResolvedValue({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' }),
+      listCommands: vi.fn().mockResolvedValue([{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }]),
     };
     Object.assign(window, { relay });
   });
 
   afterEach(() => {
     Reflect.deleteProperty(window, 'relay');
+  });
+
+  it("offers the selected session's own commands when the user types a slash", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    expect(relay.listCommands).toHaveBeenCalledWith('a');
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/rev');
+    const menu = await screen.findByRole('listbox');
+    expect(menu.querySelector('.slash-menu__name')?.textContent).toBe('/review [pr]');
+    expect(menu).toHaveTextContent('Review the diff');
+    // a different session is asked about separately
+    await userEvent.click(screen.getByText('Beta'));
+    expect(relay.listCommands).toHaveBeenLastCalledWith('b');
   });
 
   it('loads the orchestrator history, sends from the chat, and shows orchestrator entries only in the chat', async () => {

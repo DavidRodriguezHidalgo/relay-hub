@@ -25,6 +25,7 @@ const api: RelayApi = {
   watchDelete: (watchId) => ipcRenderer.invoke(IPC.watchDelete, watchId),
   listProjects: () => ipcRenderer.invoke(IPC.listProjects),
   createSession: (req) => ipcRenderer.invoke(IPC.createSession, req),
+  listCommands: (sessionId) => ipcRenderer.invoke(IPC.listCommands, sessionId),
 };
 
 contextBridge.exposeInMainWorld('relay', api);

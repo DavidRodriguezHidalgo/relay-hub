@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
+import type { Invocable, LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { SessionPanel } from './SessionPanel';
 
 const session: SessionSummary = {
@@ -21,8 +21,134 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null,
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[],
 };
+
+const commands = [
+  { name: 'review', description: 'Review the diff', argumentHint: '[pr]' },
+  { name: 'rebase-all', description: 'Rebase everything', argumentHint: '' },
+  { name: 'superpowers:brainstorming', description: 'Explore intent first', argumentHint: '' },
+];
+
+function renderPanel(props: Partial<typeof base> = {}) {
+  return render(
+    <SessionPanel {...base} {...props} entries={[]} liveEntries={[]} state={undefined} approvals={[]} />,
+  );
+}
+const box = () => screen.getByPlaceholderText('Send to this session (dev)');
+/** Only the menu's own options: the delivery-mode select has options too. */
+const options = () => within(screen.getByRole('listbox')).getAllByRole('option');
+
+describe('SessionPanel', () => {
+  it('shows the same running dot as the sidebar, so the panel alone says whether it is working', () => {
+    const { rerender } = render(
+      <SessionPanel {...base} entries={[]} liveEntries={[]} state={{ state: 'running', error: null }} approvals={[]} />,
+    );
+    expect(screen.getByLabelText('running')).toHaveClass('dot--running');
+    rerender(
+      <SessionPanel {...base} entries={[]} liveEntries={[]} state={undefined} approvals={[]} dot="elsewhere" />,
+    );
+    expect(screen.getByLabelText('running elsewhere')).toHaveClass('dot--elsewhere');
+  });
+});
+
+describe('SessionPanel slash menu', () => {
+  it('opens on "/" and lists every command, with its description', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.click(box());
+    await user.keyboard('/');
+    expect(options().map((o) => o.textContent)).toEqual([
+      '/review [pr]Review the diff',
+      '/rebase-allRebase everything',
+      '/superpowers:brainstormingExplore intent first',
+    ]);
+  });
+
+  it('filters as the user keeps typing, and closes when nothing matches', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    await user.click(box());
+    await user.keyboard('/re');
+    expect(options().map((o) => o.querySelector('.slash-menu__name')?.textContent)).toEqual(['/review [pr]', '/rebase-all']);
+    await user.keyboard('b');
+    expect(options()).toHaveLength(1);
+    await user.keyboard('zzz');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('moves through the list with the arrow keys, keeping the first item selected to start', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    await user.click(box());
+    await user.keyboard('/');
+    const selected = () => options().find((o) => o.getAttribute('aria-selected') === 'true');
+    expect(selected()).toHaveTextContent('/review');
+    await user.keyboard('{ArrowDown}');
+    expect(selected()).toHaveTextContent('/rebase-all');
+    await user.keyboard('{ArrowUp}');
+    expect(selected()).toHaveTextContent('/review');
+    // the list does not run off either end
+    await user.keyboard('{ArrowUp}');
+    expect(selected()).toHaveTextContent('/review');
+  });
+
+  it.each(['{Enter}', '{Tab}'])('puts the chosen command in the box with %s, ready for arguments, without sending', async (key) => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    renderPanel({ commands, onSend });
+    await user.click(box());
+    await user.keyboard('/reb');
+    await user.keyboard(key);
+    expect(box()).toHaveValue('/rebase-all ');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('picks the command the user clicks', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    await user.click(box());
+    await user.keyboard('/');
+    await user.click(screen.getByText('/superpowers:brainstorming'));
+    expect(box()).toHaveValue('/superpowers:brainstorming ');
+  });
+
+  it('closes on Escape and stays closed until the command is typed again', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    await user.click(box());
+    await user.keyboard('/re');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.keyboard('v');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    await user.clear(box());
+    await user.keyboard('/re');
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('leaves a slash that is not a command alone', async () => {
+    const user = userEvent.setup();
+    renderPanel({ commands });
+    await user.click(box());
+    await user.keyboard('look in src/ui');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('sends the command as typed', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    renderPanel({ commands, onSend });
+    await user.click(box());
+    await user.keyboard('/review');
+    await user.keyboard('{Enter}');
+    await user.keyboard('3497');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
+  });
+});
 
 describe('SessionPanel', () => {
   it('shows why a send failed inside the send box, which stays on screen', () => {

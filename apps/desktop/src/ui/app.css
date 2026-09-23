@@ -57,6 +57,7 @@
   .session-list__group {
     @apply flex w-full items-center gap-1.5 border-0 bg-transparent px-2 py-0.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase hover:text-fg;
   }
+  .session-list__caret { @apply inline-block w-3 text-[11px] text-accent-fg; }
   .session-list__count { @apply ml-auto rounded-full bg-surface-2 px-1.5 text-[10px] text-fg; }
   .session-list__new { @apply mb-3 w-full; }
   .new-session { @apply mb-3 flex flex-col gap-2 rounded-lg border border-line bg-surface-2 p-3 text-[12px]; }
@@ -115,7 +116,15 @@
   .approval__actions { @apply mt-2 flex flex-wrap gap-1.5; }
 
   .error { @apply text-danger; }
-  .dev-send { @apply sticky bottom-0 -mr-4 -ml-6 mt-auto border-t border-line bg-surface pr-4 pl-6 pt-3 pb-4; }
+  /* sits above the box it belongs to, like a terminal's own command menu */
+  .slash-menu { @apply absolute bottom-full left-0 right-0 z-10 m-0 max-h-72 list-none overflow-y-auto rounded-t-lg border border-line bg-surface-2 p-1 shadow-lg; }
+  .slash-menu__item { @apply flex cursor-pointer items-baseline gap-2 rounded px-2 py-1; }
+  .slash-menu__item--active { @apply bg-accent text-on-accent; }
+  .slash-menu__name { @apply shrink-0 font-mono text-[12px]; }
+  .slash-menu__hint { @apply text-muted; }
+  .slash-menu__desc { @apply truncate text-[12px] text-muted; }
+  .slash-menu__item--active .slash-menu__desc, .slash-menu__item--active .slash-menu__hint { @apply text-on-accent; }
+  .dev-send { @apply relative sticky bottom-0 -mr-4 -ml-6 mt-auto border-t border-line bg-surface pr-4 pl-6 pt-3 pb-4; }
   .dev-send textarea { @apply w-full; }
   .dev-send__row { @apply mt-1 flex gap-1.5; }
 

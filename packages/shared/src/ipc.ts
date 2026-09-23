@@ -1,3 +1,4 @@
+import type { Invocable } from './commands';
 import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { TranscriptEntry } from './transcript';
@@ -20,6 +21,7 @@ export const IPC = {
   watchDelete: 'relay:watchDelete',
   listProjects: 'relay:listProjects',
   createSession: 'relay:createSession',
+  listCommands: 'relay:listCommands',
 } as const;
 
 export interface SendRequest {
@@ -48,4 +50,5 @@ export interface RelayApi {
   watchDelete(watchId: string): Promise<void>;
   listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
+  listCommands(sessionId: string): Promise<Invocable[]>;
 }

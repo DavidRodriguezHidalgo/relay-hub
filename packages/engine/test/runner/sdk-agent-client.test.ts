@@ -11,7 +11,11 @@ async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
   return out;
 }
 
-type FakeGen = AsyncGenerator<unknown, void> & { interrupt: () => Promise<void> };
+type FakeGen = AsyncGenerator<unknown, void> & {
+  interrupt: () => Promise<void>;
+  close?: () => void;
+  supportedCommands?: () => Promise<{ name: string; description: string; argumentHint: string }[]>;
+};
 
 describe('SdkAgentClient', () => {
   it('starts an orchestrator: no resume, no built-in tools, only Relay tools over in-process MCP', async () => {
@@ -186,6 +190,26 @@ describe('SdkAgentClient', () => {
     });
     expect(await hook('ls')).toEqual({});
     expect(asked).toEqual([['Bash', { command: 'git reset --hard' }], ['Bash', { command: 'ls' }]]);
+  });
+
+  it('asks the runtime which commands a directory offers, and shuts that query down again', async () => {
+    let seen: Parameters<SdkQueryFn>[0] | null = null;
+    let closed = 0;
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      seen = params;
+      async function* gen() {}
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      g.close = () => {
+        closed += 1;
+      };
+      g.supportedCommands = async () => [{ name: 'review', description: 'Review', argumentHint: '[pr]' }];
+      return g;
+    }) as unknown as SdkQueryFn;
+    const commands = await new SdkAgentClient(fakeQuery).describe('/repo');
+    expect(commands).toEqual([{ name: 'review', description: 'Review', argumentHint: '[pr]' }]);
+    expect(seen!.options).toMatchObject({ cwd: '/repo', settingSources: ['user', 'project', 'local'] });
+    expect(closed).toBe(1);
   });
 
   it('maps an error result and a deny from canUseTool', async () => {

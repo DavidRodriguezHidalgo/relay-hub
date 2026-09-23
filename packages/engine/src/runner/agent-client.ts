@@ -1,4 +1,4 @@
-import type { MessageOrigin, TranscriptBlock } from '@relay/shared';
+import type { Invocable, MessageOrigin, TranscriptBlock } from '@relay/shared';
 import type { z, ZodRawShape } from 'zod';
 import type { PermissionOutcome } from '../approvals/approval-queue';
 
@@ -77,4 +77,6 @@ export interface AgentStartOptions {
 /** The only seam between Relay and the agent runtime; tests script it, production uses the SDK. */
 export interface AgentClient {
   start(opts: AgentStartOptions): AgentRun;
+  /** Commands, skills and plugins a directory offers; absent when the runtime cannot say. */
+  describe?(cwd: string): Promise<Invocable[]>;
 }

@@ -47,6 +47,14 @@ so and watches pause. Quitting while sessions are mid-turn asks first.
 
 Live read-only check: `RELAY_LIVE_GH=owner/repo#123 pnpm --filter @relay/engine test gh-live`.
 
+## Commands and skills
+
+A session runs with your own settings, so it has the same slash commands, skills and plugins as
+the terminal. Type `/` in a session's send box for the list (arrow keys, Enter or Tab to pick,
+Escape to close); it comes from the agent runtime itself, so built-ins and plugin-qualified names
+are exactly what the session will accept. Settings that allow a command cannot pre-approve what
+Relay's approval rules hold back.
+
 ## Look
 
 Continental yellow on near-black; follows macOS light/dark (in light mode yellow is only a fill

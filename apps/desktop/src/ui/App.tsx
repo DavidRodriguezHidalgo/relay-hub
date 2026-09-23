@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ORCHESTRATOR_KEY, type SessionSummary, type TranscriptEntry } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { NewSessionForm } from './NewSessionForm';
 import { OrchestratorChat } from './OrchestratorChat';
 import { SessionList } from './SessionList';
 import { SessionPanel } from './SessionPanel';
+import { dotState } from './sessionDot';
 import { useFollowBottom } from './useFollowBottom';
 import { useRunState } from './useRunState';
 
@@ -16,6 +17,7 @@ export function App() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
+  const [commands, setCommands] = useState<Invocable[]>([]);
   const panelRef = useRef<HTMLElement>(null);
   const run = useRunState();
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
@@ -43,6 +45,19 @@ export function App() {
 
   useEffect(() => {
     setSendError(null);
+    setCommands([]);
+    if (!selectedId) return;
+    let cancelled = false;
+    // what this session can run depends on its directory, so it is asked per session
+    void window.relay.listCommands(selectedId).then(
+      (list) => {
+        if (!cancelled) setCommands(list);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId]);
 
   // A newly opened session starts at its latest turn; updates keep following it unless the user scrolled up.
@@ -123,6 +138,8 @@ export function App() {
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
             notice={sendError}
+            commands={commands}
+            dot={dotState(selected.id, run.states, run.external)}
           />
         ) : (
           <p className="placeholder">Select a session.</p>

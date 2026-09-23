@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   ApprovalDecision,
   DeliveryMode,
+  Invocable,
   LiveEntry,
   PendingApproval,
   PrWatch,
+  SessionState,
   SessionSummary,
   TranscriptEntry,
 } from '@relay/shared';
 import { ApprovalCard } from './ApprovalCard';
+import { DOT_LABEL, dotState } from './sessionDot';
+import { applyCommand, matchCommands, SlashMenu, slashQuery } from './SlashMenu';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
 
@@ -16,7 +20,7 @@ interface Props {
   session: SessionSummary;
   entries: TranscriptEntry[];
   liveEntries: LiveEntry[];
-  state: { state: string; error: string | null } | undefined;
+  state: { state: SessionState; error: string | null } | undefined;
   approvals: PendingApproval[];
   showSidechain: boolean;
   onToggleSidechain: (v: boolean) => void;
@@ -29,12 +33,54 @@ interface Props {
   onUnwatch: (watchId: string) => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
+  /** Commands, skills and plugins this session can be asked to run. */
+  commands: Invocable[];
+  /** The sidebar's indicator for this session; defaults to whatever its own state says. */
+  dot?: string;
 }
 
 export function SessionPanel(p: Props) {
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<DeliveryMode>('steer');
+  const [caret, setCaret] = useState(0);
+  const [active, setActive] = useState(0);
+  /** Escape shuts the menu for this command; it opens again only once a new one is started. */
+  const [dismissed, setDismissed] = useState(false);
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+  const query = slashQuery(draft, caret);
+  const matches = query === null || dismissed ? [] : matchCommands(p.commands, query);
+  const pick = (command: Invocable) => {
+    const next = applyCommand(draft, caret, command.name);
+    setDraft(next.value);
+    setCaret(next.caret);
+    setActive(0);
+    const box = boxRef.current;
+    if (box) {
+      // the caret belongs after the command, not where React would leave it
+      requestAnimationFrame(() => box.setSelectionRange(next.caret, next.caret));
+      box.focus();
+    }
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (matches.length === 0) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const step = e.key === 'ArrowDown' ? 1 : -1;
+      setActive((i) => Math.min(matches.length - 1, Math.max(0, i + step)));
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      pick(matches[active] ?? matches[0]!);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setDismissed(true);
+    }
+  };
   const state = p.state?.state ?? 'idle';
+  const dot = p.dot ?? dotState(p.session.id, p.state ? { [p.session.id]: p.state } : undefined);
   const submit = () => {
     if (!draft.trim()) return;
     p.onSend(draft, mode);
@@ -45,6 +91,7 @@ export function SessionPanel(p: Props) {
       <header className="session-panel__header">
         <h1>{p.session.title}</h1>
         <p>
+          <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
           <span className={`state state--${state}`}>{state}</span> <code>{p.session.cwd}</code>{' '}
           {p.session.branch && <code>{p.session.branch}</code>}{' '}
           {p.session.prUrl && (
@@ -98,10 +145,21 @@ export function SessionPanel(p: Props) {
               {p.notice}
             </p>
           )}
+          <SlashMenu items={matches} activeIndex={active} onPick={pick} onHover={setActive} />
           <textarea
+            ref={boxRef}
             placeholder="Send to this session (dev)"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              const at = e.target.selectionStart ?? next.length;
+              setDraft(next);
+              setCaret(at);
+              setActive(0);
+              if (slashQuery(next, at) === null) setDismissed(false);
+            }}
+            onKeyDown={onKeyDown}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             rows={2}
           />
           <div className="dev-send__row">
