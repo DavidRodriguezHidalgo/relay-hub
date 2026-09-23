@@ -31,6 +31,7 @@
     @apply rounded-md border border-line bg-surface px-2 py-1.5 text-fg placeholder:text-muted
       focus:border-accent focus:outline-none;
   }
+  input[type='checkbox'] { @apply accent-accent; }
   code { @apply font-mono text-[12px] text-muted; }
   a { @apply text-accent-fg underline-offset-2 hover:underline; }
   ::selection { @apply bg-accent text-on-accent; }

@@ -62,7 +62,7 @@ export function SessionPanel(p: Props) {
               {p.watch.lastError && <span className="error"> {p.watch.lastError}</span>}
             </>
           ) : (
-            <button type="button" onClick={p.onWatch}>
+            <button type="button" className="btn-primary" onClick={p.onWatch}>
               Watch PR
             </button>
           )}
@@ -97,7 +97,7 @@ export function SessionPanel(p: Props) {
               <option value="queue">queue</option>
               <option value="interrupt">interrupt</option>
             </select>
-            <button type="submit">Send</button>
+            <button type="submit" className="btn-primary">Send</button>
             <button type="button" onClick={p.onInterrupt}>
               Interrupt
             </button>

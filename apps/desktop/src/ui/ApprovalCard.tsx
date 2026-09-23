@@ -20,7 +20,7 @@ export function ApprovalCard({ approval, onDecide }: Props) {
         {approval.toolName} · {approval.cwd}
       </div>
       <div className="approval__actions">
-        <button type="button" onClick={() => onDecide(approval.id, { kind: 'allow-once' })}>
+        <button type="button" className="btn-primary" onClick={() => onDecide(approval.id, { kind: 'allow-once' })}>
           Allow once
         </button>
         <button type="button" onClick={() => onDecide(approval.id, { kind: 'deny' })}>

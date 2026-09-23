@@ -38,7 +38,7 @@ export function BulkRunCard({ run, onConfirm, onCancel }: Props) {
           ))}
         </ul>
         <div className="bulk-card__actions">
-          <button type="button" disabled={ticked.size === 0} onClick={() => onConfirm(run.rows.map((r) => r.sessionId).filter((id) => ticked.has(id)))}>
+          <button type="button" className="btn-primary" disabled={ticked.size === 0} onClick={() => onConfirm(run.rows.map((r) => r.sessionId).filter((id) => ticked.has(id)))}>
             Run on {plural(ticked.size)}
           </button>
           <button type="button" onClick={onCancel}>Cancel</button>

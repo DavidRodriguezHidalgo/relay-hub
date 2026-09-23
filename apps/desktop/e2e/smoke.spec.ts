@@ -50,3 +50,18 @@ test('a PR link opens in the system browser, never in an app window', async () =
   await expect(page.getByLabel('Session panel')).toContainText('/repo/wt-a');
   await app.close();
 });
+test('renders readably in dark and light', async () => {
+  const app = await launchWithFixtures(['basic.jsonl', 'no-prompt.jsonl']);
+  const page = await app.firstWindow();
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.getByLabel('Show stale').check();
+  await page.getByText('Add tests for the zero-rate case').click();
+  for (const theme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `test-results/relay-${theme}.png` });
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(bg).toBe(theme === 'dark' ? 'rgb(11, 11, 11)' : 'rgb(255, 255, 255)');
+  }
+  await app.close();
+});
