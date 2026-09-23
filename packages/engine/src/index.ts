@@ -31,3 +31,5 @@ export { Orchestrator } from './orchestrator/orchestrator';
 export type { OrchestratorOptions } from './orchestrator/orchestrator';
 export { createRelayTools } from './orchestrator/relay-tools';
 export type { RelayToolDeps } from './orchestrator/relay-tools';
+export { BULK_CONCURRENCY, BulkRuns, bulkOrigin, repairLoadedRuns } from './bulk/bulk-runs';
+export type { BulkRunsDeps, BulkTarget } from './bulk/bulk-runs';
