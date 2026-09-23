@@ -4,16 +4,18 @@ import { ApprovalQueue } from '../../src/approvals/approval-queue';
 import { SessionRunner } from '../../src/runner/session-runner';
 import { FakeAgentClient, tick } from './fake-agent-client';
 
-function setup() {
+function setup(closeTimeoutMs = 5_000) {
   const client = new FakeAgentClient();
   const approvals = new ApprovalQueue();
-  const runner = new SessionRunner({ sessionId: 's1', cwd: '/repo', client, approvals });
+  const runner = new SessionRunner({ sessionId: 's1', cwd: '/repo', client, approvals, closeTimeoutMs });
   const states: SessionState[] = [];
   const entries: LiveEntry[] = [];
   runner.on('state', (s) => states.push(s));
   runner.on('entry', (e) => entries.push(e));
   return { client, approvals, runner, states, entries };
 }
+
+const sent = (client: FakeAgentClient) => client.received.map((m) => [m.text, m.priority]);
 
 describe('SessionRunner', () => {
   it('starts lazily on the first send and reports entries with the origin, then idles on result', async () => {
@@ -24,7 +26,7 @@ describe('SessionRunner', () => {
     expect(id).toMatch(/.+/);
     await tick();
     expect(client.starts[0]).toMatchObject({ sessionId: 's1', cwd: '/repo' });
-    expect(client.received).toEqual([{ text: 'do x', priority: 'now', origin: 'orchestrator' }]);
+    expect(client.received).toEqual([{ id, text: 'do x', priority: 'now', origin: 'orchestrator' }]);
     expect(runner.state).toBe('running');
     client.assistant('a1', 'working');
     client.result();
@@ -41,7 +43,7 @@ describe('SessionRunner', () => {
     await runner.send('c', { mode: 'interrupt', origin: 'user' });
     await tick();
     expect(client.interrupts).toBe(1);
-    expect(client.received.map((m) => [m.text, m.priority])).toEqual([['a', 'now'], ['b', 'next'], ['c', 'now']]);
+    expect(sent(client)).toEqual([['a', 'now'], ['b', 'next'], ['c', 'now']]);
   });
 
   it('a second send while running reuses the same run', async () => {
@@ -49,6 +51,41 @@ describe('SessionRunner', () => {
     await runner.send('a', { mode: 'steer', origin: 'user' });
     await runner.send('b', { mode: 'steer', origin: 'user' });
     expect(client.starts).toHaveLength(1);
+  });
+
+  it('a steer folded into the running turn is settled by that turn: one result → idle', async () => {
+    const { client, runner } = setup();
+    await runner.send('a', { mode: 'steer', origin: 'user' });
+    await runner.send('b', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.result(); // the SDK emits one result per turn, not per send
+    await tick();
+    expect(runner.state).toBe('idle');
+  });
+
+  it('stays running while the SDK still has queued turns, idles when the last one ends', async () => {
+    const { client, runner } = setup();
+    const a = await runner.send('a', { mode: 'steer', origin: 'user' });
+    await runner.send('b', { mode: 'queue', origin: 'user' });
+    await tick();
+    client.result(null, 1, [a]);
+    await tick();
+    expect(runner.state).toBe('running');
+    client.result(null, 0);
+    await tick();
+    expect(runner.state).toBe('idle');
+  });
+
+  it('an entry arriving while idle flips the session back to running', async () => {
+    const { client, runner } = setup();
+    await runner.send('a', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.result();
+    await tick();
+    expect(runner.state).toBe('idle');
+    client.assistant('late', 'still going'); // e.g. a turn the last result did not account for
+    await tick();
+    expect(runner.state).toBe('running');
   });
 
   it('goes to waiting-approval while a destructive call is pending and back to running when decided', async () => {
@@ -65,8 +102,8 @@ describe('SessionRunner', () => {
     expect(states).toEqual(['running', 'waiting-approval', 'running']);
   });
 
-  it('interrupt denies pending approvals so the agent never hangs', async () => {
-    const { client, approvals, runner } = setup();
+  it('interrupt denies pending approvals and the aborted turn ends normally, not in error', async () => {
+    const { client, approvals, runner, states } = setup();
     await runner.send('x', { mode: 'steer', origin: 'user' });
     await tick();
     const outcome = client.askTool('Bash', { command: 'git reset --hard' });
@@ -74,7 +111,23 @@ describe('SessionRunner', () => {
     await runner.interrupt();
     expect(await outcome).toEqual({ behavior: 'deny', message: 'interrupted' });
     expect(approvals.pending()).toEqual([]);
-    expect(runner.state).toBe('running'); // the interrupted turn still has to yield its result
+    await tick();
+    expect(runner.state).toBe('idle');
+    expect(states).not.toContain('error');
+  });
+
+  it('an interrupt-mode send is not lost to the aborted turn result', async () => {
+    const { client, runner } = setup();
+    await runner.send('long task', { mode: 'steer', origin: 'user' });
+    await tick();
+    await runner.send('stop and say done', { mode: 'interrupt', origin: 'user' });
+    await tick();
+    expect(sent(client)).toEqual([['long task', 'now'], ['stop and say done', 'now']]);
+    expect(runner.state).toBe('running');
+    expect(runner.error).toBeNull();
+    client.result();
+    await tick();
+    expect(runner.state).toBe('idle');
   });
 
   it('an error result marks the session error with the reason and a new send starts fresh', async () => {
@@ -92,6 +145,18 @@ describe('SessionRunner', () => {
     expect(states).toEqual(['running', 'error', 'running']);
   });
 
+  it('an error names the queued messages it dropped', async () => {
+    const { client, runner } = setup();
+    await runner.send('x', { mode: 'steer', origin: 'user' });
+    await runner.send('later 1', { mode: 'queue', origin: 'watch:ci_failed' });
+    await runner.send('later 2', { mode: 'queue', origin: 'user' });
+    await tick();
+    client.result('api error', 2, []);
+    await tick();
+    expect(runner.state).toBe('error');
+    expect(runner.error).toBe('api error (2 queued messages dropped)');
+  });
+
   it('a run that throws mid-turn marks error and denies pending approvals', async () => {
     const { client, approvals, runner } = setup();
     await runner.send('x', { mode: 'steer', origin: 'user' });
@@ -107,7 +172,7 @@ describe('SessionRunner', () => {
     expect(approvals.pending()).toEqual([]);
   });
 
-  it('close ends input, cancels approvals and forgets allow-patterns', async () => {
+  it('close interrupts the run, ends input, cancels approvals and forgets allow-patterns', async () => {
     const { client, approvals, runner } = setup();
     await runner.send('x', { mode: 'steer', origin: 'user' });
     await tick();
@@ -115,9 +180,8 @@ describe('SessionRunner', () => {
     await tick();
     approvals.decide(approvals.pending()[0]!.id, { kind: 'allow-pattern' });
     await first;
-    client.result();
-    await tick();
     await runner.close();
+    expect(client.interrupts).toBe(1);
     // a fresh runner for the same session asks again
     const again = new SessionRunner({ sessionId: 's1', cwd: '/repo', client, approvals });
     await again.send('y', { mode: 'steer', origin: 'user' });
@@ -126,5 +190,18 @@ describe('SessionRunner', () => {
     await tick();
     expect(approvals.pending()).toHaveLength(1);
     await again.close();
+  });
+
+  it('close gives up on a run that never ends after the timeout', async () => {
+    const { client, runner } = setup(30);
+    await runner.send('x', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.failWith = null;
+    // make the fake ignore end-of-input: keep the output open by never ending it
+    const stuck = new Promise<void>(() => undefined);
+    (runner as unknown as { consuming: Promise<void> }).consuming = stuck;
+    const started = Date.now();
+    await runner.close();
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });

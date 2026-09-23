@@ -19,7 +19,11 @@ describe('RelayEngine', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  async function startWithBasic(client: FakeAgentClient, now = () => new Date('2026-09-23T00:00:00.000Z')) {
+  async function startWithBasic(
+    client: FakeAgentClient,
+    now = () => new Date('2026-09-23T00:00:00.000Z'),
+    extra: { idleTimeoutMs?: number } = {},
+  ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
     const cwd = join(root, 'wt-a');
     await mkdir(cwd);
@@ -35,6 +39,7 @@ describe('RelayEngine', () => {
       git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
       agent: client,
       now,
+      ...extra,
     });
     return { cwd, file };
   }
@@ -103,5 +108,60 @@ describe('RelayEngine', () => {
     expect(events).toContainEqual({ type: 'approval-resolved', approvalId: approval.id, decision: 'deny' });
     // the runner leaves waiting-approval once the decision lands
     expect(events.at(-1)).toMatchObject({ type: 'state', sessionId: 's-basic', state: 'running' });
+  });
+
+  it('two concurrent first sends start one run, not two', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await Promise.all([
+      engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' }),
+      engine!.send({ sessionId: 's-basic', prompt: 'b', mode: 'steer', origin: 'user' }),
+    ]);
+    await tick();
+    expect(client.starts).toHaveLength(1);
+    expect(client.received.map((m) => m.text)).toEqual(['a', 'b']);
+  });
+
+  it('re-checks for another writer on every send to an idle runner', async () => {
+    const client = new FakeAgentClient();
+    const { file } = await startWithBasic(client, () => new Date());
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result();
+    await tick();
+    expect(engine!.runState().states['s-basic']?.state).toBe('idle');
+    // a terminal writes the transcript after Relay went idle
+    await new Promise((r) => setTimeout(r, 1_100));
+    const now = new Date();
+    await utimes(file, now, now);
+    await expect(
+      engine!.send({ sessionId: 's-basic', prompt: 'b', mode: 'steer', origin: 'user' }),
+    ).rejects.toBeInstanceOf(SessionBusyError);
+  });
+
+  it('closes an idle runner after the idle timeout and drops its state', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, { idleTimeoutMs: 30 });
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result();
+    await tick();
+    expect(engine!.runState().states['s-basic']?.state).toBe('idle');
+    await new Promise((r) => setTimeout(r, 80));
+    expect(engine!.runState().states['s-basic']).toBeUndefined();
+    // the next send starts a fresh run
+    await engine!.send({ sessionId: 's-basic', prompt: 'b', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts).toHaveLength(2);
+  });
+
+  it('close interrupts running sessions', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    await engine!.close();
+    expect(client.interrupts).toBe(1);
+    engine = null;
   });
 });

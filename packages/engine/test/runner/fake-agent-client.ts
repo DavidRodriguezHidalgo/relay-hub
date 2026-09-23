@@ -1,7 +1,11 @@
 import { AsyncQueue } from '../../src/runner/async-queue';
 import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from '../../src/runner/agent-client';
 
-/** A hand-driven agent: the test pushes messages, reads what was sent, and can fail the run. */
+/**
+ * A hand-driven agent that behaves like the SDK where it matters for state:
+ * one `result` per turn (sends close together fold into one turn), and an
+ * interrupt ends the current turn with a non-error result.
+ */
 export class FakeAgentClient implements AgentClient {
   starts: AgentStartOptions[] = [];
   received: AgentInput[] = [];
@@ -9,6 +13,8 @@ export class FakeAgentClient implements AgentClient {
   interrupts = 0;
   failWith: Error | null = null;
   lastOpts: AgentStartOptions | null = null;
+  /** Ids of sends the fake has received and not yet settled with a result. */
+  private unsettled: string[] = [];
 
   start(opts: AgentStartOptions): AgentRun {
     this.starts.push(opts);
@@ -17,7 +23,10 @@ export class FakeAgentClient implements AgentClient {
     this.out = out;
     // Like the SDK: once the input stream ends, the output generator completes.
     void (async () => {
-      for await (const m of opts.input) this.received.push(m);
+      for await (const m of opts.input) {
+        this.received.push(m);
+        this.unsettled.push(m.id);
+      }
       out.end();
     })();
     const self = this;
@@ -31,6 +40,7 @@ export class FakeAgentClient implements AgentClient {
       messages: messages(),
       interrupt: async () => {
         self.interrupts += 1;
+        self.result(null, 0);
       },
     };
   }
@@ -44,13 +54,15 @@ export class FakeAgentClient implements AgentClient {
     this.out.push({ type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }] });
   }
 
-  result(error: string | null = null) {
-    this.out.push({ type: 'result', isError: error !== null, error });
+  /** Ends the current turn; every send received so far is settled unless `queuedTurns` says otherwise. */
+  result(error: string | null = null, queuedTurns = 0, settledSendIds: string[] = this.unsettled) {
+    this.unsettled = this.unsettled.filter((id) => !settledSendIds.includes(id));
+    this.out.push({ type: 'result', isError: error !== null, error, queuedTurns, settledSendIds });
   }
 
   die(err: Error) {
     this.failWith = err;
-    this.out.push({ type: 'result', isError: false, error: null }); // wake the consumer
+    this.out.push({ type: 'result', isError: false, error: null, queuedTurns: 0, settledSendIds: [] }); // wake the consumer
   }
 }
 

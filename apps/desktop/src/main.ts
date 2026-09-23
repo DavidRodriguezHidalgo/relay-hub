@@ -68,6 +68,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
-  void engine?.close();
+// Interrupt driven sessions and wait for them before exiting, so transcripts stay resumable
+// and no `claude` process is left orphaned mid-write.
+let quitting = false;
+app.on('before-quit', (event) => {
+  if (quitting || !engine) return;
+  event.preventDefault();
+  quitting = true;
+  void engine.close().finally(() => app.exit(0));
 });

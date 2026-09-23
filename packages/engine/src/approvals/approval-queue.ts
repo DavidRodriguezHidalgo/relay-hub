@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { ApprovalDecision, PendingApproval } from '@relay/shared';
-import { classifyToolUse, patternKey } from './rules';
+import { classifyToolUse } from './rules';
 
 export type PermissionOutcome = { behavior: 'allow' } | { behavior: 'deny'; message: string };
 
@@ -14,21 +14,27 @@ export interface ApprovalRequest {
   signal: AbortSignal;
 }
 
-type Waiting = { approval: PendingApproval; resolve: (o: PermissionOutcome) => void; onAbort: () => void };
+type Waiting = {
+  approval: PendingApproval;
+  patternKey: string;
+  resolve: (o: PermissionOutcome) => void;
+  signal: AbortSignal;
+  onAbort: () => void;
+};
 
 type QueueEvents = { pending: [PendingApproval]; resolved: [string, ApprovalDecision['kind']] };
 
 /** Turns `canUseTool` callbacks into pending decisions; safe calls pass straight through. */
 export class ApprovalQueue extends EventEmitter<QueueEvents> {
   private readonly waiting = new Map<string, Waiting>();
+  /** Per session: pattern keys the user allowed for the life of its runner. */
   private readonly allowed = new Map<string, Set<string>>();
 
   request(req: ApprovalRequest): Promise<PermissionOutcome> {
     const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
     if (verdict.outcome === 'allow') return Promise.resolve({ behavior: 'allow' });
-    if (this.allowed.get(req.sessionId)?.has(patternKey(req.toolName, req.input))) {
-      return Promise.resolve({ behavior: 'allow' });
-    }
+    if (this.allowed.get(req.sessionId)?.has(verdict.patternKey)) return Promise.resolve({ behavior: 'allow' });
+    if (req.signal.aborted) return Promise.resolve({ behavior: 'deny', message: 'aborted' });
     const approval: PendingApproval = {
       id: randomUUID(),
       sessionId: req.sessionId,
@@ -42,7 +48,7 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
     return new Promise((resolve) => {
       const onAbort = () => this.settle(approval.id, { behavior: 'deny', message: 'aborted' }, 'deny');
       req.signal.addEventListener('abort', onAbort, { once: true });
-      this.waiting.set(approval.id, { approval, resolve, onAbort });
+      this.waiting.set(approval.id, { approval, patternKey: verdict.patternKey, resolve, signal: req.signal, onAbort });
       this.emit('pending', approval);
     });
   }
@@ -56,7 +62,7 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
         break;
       case 'allow-pattern': {
         const set = this.allowed.get(w.approval.sessionId) ?? new Set<string>();
-        set.add(patternKey(w.approval.toolName, w.approval.input));
+        set.add(w.patternKey);
         this.allowed.set(w.approval.sessionId, set);
         this.settle(approvalId, { behavior: 'allow' }, 'allow-pattern');
         break;
@@ -87,6 +93,7 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
     const w = this.waiting.get(id);
     if (!w) return;
     this.waiting.delete(id);
+    w.signal.removeEventListener('abort', w.onAbort);
     w.resolve(outcome);
     this.emit('resolved', id, kind);
   }

@@ -45,7 +45,7 @@ describe('SdkAgentClient', () => {
     const msgs = await collect(run.messages);
     await run.interrupt();
 
-    expect(seen!.options).toMatchObject({ resume: 'abc', cwd: '/r', permissionMode: 'acceptEdits' });
+    expect(seen!.options).toMatchObject({ resume: 'abc', cwd: '/r', permissionMode: 'acceptEdits', settingSources: ['project'] });
     expect(typeof seen!.options!.canUseTool).toBe('function');
     expect(msgs).toEqual([
       { type: 'init', sessionId: 'abc' },
@@ -57,9 +57,41 @@ describe('SdkAgentClient', () => {
         type: 'tool-results', uuid: 'u1', timestamp: expect.any(String),
         blocks: [{ kind: 'tool_result', toolUseId: 't', text: 'ok', isError: false }],
       },
-      { type: 'result', isError: false, error: null },
+      { type: 'result', isError: false, error: null, queuedTurns: null, settledSendIds: [] },
     ]);
     expect(interrupted).toBe(true);
+  });
+
+  it('stamps each send id as the SDK user message uuid and reads turn accounting back from results', async () => {
+    const received: unknown[] = [];
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      async function* gen() {
+        for await (const m of params.prompt as AsyncIterable<{ uuid?: string }>) received.push(m.uuid);
+        yield {
+          type: 'result', subtype: 'success', is_error: false, session_id: 's', result: 'ok',
+          user_message_uuids: ['id-1'], queued_turn_count: 1,
+        };
+        // an interrupted turn, exactly as the SDK reports it
+        yield { type: 'result', subtype: 'error_during_execution', is_error: true, session_id: 's', terminal_reason: 'aborted_streaming', user_message_uuids: ['id-1'], queued_turn_count: 0 };
+      }
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    const input = new AsyncQueue<AgentInput>();
+    input.push({ id: 'id-1', text: 'a', priority: 'now', origin: 'user' });
+    input.push({ id: 'id-2', text: 'b', priority: 'next', origin: 'user' });
+    input.end();
+    const run = new SdkAgentClient(fakeQuery).start({
+      sessionId: 's', cwd: '/r', input, canUseTool: async () => ({ behavior: 'allow' }),
+    });
+    const msgs = await collect(run.messages);
+    expect(received).toEqual(['id-1', 'id-2']);
+    expect(msgs).toEqual([
+      { type: 'result', isError: false, error: null, queuedTurns: 1, settledSendIds: ['id-1'] },
+      // what the SDK really sends for an interrupted turn: is_error true, terminal_reason aborted_*
+      { type: 'result', isError: false, error: null, queuedTurns: 0, settledSendIds: ['id-1'] },
+    ]);
   });
 
   it('turns AgentInput into SDK user messages with priority and a human origin', async () => {
@@ -73,16 +105,16 @@ describe('SdkAgentClient', () => {
       return g;
     }) as unknown as SdkQueryFn;
     const input = new AsyncQueue<AgentInput>();
-    input.push({ text: 'do x', priority: 'now', origin: 'orchestrator' });
-    input.push({ text: 'then y', priority: 'next', origin: 'watch:ci_failed' });
+    input.push({ id: 'u1', text: 'do x', priority: 'now', origin: 'orchestrator' });
+    input.push({ id: 'u2', text: 'then y', priority: 'next', origin: 'watch:ci_failed' });
     input.end();
     const run = new SdkAgentClient(fakeQuery).start({
       sessionId: 's', cwd: '/r', input, canUseTool: async () => ({ behavior: 'allow' }),
     });
     await collect(run.messages);
     expect(received).toEqual([
-      { type: 'user', message: { role: 'user', content: 'do x' }, parent_tool_use_id: null, priority: 'now', origin: { kind: 'human' } },
-      { type: 'user', message: { role: 'user', content: 'then y' }, parent_tool_use_id: null, priority: 'next', origin: { kind: 'human' } },
+      { type: 'user', uuid: 'u1', message: { role: 'user', content: 'do x' }, parent_tool_use_id: null, priority: 'now', origin: { kind: 'human' } },
+      { type: 'user', uuid: 'u2', message: { role: 'user', content: 'then y' }, parent_tool_use_id: null, priority: 'next', origin: { kind: 'human' } },
     ]);
   });
 
@@ -103,6 +135,8 @@ describe('SdkAgentClient', () => {
     });
     const msgs = await collect(run.messages);
     expect(bridged).toEqual({ behavior: 'deny', message: 'no' });
-    expect(msgs).toEqual([{ type: 'result', isError: true, error: 'error_during_execution: boom' }]);
+    expect(msgs).toEqual([
+      { type: 'result', isError: true, error: 'error_during_execution: boom', queuedTurns: null, settledSendIds: [] },
+    ]);
   });
 });

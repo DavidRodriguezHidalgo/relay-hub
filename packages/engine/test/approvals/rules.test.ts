@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyToolUse, patternKey } from '../../src/approvals/rules';
+import { classifyToolUse } from '../../src/approvals/rules';
 
 const cwd = '/Users/me/code/repo';
 const bash = (command: string) => classifyToolUse('Bash', { command }, cwd);
@@ -19,6 +19,25 @@ describe('classifyToolUse', () => {
     'rm -fr dist',
     'git fetch && git reset --hard origin/main',
     'pnpm build; git push --force-with-lease',
+    // spellings a chain can hide behind
+    'rm -r -f dist',
+    'rm --recursive --force dist',
+    'RM -RF dist',
+    'git -c core.x=y push -f',
+    'GIT_TRACE=1 git push -f',
+    'sudo git push -f',
+    'command git reset --hard',
+    'xargs rm -rf',
+    'sh -c "git push -f"',
+    "bash -c 'git reset --hard'",
+    'echo $(git push -f)',
+    'echo `git push -f`',
+    '(git push -f)',
+    'git fetch & git reset --hard',
+    'git push origin :main',
+    'git push --delete origin main',
+    'git push --mirror',
+    'git  push   --force',
   ])('asks for destructive git / rm: %s', (command) => {
     expect(bash(command)).toMatchObject({ outcome: 'ask', reason: 'destructive-git', summary: command });
   });
@@ -30,16 +49,32 @@ describe('classifyToolUse', () => {
     'git rebase --continue',
     'git branch -d merged',
     'rm dist/out.js',
+    'rm -r dist',
     'pnpm test',
     `cat ${cwd}/README.md`,
     'ls /tmp/x && cat /private/tmp/y',
+    'pnpm test > /dev/null 2>&1',
+    '/usr/bin/env node -v',
+    'echo "no path: here"',
+    'git push --force-if-includes origin feat',
   ])('allows ordinary commands: %s', (command) => {
     expect(bash(command)).toEqual({ outcome: 'allow' });
   });
 
-  it('asks when a Bash command touches a path outside the cwd', () => {
-    expect(bash('cat /Users/me/code/other/secret.env')).toMatchObject({ outcome: 'ask', reason: 'outside-cwd' });
-    expect(bash(`cp ${cwd}/a /Users/me/Desktop/a`)).toMatchObject({ outcome: 'ask', reason: 'outside-cwd' });
+  it.each([
+    'cat /Users/me/code/other/secret.env',
+    `cp ${cwd}/a /Users/me/Desktop/a`,
+    'cat "/Users/me/code/other/secret.env"',
+    "cat '/etc/passwd'",
+    'cat "/Users/me/my docs/notes.txt"',
+    'curl --config=/etc/x',
+    'cat ~/.ssh/id_rsa',
+    'cat $HOME/.zshrc',
+    'cp x ../../other/',
+    'git -C ../other status',
+    'git -C /Users/me/other status',
+  ])('asks when a Bash command touches a path outside the cwd: %s', (command) => {
+    expect(bash(command)).toMatchObject({ outcome: 'ask', reason: 'outside-cwd', summary: command });
   });
 
   it('asks when a file tool targets a path outside the cwd, allows inside', () => {
@@ -48,7 +83,9 @@ describe('classifyToolUse', () => {
       reason: 'outside-cwd',
       summary: '/Users/me/code/other/x.ts',
     });
+    expect(classifyToolUse('Write', { file_path: '../other/x.ts' }, cwd)).toMatchObject({ outcome: 'ask', reason: 'outside-cwd' });
     expect(classifyToolUse('Write', { file_path: `${cwd}/src/x.ts` }, cwd)).toEqual({ outcome: 'allow' });
+    expect(classifyToolUse('Write', { file_path: 'src/x.ts' }, cwd)).toEqual({ outcome: 'allow' });
     expect(classifyToolUse('Read', { file_path: '/tmp/scratch.txt' }, cwd)).toEqual({ outcome: 'allow' });
   });
 
@@ -63,12 +100,24 @@ describe('classifyToolUse', () => {
   it('allows unknown tools', () => {
     expect(classifyToolUse('WebFetch', { url: 'https://x' }, cwd)).toEqual({ outcome: 'allow' });
   });
-});
 
-describe('patternKey', () => {
-  it('is tool + first two command words for Bash, tool name otherwise', () => {
-    expect(patternKey('Bash', { command: 'git push --force origin x' })).toBe('Bash git push');
-    expect(patternKey('Bash', { command: 'rm -rf dist' })).toBe('Bash rm -rf');
-    expect(patternKey('Edit', { file_path: '/x' })).toBe('Edit');
+  describe('patternKey names the offending step, not the first words of the line', () => {
+    it.each([
+      ['git fetch && git reset --hard origin/main', 'Bash git reset'],
+      ['cd /x && git push -f', 'Bash git push'],
+      ['sh -c "git push -f"', 'Bash git push'],
+      ['rm -rf dist', 'Bash rm -rf'],
+      ['GIT_TRACE=1 git push -f', 'Bash git push'],
+    ])('%s → %s', (command, key) => {
+      expect(bash(command)).toMatchObject({ outcome: 'ask', patternKey: key });
+    });
+
+    it('keys out-of-cwd paths by their directory', () => {
+      expect(bash('cat /Users/me/code/other/secret.env')).toMatchObject({ patternKey: 'Bash path /Users/me/code/other' });
+      expect(classifyToolUse('Edit', { file_path: '/Users/me/code/other/x.ts' }, cwd)).toMatchObject({
+        patternKey: 'Edit /Users/me/code/other',
+      });
+      expect(classifyToolUse('Bash', { command: 'ls' }, cwd, '/etc/hosts')).toMatchObject({ patternKey: 'Bash blocked /etc' });
+    });
   });
 });

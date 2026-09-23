@@ -55,6 +55,31 @@ describe('ApprovalQueue', () => {
     expect(q.pending().map((p) => p.sessionId)).toEqual(['s2', 's1']);
   });
 
+  it('allow-pattern covers the destructive step, not whatever the line started with', async () => {
+    const q = new ApprovalQueue();
+    const first = req(q, 'git fetch && git reset --hard origin/main');
+    q.decide(q.pending()[0]!.id, { kind: 'allow-pattern' });
+    expect(await first).toEqual({ behavior: 'allow' });
+    // same head, different destructive step: asks
+    void req(q, 'git fetch && git push -f origin +main');
+    expect(q.pending().map((p) => p.summary)).toEqual(['git fetch && git push -f origin +main']);
+    q.decide(q.pending()[0]!.id, { kind: 'deny' });
+    // same destructive step behind a different head: allowed
+    expect(await req(q, 'git pull && git reset --hard origin/x')).toEqual({ behavior: 'allow' });
+  });
+
+  it('allow-pattern for a file outside the cwd covers only that directory', async () => {
+    const q = new ApprovalQueue();
+    const edit = (file_path: string) =>
+      q.request({ sessionId: 's1', toolName: 'Edit', input: { file_path }, cwd, signal: new AbortController().signal });
+    const first = edit('/other/lib/a.ts');
+    q.decide(q.pending()[0]!.id, { kind: 'allow-pattern' });
+    expect(await first).toEqual({ behavior: 'allow' });
+    expect(await edit('/other/lib/b.ts')).toEqual({ behavior: 'allow' });
+    void edit('/Users/me/.zshrc');
+    expect(q.pending()).toHaveLength(1);
+  });
+
   it('cancelSession denies every pending item of that session', async () => {
     const q = new ApprovalQueue();
     const resolved: string[] = [];

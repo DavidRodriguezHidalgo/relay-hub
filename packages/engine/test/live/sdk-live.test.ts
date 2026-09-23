@@ -64,6 +64,30 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
     expect(engine.runState().states[sessionId]).toEqual({ state: 'idle', error: null });
   }, 150_000);
 
+  it('a steer sent mid-turn folds into the turn and the session still returns to idle', async () => {
+    events.length = 0;
+    await engine.send({
+      sessionId,
+      prompt: 'Use the Bash tool to run `sleep 8`, then reply with the word: first',
+      mode: 'steer',
+      origin: 'user',
+    });
+    await waitFor(() => events.some((e) => e.type === 'entry'));
+    await engine.send({ sessionId, prompt: 'Also end your reply with the word: second', mode: 'steer', origin: 'user' });
+    await waitFor(idle);
+    expect(engine.runState().states[sessionId]).toEqual({ state: 'idle', error: null });
+  }, 150_000);
+
+  it('an interrupt ends the turn without an error and the interrupt message is answered', async () => {
+    events.length = 0;
+    await engine.send({ sessionId, prompt: 'Use the Bash tool to run `sleep 60`', mode: 'steer', origin: 'user' });
+    await waitFor(() => events.some((e) => e.type === 'entry'));
+    await engine.send({ sessionId, prompt: 'Stop. Reply with exactly the word: done', mode: 'interrupt', origin: 'user' });
+    await waitFor(idle, 90_000);
+    expect(events.some((e) => e.type === 'state' && e.state === 'error')).toBe(false);
+    expect(texts().join('\n').toLowerCase()).toContain('done');
+  }, 150_000);
+
   it('holds a force-push for approval; deny reaches the agent', async () => {
     events.length = 0;
     await engine.send({
