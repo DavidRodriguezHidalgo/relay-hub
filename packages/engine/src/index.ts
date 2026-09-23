@@ -27,3 +27,7 @@ export { SessionBusyError } from './runner/session-busy-error';
 export type { SendOptions } from './relay-engine';
 export { ClaudeSessionRegistry } from './runner/session-registry';
 export type { SessionRegistry } from './runner/session-registry';
+export { Orchestrator } from './orchestrator/orchestrator';
+export type { OrchestratorOptions } from './orchestrator/orchestrator';
+export { createRelayTools } from './orchestrator/relay-tools';
+export type { RelayToolDeps } from './orchestrator/relay-tools';
