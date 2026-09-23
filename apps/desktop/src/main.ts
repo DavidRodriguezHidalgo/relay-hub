@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
@@ -44,6 +44,13 @@ async function start(): Promise<void> {
   });
   engine.onError((err) => console.error('[relay] indexing problem:', err.message));
   registerEngineIpc(engine);
+  engine.onEvent((event) => {
+    if (event.type === 'approval') {
+      new Notification({ title: 'Relay Hub: approval needed', body: event.approval.summary }).show();
+    } else if (event.type === 'state' && event.state === 'error') {
+      new Notification({ title: 'Relay Hub: session error', body: event.error ?? 'unknown error' }).show();
+    }
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

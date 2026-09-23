@@ -1,4 +1,4 @@
-import type { DeliveryMode, MessageOrigin } from './runner';
+import type { ApprovalDecision, DeliveryMode, MessageOrigin, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { TranscriptEntry } from './transcript';
 
@@ -25,4 +25,9 @@ export interface RelayApi {
   listSessions(): Promise<SessionSummary[]>;
   getTranscript(id: string): Promise<TranscriptEntry[]>;
   onSessionsChanged(listener: (sessions: SessionSummary[]) => void): () => void;
+  send(request: SendRequest): Promise<string>;
+  interrupt(sessionId: string): Promise<void>;
+  decide(approvalId: string, decision: ApprovalDecision): Promise<void>;
+  runState(): Promise<RunState>;
+  onRunnerEvent(listener: (event: RunnerEvent) => void): () => void;
 }

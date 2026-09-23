@@ -23,6 +23,11 @@ describe('App', () => {
         listeners.push(l);
         return () => undefined;
       }),
+      send: vi.fn().mockResolvedValue('msg-1'),
+      interrupt: vi.fn().mockResolvedValue(undefined),
+      decide: vi.fn().mockResolvedValue(undefined),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [] }),
+      onRunnerEvent: vi.fn(() => () => undefined),
     };
     Object.assign(window, { relay });
   });

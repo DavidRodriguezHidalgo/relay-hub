@@ -1,14 +1,21 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type RelayApi, type SessionSummary } from '@relay/shared';
+import { IPC, type RelayApi, type RunnerEvent, type SessionSummary } from '@relay/shared';
+
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_e: unknown, payload: T) => listener(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.off(channel, handler);
+}
 
 const api: RelayApi = {
   listSessions: () => ipcRenderer.invoke(IPC.listSessions),
   getTranscript: (id) => ipcRenderer.invoke(IPC.getTranscript, id),
-  onSessionsChanged: (listener) => {
-    const handler = (_e: unknown, sessions: SessionSummary[]) => listener(sessions);
-    ipcRenderer.on(IPC.sessionsChanged, handler);
-    return () => ipcRenderer.off(IPC.sessionsChanged, handler);
-  },
+  onSessionsChanged: (listener) => subscribe<SessionSummary[]>(IPC.sessionsChanged, listener),
+  send: (request) => ipcRenderer.invoke(IPC.send, request),
+  interrupt: (sessionId) => ipcRenderer.invoke(IPC.interrupt, sessionId),
+  decide: (approvalId, decision) => ipcRenderer.invoke(IPC.decide, approvalId, decision),
+  runState: () => ipcRenderer.invoke(IPC.runState),
+  onRunnerEvent: (listener) => subscribe<RunnerEvent>(IPC.runnerEvent, listener),
 };
 
 contextBridge.exposeInMainWorld('relay', api);
