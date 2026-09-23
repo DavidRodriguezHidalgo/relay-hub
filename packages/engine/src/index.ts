@@ -20,3 +20,5 @@ export type {
 } from './runner/agent-client';
 export { SessionRunner } from './runner/session-runner';
 export type { SessionRunnerOptions } from './runner/session-runner';
+export { SessionBusyError } from './runner/session-busy-error';
+export type { SendOptions } from './relay-engine';
