@@ -30,6 +30,9 @@ export function useRunState(): RunView {
             return { ...v, approvals: [...v.approvals, event.approval] };
           case 'approval-resolved':
             return { ...v, approvals: v.approvals.filter((a) => a.id !== event.approvalId) };
+          case 'watch':
+          case 'pr-event':
+            return v;
           case 'bulk': {
             const others = v.bulkRuns.filter((r) => r.id !== event.run.id);
             return { ...v, bulkRuns: [event.run, ...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };

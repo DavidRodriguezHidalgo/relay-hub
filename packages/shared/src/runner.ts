@@ -57,15 +57,43 @@ export interface BulkRun {
   rows: BulkRow[];
 }
 
+export type PrEventKind = 'ci_failed' | 'review_comment' | 'base_moved' | 'merged';
+
+/** Something that changed on a watched PR; `details` is the message the session is woken with. */
+export interface PrEvent {
+  kind: PrEventKind;
+  summary: string;
+  details: string;
+}
+
+export interface PrWatch {
+  id: string;
+  sessionId: string;
+  /** owner/name */
+  repo: string;
+  prNumber: number;
+  prUrl: string;
+  active: boolean;
+  createdAt: string;
+  lastPolledAt: string | null;
+  lastError: string | null;
+}
+
+export type GhStatus = { state: 'ok' } | { state: 'unavailable'; message: string };
+
 export type RunnerEvent =
   | { type: 'state'; sessionId: string; state: SessionState; error: string | null }
   | { type: 'entry'; sessionId: string; entry: LiveEntry }
   | { type: 'approval'; approval: PendingApproval }
   | { type: 'approval-resolved'; approvalId: string; decision: ApprovalDecision['kind'] }
-  | { type: 'bulk'; run: BulkRun };
+  | { type: 'bulk'; run: BulkRun }
+  | { type: 'watch'; watch: PrWatch; gh: GhStatus }
+  | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
 
 export interface RunState {
   states: Record<string, { state: SessionState; error: string | null }>;
   approvals: PendingApproval[];
   bulkRuns: BulkRun[];
+  watches: PrWatch[];
+  gh: GhStatus;
 }

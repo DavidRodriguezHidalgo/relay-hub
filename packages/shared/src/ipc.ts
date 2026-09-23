@@ -1,4 +1,4 @@
-import type { ApprovalDecision, DeliveryMode, MessageOrigin, RunState, RunnerEvent } from './runner';
+import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { TranscriptEntry } from './transcript';
 
@@ -16,6 +16,8 @@ export const IPC = {
   orchestratorHistory: 'relay:orchestratorHistory',
   bulkConfirm: 'relay:bulkConfirm',
   bulkCancel: 'relay:bulkCancel',
+  watchCreate: 'relay:watchCreate',
+  watchDelete: 'relay:watchDelete',
 } as const;
 
 export interface SendRequest {
@@ -40,4 +42,6 @@ export interface RelayApi {
   orchestratorHistory(): Promise<TranscriptEntry[]>;
   bulkConfirm(runId: string, sessionIds: string[]): Promise<void>;
   bulkCancel(runId: string): Promise<void>;
+  watchCreate(sessionId: string): Promise<PrWatch>;
+  watchDelete(watchId: string): Promise<void>;
 }

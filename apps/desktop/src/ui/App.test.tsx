@@ -26,13 +26,15 @@ describe('App', () => {
       send: vi.fn().mockResolvedValue('msg-1'),
       interrupt: vi.fn().mockResolvedValue(undefined),
       decide: vi.fn().mockResolvedValue(undefined),
-      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [] }),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } }),
       onRunnerEvent: vi.fn(() => () => undefined),
       orchestratorSend: vi.fn().mockResolvedValue('o-1'),
       orchestratorInterrupt: vi.fn().mockResolvedValue(undefined),
       orchestratorHistory: vi.fn().mockResolvedValue([]),
       bulkConfirm: vi.fn().mockResolvedValue(undefined),
       bulkCancel: vi.fn().mockResolvedValue(undefined),
+      watchCreate: vi.fn(),
+      watchDelete: vi.fn().mockResolvedValue(undefined),
     };
     Object.assign(window, { relay });
   });
