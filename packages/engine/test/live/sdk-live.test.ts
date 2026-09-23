@@ -164,4 +164,18 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
       120_000,
     );
   }, 800_000);
+
+  it('creates a session in a new worktree of the scratch repo and gets its first reply', async () => {
+    events.length = 0;
+    const branch = `relay-live-${Date.now()}`;
+    const created = await engine.createSession({
+      project: '/private/tmp/relay-scratch', branch, prompt: 'Reply with exactly the word: born', origin: 'user',
+    });
+    expect(created.cwd).toBe(`/private/tmp/relay-scratch-worktrees/${branch}`);
+    await waitFor(
+      () => events.some((e) => e.type === 'entry' && e.sessionId === created.sessionId && e.entry.role === 'assistant'),
+      180_000,
+    );
+    expect(texts().join('\n').toLowerCase()).toContain('born');
+  }, 300_000);
 });

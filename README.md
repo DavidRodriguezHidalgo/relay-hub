@@ -1,6 +1,6 @@
 # Relay Hub
 
-One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat. Milestone 4: bulk actions. Milestone 5: PR watches.
+One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat. Milestone 4: bulk actions. Milestone 5: PR watches. Milestone 6: Continental look, creating sessions.
 
 ## Run
 
@@ -46,6 +46,21 @@ plain code and costs no tokens. Needs `gh auth login`; when `gh` is unavailable 
 so and watches pause. Quitting while sessions are mid-turn asks first.
 
 Live read-only check: `RELAY_LIVE_GH=owner/repo#123 pnpm --filter @relay/engine test gh-live`.
+
+## Look
+
+Continental yellow on near-black; follows macOS light/dark (in light mode yellow is only a fill
+behind black text). Colours live in `apps/desktop/src/ui/theme.css`, and a test checks every
+text/background pair reaches WCAG AA (4.5:1) in both modes.
+
+## Creating sessions (M6)
+
+Ask Relay to start one ("start a session in factorial to add mileage exports"). It asks which
+project and, normally, a new branch; then it creates a git worktree next to the repo
+(`~/code/factorial` → `~/code/factorial-worktrees/<branch>`, off the freshly fetched default
+branch) and starts a fresh Claude session there with your instruction. It refuses when the branch
+or directory already exists, and never touches the main checkout. Without a branch the session
+starts in the directory you name.
 
 ## Layout
 
