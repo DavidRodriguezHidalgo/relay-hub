@@ -1,5 +1,7 @@
 import {
+  createSdkMcpServer,
   query as sdkQuery,
+  tool,
   type Options,
   type SDKMessage,
   type SDKUserMessage,
@@ -77,6 +79,34 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
   }
 }
 
+function profileOptions(opts: AgentStartOptions): Options {
+  const base: Options = { cwd: opts.cwd, ...(opts.sessionId ? { resume: opts.sessionId } : {}) };
+  const profile = opts.profile ?? { kind: 'session' };
+  if (profile.kind === 'session') {
+    // Project settings and CLAUDE.md load; user/local permission allow-lists must not
+    // pre-approve commands before Relay's own approval rules see them.
+    return { ...base, permissionMode: 'acceptEdits', settingSources: ['project'] };
+  }
+  const server = createSdkMcpServer({
+    name: 'relay',
+    tools: profile.tools.map((t) =>
+      tool(t.name, t.description, t.input, async (args) => {
+        // the zod generic is erased at the tool() boundary; the SDK validated args against t.input
+        const r = await t.handler(args as never);
+        return { content: [{ type: 'text', text: r.text }], isError: r.isError === true };
+      }),
+    ),
+  });
+  return {
+    ...base,
+    tools: [],
+    settingSources: [],
+    systemPrompt: profile.systemPrompt,
+    mcpServers: { relay: server },
+    allowedTools: profile.tools.map((t) => `mcp__relay__${t.name}`),
+  };
+}
+
 /** Drives one Claude Code session through the Agent SDK in streaming-input mode. */
 export class SdkAgentClient implements AgentClient {
   constructor(private readonly queryFn: SdkQueryFn = sdkQuery as unknown as SdkQueryFn) {}
@@ -85,12 +115,7 @@ export class SdkAgentClient implements AgentClient {
     const q = this.queryFn({
       prompt: toSdkInput(opts.input),
       options: {
-        resume: opts.sessionId,
-        cwd: opts.cwd,
-        permissionMode: 'acceptEdits',
-        // Project settings and CLAUDE.md load; user/local permission allow-lists must not
-        // pre-approve commands before Relay's own approval rules see them.
-        settingSources: ['project'],
+        ...profileOptions(opts),
         canUseTool: (toolName, input, { signal, blockedPath }) =>
           opts.canUseTool(toolName, input, blockedPath, signal).then((o) =>
             o.behavior === 'allow'

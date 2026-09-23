@@ -50,6 +50,15 @@ export class FakeAgentClient implements AgentClient {
     return this.lastOpts!.canUseTool(toolName, input, undefined, new AbortController().signal);
   }
 
+  /** Calls a tool the orchestrator was started with, as the model would. */
+  callTool(name: string, args: Record<string, unknown>) {
+    const profile = this.lastOpts?.profile;
+    if (profile?.kind !== 'orchestrator') throw new Error('not an orchestrator run');
+    const t = profile.tools.find((x) => x.name === name);
+    if (!t) throw new Error(`no tool ${name}`);
+    return t.handler(args as never);
+  }
+
   assistant(uuid: string, text: string) {
     this.out.push({ type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }] });
   }

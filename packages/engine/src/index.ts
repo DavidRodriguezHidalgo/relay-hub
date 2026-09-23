@@ -13,6 +13,9 @@ export type { SdkQueryFn } from './runner/sdk-agent-client';
 export type {
   AgentClient,
   AgentInput,
+  AgentProfile,
+  AgentTool,
+  AgentToolResult,
   AgentMessage,
   AgentRun,
   AgentStartOptions,

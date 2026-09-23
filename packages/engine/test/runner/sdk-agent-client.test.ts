@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SdkAgentClient, type SdkQueryFn } from '../../src/runner/sdk-agent-client';
 import { AsyncQueue } from '../../src/runner/async-queue';
-import type { AgentInput } from '../../src/runner/agent-client';
+import { z } from 'zod';
+import type { AgentInput, AgentTool } from '../../src/runner/agent-client';
 
 async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
   const out: T[] = [];
@@ -13,6 +14,37 @@ async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {
 type FakeGen = AsyncGenerator<unknown, void> & { interrupt: () => Promise<void> };
 
 describe('SdkAgentClient', () => {
+  it('starts an orchestrator: no resume, no built-in tools, only Relay tools over in-process MCP', async () => {
+    let seen: Parameters<SdkQueryFn>[0] | null = null;
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      seen = params;
+      async function* gen() {}
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    const echo: AgentTool = {
+      name: 'echo',
+      description: 'Echo',
+      input: { text: z.string() },
+      handler: async (args) => ({ text: String(args.text) }),
+    };
+    const run = new SdkAgentClient(fakeQuery).start({
+      sessionId: null,
+      cwd: '/orch',
+      input: new AsyncQueue(),
+      canUseTool: async () => ({ behavior: 'allow' }),
+      profile: { kind: 'orchestrator', systemPrompt: 'You route.', tools: [echo] },
+    });
+    await collect(run.messages);
+    const o = seen!.options!;
+    expect(o.resume).toBeUndefined();
+    expect(o).toMatchObject({
+      cwd: '/orch', tools: [], settingSources: [], systemPrompt: 'You route.', allowedTools: ['mcp__relay__echo'],
+    });
+    expect(Object.keys(o.mcpServers ?? {})).toEqual(['relay']);
+  });
+
   it('passes resume, cwd, acceptEdits and a canUseTool bridge to query(), and maps messages', async () => {
     let seen: Parameters<SdkQueryFn>[0] | null = null;
     let interrupted = false;
