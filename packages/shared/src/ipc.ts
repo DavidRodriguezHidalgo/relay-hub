@@ -11,6 +11,9 @@ export const IPC = {
   decide: 'relay:decide',
   runState: 'relay:runState',
   runnerEvent: 'relay:runnerEvent',
+  orchestratorSend: 'relay:orchestratorSend',
+  orchestratorInterrupt: 'relay:orchestratorInterrupt',
+  orchestratorHistory: 'relay:orchestratorHistory',
 } as const;
 
 export interface SendRequest {
@@ -30,4 +33,7 @@ export interface RelayApi {
   decide(approvalId: string, decision: ApprovalDecision): Promise<void>;
   runState(): Promise<RunState>;
   onRunnerEvent(listener: (event: RunnerEvent) => void): () => void;
+  orchestratorSend(prompt: string): Promise<string>;
+  orchestratorInterrupt(): Promise<void>;
+  orchestratorHistory(): Promise<TranscriptEntry[]>;
 }

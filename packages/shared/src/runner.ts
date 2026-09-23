@@ -1,5 +1,8 @@
 import type { TranscriptEntry } from './transcript';
 
+/** `sessionId` used by runner events that belong to the orchestrator itself. */
+export const ORCHESTRATOR_KEY = 'orchestrator';
+
 export type SessionState = 'idle' | 'running' | 'waiting-approval' | 'error';
 
 export type DeliveryMode = 'steer' | 'queue' | 'interrupt';

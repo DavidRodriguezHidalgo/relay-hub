@@ -28,6 +28,9 @@ describe('App', () => {
       decide: vi.fn().mockResolvedValue(undefined),
       runState: vi.fn().mockResolvedValue({ states: {}, approvals: [] }),
       onRunnerEvent: vi.fn(() => () => undefined),
+      orchestratorSend: vi.fn().mockResolvedValue('o-1'),
+      orchestratorInterrupt: vi.fn().mockResolvedValue(undefined),
+      orchestratorHistory: vi.fn().mockResolvedValue([]),
     };
     Object.assign(window, { relay });
   });

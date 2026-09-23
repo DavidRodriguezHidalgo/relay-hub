@@ -16,6 +16,9 @@ const api: RelayApi = {
   decide: (approvalId, decision) => ipcRenderer.invoke(IPC.decide, approvalId, decision),
   runState: () => ipcRenderer.invoke(IPC.runState),
   onRunnerEvent: (listener) => subscribe<RunnerEvent>(IPC.runnerEvent, listener),
+  orchestratorSend: (prompt) => ipcRenderer.invoke(IPC.orchestratorSend, prompt),
+  orchestratorInterrupt: () => ipcRenderer.invoke(IPC.orchestratorInterrupt),
+  orchestratorHistory: () => ipcRenderer.invoke(IPC.orchestratorHistory),
 };
 
 contextBridge.exposeInMainWorld('relay', api);

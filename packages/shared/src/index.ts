@@ -14,3 +14,4 @@ export type {
   SessionState,
 } from './runner';
 export type { SendRequest } from './ipc';
+export { ORCHESTRATOR_KEY } from './runner';
