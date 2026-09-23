@@ -6,6 +6,27 @@ import { fileURLToPath } from 'node:url';
 import type { RunnerEvent } from '@relay/shared';
 import { RelayEngine } from '../src/relay-engine';
 import type { AgentClient } from '../src/runner/agent-client';
+import type { GhClient, PrData, PrRef } from '../src/pr/gh-client';
+
+class FakeGh implements GhClient {
+  data: PrData = {
+    number: 42, url: 'https://github.com/org/repo/pull/42', title: 'M', state: 'OPEN', headRefName: 'feat/a',
+    headRefOid: 'h1', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', checks: [], feedback: [],
+  };
+  found: PrRef | null = null;
+  async viewer() {
+    return 'me';
+  }
+  async viewPr() {
+    return this.data;
+  }
+  async findPrForBranch() {
+    return this.found;
+  }
+  async listMyPrs() {
+    return [];
+  }
+}
 import { SessionBusyError } from '../src/runner/session-busy-error';
 import { FakeAgentClient, tick } from './runner/fake-agent-client';
 
@@ -27,7 +48,9 @@ describe('RelayEngine', () => {
       idleTimeoutMs?: number;
       registry?: { foreignHolders(id: string): Promise<number[]> };
       more?: boolean;
+      noPr?: boolean;
       bulkConcurrency?: number;
+      gh?: GhClient;
     } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
@@ -39,7 +62,15 @@ describe('RelayEngine', () => {
     await writeFile(file, src.replaceAll('/repo/wt-a', cwd));
     const old = new Date('2026-09-20T10:01:00.000Z');
     await utimes(file, old, old); // last written days ago: nobody else is driving it
-    const { more, ...engineExtra } = extra;
+    const { more, noPr, ...engineExtra } = extra;
+    if (noPr) {
+      const cwdC = join(root, 'wt-c');
+      await mkdir(cwdC);
+      const nopr = join(root, 'projects', 'p', 's-nopr.jsonl');
+      const withoutPr = src.split('\n').filter((l) => !l.includes('"pr-link"')).join('\n');
+      await writeFile(nopr, withoutPr.replaceAll('/repo/wt-a', cwdC).replaceAll('s-basic', 's-nopr'));
+      await utimes(nopr, old, old);
+    }
     if (more) {
       const cwdB = join(root, 'wt-b');
       await mkdir(cwdB);
@@ -447,5 +478,79 @@ describe('RelayEngine', () => {
     const r = await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'more' });
     expect(r).toMatchObject({ isError: true });
     expect(engine!.runState().bulkRuns).toEqual([]);
+  });
+
+  const pollNow = () => (engine as unknown as { watcher: { pollAll(): Promise<void> } }).watcher.pollAll();
+
+  it("watching a session's PR wakes it with a queued watch message when CI fails, and never the orchestrator", async () => {
+    const { orchClient, perSession, router } = perSessionRouter();
+    const gh = new FakeGh();
+    await startWithBasic(router, undefined, { gh });
+    const watch = await engine!.watchCreate('s-basic');
+    expect(watch).toMatchObject({ repo: 'org/repo', prNumber: 42, active: true });
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    gh.data = { ...gh.data, checks: [{ name: 'test', conclusion: 'FAILURE', status: 'COMPLETED' }] };
+    await pollNow();
+    // the wake creates a runner first (busy checks read the process registry), so wait for it to land
+    for (let i = 0; !perSession.get('s-basic')?.received.length && i < 100; i += 1) await tick();
+    expect(engine!.runState().watches[0]!.lastError).toBeNull();
+    expect(events.find((e) => e.type === 'pr-event')).toMatchObject({ sessionId: 's-basic', event: { kind: 'ci_failed' } });
+    expect(events.find((e) => e.type === 'watch')).toMatchObject({ gh: { state: 'ok' } });
+    const woke = perSession.get('s-basic')!.received;
+    expect(woke).toHaveLength(1);
+    expect(woke[0]).toMatchObject({ priority: 'next', origin: 'watch:ci_failed' });
+    expect(woke[0]!.text).toContain('Newly failing checks: test');
+    perSession.get('s-basic')!.result();
+    await tick();
+    expect(orchClient.received.filter((m) => m.origin.startsWith('watch:'))).toHaveLength(0);
+    expect(engine!.runState().watches).toHaveLength(1);
+  });
+
+  it('falls back to gh for a session without a recorded PR, and says so when there is none', async () => {
+    const gh = new FakeGh();
+    await startWithBasic(new FakeAgentClient(), undefined, { gh, noPr: true });
+    await expect(engine!.watchCreate('nope')).rejects.toThrow(/unknown session/i);
+    gh.found = { repo: 'o/r', number: 5, url: 'https://github.com/o/r/pull/5' };
+    expect(await engine!.watchCreate('s-nopr')).toMatchObject({ repo: 'o/r', prNumber: 5 });
+    engine!.watchDelete(engine!.runState().watches[0]!.id);
+    gh.found = null;
+    await expect(engine!.watchCreate('s-nopr')).rejects.toThrow(/No pull request found for session/);
+  });
+
+  it('a wake refused because the session is busy elsewhere is recorded on the watch', async () => {
+    const gh = new FakeGh();
+    let holders: number[] = [];
+    await startWithBasic(new FakeAgentClient(), undefined, { gh, registry: { foreignHolders: async () => holders } });
+    await engine!.watchCreate('s-basic');
+    holders = [99];
+    gh.data = { ...gh.data, checks: [{ name: 'test', conclusion: 'FAILURE', status: 'COMPLETED' }] };
+    await pollNow();
+    for (let i = 0; !engine!.runState().watches[0]!.lastError && i < 100; i += 1) await tick();
+    expect(engine!.runState().watches[0]!.lastError).toMatch(/open in another Claude process/);
+  });
+
+  it('a merged PR notifies but does not wake the session', async () => {
+    const { perSession, router } = perSessionRouter();
+    const gh = new FakeGh();
+    await startWithBasic(router, undefined, { gh });
+    await engine!.watchCreate('s-basic');
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    gh.data = { ...gh.data, state: 'MERGED' };
+    await pollNow();
+    await tick();
+    expect(events.find((e) => e.type === 'pr-event')).toMatchObject({ event: { kind: 'merged' } });
+    expect(perSession.has('s-basic')).toBe(false);
+    expect(engine!.runState().watches[0]!.active).toBe(false);
+  });
+
+  it('activeSessions lists running sessions for the quit dialog', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    expect(engine!.activeSessions()).toEqual([]);
+    await engine!.send({ sessionId: 's-basic', prompt: 'x', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(engine!.activeSessions()).toEqual([{ id: 's-basic', title: 'Add tests for the zero-rate case', state: 'running' }]);
   });
 });

@@ -4,6 +4,9 @@ import {
   ORCHESTRATOR_KEY,
   type ApprovalDecision,
   type BulkRowStatus,
+  type PrEvent,
+  type PrWatch,
+  type SessionState,
   type BulkRun,
   type DeliveryMode,
   type MessageOrigin,
@@ -17,7 +20,9 @@ import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
-import { createRelayTools } from './orchestrator/relay-tools';
+import { ExecGhClient, repoFromPrUrl, type GhClient, type PrRef } from './pr/gh-client';
+import { PrWatcher } from './pr/pr-watcher';
+import { createRelayTools, type PrListing } from './orchestrator/relay-tools';
 import type { AgentClient } from './runner/agent-client';
 import { SdkAgentClient } from './runner/sdk-agent-client';
 import { SessionBusyError } from './runner/session-busy-error';
@@ -53,6 +58,8 @@ export interface RelayEngineOptions {
   registry?: SessionRegistry;
   /** Rows of one bulk run that run at once; defaults to BULK_CONCURRENCY. */
   bulkConcurrency?: number;
+  gh?: GhClient;
+  prPollIntervalMs?: number;
 }
 
 export interface SendOptions {
@@ -70,6 +77,7 @@ export class RelayEngine {
   private readonly listeners = new Set<(e: RunnerEvent) => void>();
   private readonly orchestrator: Orchestrator;
   private readonly bulk: BulkRuns;
+  private readonly watcher: PrWatcher;
   private readonly orchestratorCwd: string;
   private closing = false;
 
@@ -84,7 +92,12 @@ export class RelayEngine {
     orchestratorDir: string,
     loadedBulkRuns: BulkRun[],
     bulkConcurrency: number | undefined,
+    private readonly gh: GhClient,
+    prPollIntervalMs: number | undefined,
   ) {
+    this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
+    this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
+    this.watcher.on('event', (watch, event) => this.onPrEvent(watch, event));
     this.bulk = new BulkRuns({ send: (req) => this.send(req), concurrency: bulkConcurrency }, loadedBulkRuns);
     this.bulk.on('changed', (run) => {
       this.store.saveBulkRun(run);
@@ -108,6 +121,16 @@ export class RelayEngine {
         proposeBulk: async (targets, mode) => {
           this.refuseRelayOnly();
           return this.proposeBulk(targets, mode);
+        },
+        listPrs: () => this.listPrs(),
+        createWatch: async (sessionId) => {
+          this.refuseRelayOnly();
+          return this.watchCreate(sessionId);
+        },
+        deleteWatch: async (sessionId) => {
+          const w = this.watcher.forSession(sessionId);
+          if (!w) throw new Error('Not watching a PR for that session');
+          this.watchDelete(w.id);
         },
         interrupt: (id) => this.interrupt(id),
       }),
@@ -134,7 +157,7 @@ export class RelayEngine {
     });
     await index.scan();
     index.watch();
-    return new RelayEngine(
+    const engine = new RelayEngine(
       store,
       index,
       opts.agent ?? new SdkAgentClient(),
@@ -145,7 +168,11 @@ export class RelayEngine {
       opts.orchestratorDir,
       loadedBulkRuns,
       opts.bulkConcurrency,
+      opts.gh ?? new ExecGhClient(),
+      opts.prPollIntervalMs,
     );
+    engine.watcher.start();
+    return engine;
   }
 
   /** Every session except the orchestrator's own, which must never be listed or targeted. */
@@ -206,6 +233,35 @@ export class RelayEngine {
     }
   }
 
+  /** Watches the session's PR: the one recorded in its transcript, else the open PR for its branch. */
+  async watchCreate(sessionId: string): Promise<PrWatch> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    let ref: PrRef | null = null;
+    const recordedRepo = session.prUrl ? repoFromPrUrl(session.prUrl) : null;
+    if (session.prUrl && session.prNumber !== null && recordedRepo) {
+      ref = { repo: recordedRepo, number: session.prNumber, url: session.prUrl };
+    } else if (session.branch && session.cwdExists) {
+      ref = await this.gh.findPrForBranch(session.cwd, session.branch);
+    }
+    if (!ref) {
+      throw new Error(`No pull request found for session "${session.title}" (branch ${session.branch ?? 'none'})`);
+    }
+    return this.watcher.add({ sessionId, repo: ref.repo, prNumber: ref.number, prUrl: ref.url });
+  }
+
+  watchDelete(watchId: string): void {
+    this.watcher.remove(watchId);
+  }
+
+  /** Sessions with a turn in flight, for the quit confirmation. */
+  activeSessions(): { id: string; title: string; state: SessionState }[] {
+    const titles = new Map(this.listSessions().map((s) => [s.id, s.title]));
+    return [...this.runners.entries()]
+      .filter(([, r]) => r.state === 'running' || r.state === 'waiting-approval')
+      .map(([id, r]) => ({ id, title: titles.get(id) ?? id, state: r.state }));
+  }
+
   bulkConfirm(runId: string, sessionIds: string[]): void {
     this.bulk.confirm(runId, sessionIds);
   }
@@ -226,8 +282,8 @@ export class RelayEngine {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
     return { states, approvals: this.approvals.pending(), bulkRuns: this.bulk.recent(RECENT_BULK_RUNS),
-      watches: [],
-      gh: { state: 'ok' },
+      watches: this.watcher.list(),
+      gh: this.watcher.ghStatus,
     };
   }
 
@@ -236,6 +292,7 @@ export class RelayEngine {
     this.idleTimers.clear();
     // Sessions first, with the relay off: their interrupted turns must not wake the orchestrator.
     this.closing = true;
+    this.watcher.stop();
     this.bulk.stop();
     await Promise.all([...this.runners.values()].map((r) => r.close()));
     await this.orchestrator.close();
@@ -311,6 +368,32 @@ export class RelayEngine {
         ? ` was interrupted. Last reply: ${reply}`
         : ` finished. Last reply: ${reply}`;
     void this.orchestrator.send(`[turn-end] ${where}${outcome}`, { origin: 'watch:turn-end', mode: 'queue' });
+  }
+
+  /** A PR event is published; unless it is a merge, the session is woken with it as a queued message. */
+  private onPrEvent(watch: PrWatch, event: PrEvent): void {
+    this.publish({ type: 'pr-event', sessionId: watch.sessionId, watchId: watch.id, event });
+    if (event.kind === 'merged' || this.closing) return;
+    this.send({ sessionId: watch.sessionId, prompt: event.details, mode: 'queue', origin: `watch:${event.kind}` }).catch(
+      (err: unknown) => this.watcher.noteError(watch.id, err instanceof Error ? err.message : String(err)),
+    );
+  }
+
+  private async listPrs(): Promise<PrListing[]> {
+    const sessions = this.listSessions();
+    const watches = this.watcher.list().filter((w) => w.active);
+    return (await this.gh.listMyPrs()).map((p) => {
+      const session = sessions.find((s) => s.branch === p.headRefName) ?? null;
+      return {
+        repo: p.repo,
+        number: p.number,
+        url: p.url,
+        title: p.title,
+        branch: p.headRefName,
+        sessionId: session?.id ?? null,
+        watched: watches.some((w) => w.repo === p.repo && w.prNumber === p.number),
+      };
+    });
   }
 
   /** The orchestrator must not act on its own after a relay: only the user starts sends. */

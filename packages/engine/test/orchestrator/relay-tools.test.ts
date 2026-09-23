@@ -25,6 +25,13 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
         sessionId: t.sessionId, title: 't', branch: null, prompt: t.prompt, status: 'proposed' as const, detail: null,
       })),
     })),
+    listPrs: vi.fn(async () => [
+      { repo: 'o/r', number: 7, url: 'u', title: 'M', branch: 'feat/mileage', sessionId: 'a', watched: false },
+    ]),
+    createWatch: vi.fn(async (id: string) => ({
+      id: 'w1', sessionId: id, repo: 'o/r', prNumber: 7, prUrl: 'u', active: true, createdAt: 'x', lastPolledAt: 'x', lastError: null,
+    })),
+    deleteWatch: vi.fn(async () => undefined),
     ...over,
   };
 }
@@ -38,6 +45,7 @@ describe('relay tools', () => {
   it('exposes exactly the M3 tools', () => {
     expect(createRelayTools(deps()).map((t) => t.name)).toEqual([
       'list_sessions', 'get_session', 'send_to_session', 'interrupt_session', 'propose_bulk_action',
+      'list_prs', 'create_watch', 'delete_watch',
     ]);
   });
 
@@ -121,6 +129,25 @@ describe('relay tools', () => {
     });
     expect(await call(d, 'propose_bulk_action', { targets: [{ id: 'a' }, { id: 'zz' }], prompt: 'x' })).toEqual({
       text: 'Unknown session zz', isError: true,
+    });
+  });
+
+  it('list_prs, create_watch and delete_watch call through and report errors as tool errors', async () => {
+    const d = deps();
+    expect(JSON.parse((await call(d, 'list_prs', {})).text)).toEqual([
+      { repo: 'o/r', number: 7, url: 'u', title: 'M', branch: 'feat/mileage', sessionId: 'a', watched: false },
+    ]);
+    expect(JSON.parse((await call(d, 'create_watch', { id: 'a' })).text)).toMatchObject({ watching: true, prNumber: 7 });
+    expect(d.createWatch).toHaveBeenCalledWith('a');
+    expect(JSON.parse((await call(d, 'delete_watch', { id: 'a' })).text)).toEqual({ watching: false });
+    expect(d.deleteWatch).toHaveBeenCalledWith('a');
+    const bad = deps({
+      createWatch: async () => {
+        throw new Error('No pull request found for session "A" (branch none)');
+      },
+    });
+    expect(await call(bad, 'create_watch', { id: 'a' })).toEqual({
+      text: 'No pull request found for session "A" (branch none)', isError: true,
     });
   });
 });

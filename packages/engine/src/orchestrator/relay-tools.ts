@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BulkRun, DeliveryMode, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, DeliveryMode, PrWatch, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
 import type { AgentTool, AgentToolResult } from '../runner/agent-client';
 
 const LIST_MAX = 50;
@@ -14,6 +14,21 @@ export interface RelayToolDeps {
   send(req: { sessionId: string; prompt: string; mode: DeliveryMode; origin: 'orchestrator' }): Promise<string>;
   interrupt(sessionId: string): Promise<void>;
   proposeBulk(targets: { sessionId: string; prompt: string }[], mode: DeliveryMode): Promise<BulkRun>;
+  listPrs(): Promise<PrListing[]>;
+  createWatch(sessionId: string): Promise<PrWatch>;
+  /** By session id: stops that session's active watch. */
+  deleteWatch(sessionId: string): Promise<void>;
+}
+
+/** One of the user's open PRs, joined to the session working on its branch. */
+export interface PrListing {
+  repo: string;
+  number: number;
+  url: string;
+  title: string;
+  branch: string;
+  sessionId: string | null;
+  watched: boolean;
 }
 
 const ok = (value: unknown): AgentToolResult => ({ text: JSON.stringify(value) });
@@ -175,5 +190,57 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     },
   };
 
-  return [listSessions, getSession, sendToSession, interruptSession, proposeBulk] as AgentTool[];
+  const listPrs: AgentTool<Record<string, never>> = {
+    name: 'list_prs',
+    description: "The user's open pull requests, each with the session working on its branch (if any) and whether it is watched.",
+    input: {},
+    handler: async () => {
+      try {
+        return ok(await deps.listPrs());
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
+  const createWatch: AgentTool<{ id: z.ZodString }> = {
+    name: 'create_watch',
+    description:
+      "Watch the pull request of a session. Relay checks it every few minutes and wakes that session when CI fails, " +
+      'someone reviews, or the PR falls behind or into conflict. You are not told about those wakes.',
+    input: { id: z.string() },
+    handler: async ({ id }) => {
+      try {
+        const w = await deps.createWatch(id);
+        return ok({ watching: true, repo: w.repo, prNumber: w.prNumber, prUrl: w.prUrl });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
+  const deleteWatch: AgentTool<{ id: z.ZodString }> = {
+    name: 'delete_watch',
+    description: "Stop watching a session's pull request.",
+    input: { id: z.string() },
+    handler: async ({ id }) => {
+      try {
+        await deps.deleteWatch(id);
+        return ok({ watching: false });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
+  return [
+    listSessions,
+    getSession,
+    sendToSession,
+    interruptSession,
+    proposeBulk,
+    listPrs,
+    createWatch,
+    deleteWatch,
+  ] as AgentTool[];
 }

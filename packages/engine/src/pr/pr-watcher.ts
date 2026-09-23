@@ -53,6 +53,14 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
     return { ...entry.watch };
   }
 
+  /** Records a problem that is not a gh failure (e.g. a wake the session refused). */
+  noteError(watchId: string, message: string): void {
+    const entry = this.entries.get(watchId);
+    if (!entry) return;
+    entry.watch.lastError = message;
+    this.save(entry);
+  }
+
   remove(watchId: string): void {
     this.entries.delete(watchId);
     this.store.deleteWatch(watchId);
