@@ -12,9 +12,18 @@ const pr = (over: Partial<PrData> = {}): PrData => ({
 class FakeGh implements GhClient {
   data: PrData = pr();
   fail: string | null = null;
+  /** Per PR number: a failure only that PR hits (404, lost access). */
+  failFor: Record<number, string> = {};
+  gate: Promise<void> | null = null;
   views = 0;
   async viewer() { if (this.fail) throw new Error(this.fail); return 'me'; }
-  async viewPr() { this.views += 1; if (this.fail) throw new Error(this.fail); return this.data; }
+  async viewPr(_repo: string, n: number) {
+    this.views += 1;
+    if (this.gate) await this.gate;
+    if (this.fail) throw new Error(this.fail);
+    if (this.failFor[n]) throw new Error(this.failFor[n]);
+    return { ...this.data, number: n };
+  }
   async findPrForBranch() { return null; }
   async listMyPrs() { return []; }
 }
@@ -119,5 +128,69 @@ describe('PrWatcher', () => {
     const watch = await w.add(ref);
     w.remove(watch.id);
     expect(removed).toEqual([watch.id]);
+  });
+
+  it("one broken watch does not mark gh unavailable while others work", async () => {
+    const { gh, w } = setup();
+    await w.add(ref);
+    await w.add({ ...ref, sessionId: "s2", prNumber: 8 });
+    gh.failFor[8] = "HTTP 404: Not Found";
+    await w.pollAll();
+    expect(w.ghStatus).toEqual({ state: "ok" });
+    expect(w.list().find((x) => x.prNumber === 8)!.lastError).toBe("HTTP 404: Not Found");
+  });
+
+  it("removing the only failing watch clears the unavailable status", async () => {
+    const { gh, w, statuses } = setup();
+    const watch = await w.add(ref);
+    gh.fail = "gh: not logged in";
+    await w.pollAll();
+    expect(w.ghStatus.state).toBe("unavailable");
+    w.remove(watch.id);
+    expect(w.ghStatus).toEqual({ state: "ok" });
+    expect(statuses.at(-1)).toEqual({ state: "ok" });
+  });
+
+  it("a watch deleted while its poll is in flight stays deleted", async () => {
+    const { gh, w, store } = setup();
+    const watch = await w.add(ref);
+    let release!: () => void;
+    gh.gate = new Promise((r) => (release = r));
+    const pass = w.pollAll();
+    await new Promise((r) => setTimeout(r, 5));
+    w.remove(watch.id);
+    release();
+    await pass;
+    expect(w.list()).toEqual([]);
+    expect(store.loadWatches()).toEqual([]);
+  });
+
+  it("a refused wake stays visible after the next good poll", async () => {
+    const { w } = setup();
+    const watch = await w.add(ref);
+    w.noteWakeError(watch.id, "Session s1 is open in another Claude process (pid 7)");
+    await w.pollAll();
+    expect(w.list()[0]!.wakeError).toBe("Session s1 is open in another Claude process (pid 7)");
+    w.clearWakeError(watch.id);
+    expect(w.list()[0]!.wakeError).toBeNull();
+  });
+
+  it("start() polls right away instead of waiting a whole interval", async () => {
+    const { gh, w } = setup();
+    await w.add(ref);
+    gh.views = 0;
+    w.start();
+    await new Promise((r) => setTimeout(r, 20));
+    w.stop();
+    expect(gh.views).toBe(1);
+  });
+
+  it("a pass with no watches does not block later passes", async () => {
+    const { gh, w } = setup();
+    await w.pollAll(); // nothing to poll: finishes at once
+    await w.add(ref);
+    gh.views = 0;
+    await w.pollAll();
+    expect(gh.views).toBe(1);
   });
 });

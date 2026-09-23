@@ -23,6 +23,8 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
   private status: GhStatus = { state: 'ok' };
   private timer: NodeJS.Timeout | null = null;
   private pass: Promise<void> | null = null;
+  /** Watches whose last poll failed, with the message; gh is unavailable only when all active ones fail. */
+  private readonly failing = new Map<string, string>();
 
   constructor(opts: PrWatcherOptions) {
     super();
@@ -53,28 +55,40 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
     return { ...entry.watch };
   }
 
-  /** Records a problem that is not a gh failure (e.g. a wake the session refused). */
-  noteError(watchId: string, message: string): void {
+  /** A wake the session refused; stays until a later wake succeeds. */
+  noteWakeError(watchId: string, message: string): void {
     const entry = this.entries.get(watchId);
     if (!entry) return;
-    entry.watch.lastError = message;
+    entry.watch.wakeError = message;
+    this.save(entry);
+  }
+
+  clearWakeError(watchId: string): void {
+    const entry = this.entries.get(watchId);
+    if (!entry || !entry.watch.wakeError) return;
+    entry.watch.wakeError = null;
     this.save(entry);
   }
 
   remove(watchId: string): void {
     this.entries.delete(watchId);
+    this.failing.delete(watchId);
     this.store.deleteWatch(watchId);
+    this.updateStatus();
     this.emit('removed', watchId);
   }
 
+  /** One pass over the active watches; a call during a pass shares it. */
   pollAll(): Promise<void> {
-    this.pass ??= (async () => {
-      try {
-        for (const e of this.entries.values()) if (e.watch.active) await this.poll(e);
-      } finally {
-        this.pass = null;
-      }
-    })();
+    if (this.pass) return this.pass;
+    const run = async () => {
+      for (const e of [...this.entries.values()]) if (e.watch.active) await this.poll(e);
+    };
+    // cleared in a .finally on the stored promise: a pass with nothing to poll finishes synchronously,
+    // and clearing inside it would run before the assignment and leave a stale pass behind
+    this.pass = run().finally(() => {
+      this.pass = null;
+    });
     return this.pass;
   }
 
@@ -82,6 +96,8 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
     if (this.timer) return;
     this.timer = setInterval(() => void this.pollAll(), this.intervalMs);
     this.timer.unref?.();
+    // resume right away after a restart instead of a whole interval later
+    void this.pollAll();
   }
 
   stop(): void {
@@ -94,6 +110,7 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
     try {
       this.viewer ??= await this.gh.viewer();
       const pr = await this.gh.viewPr(w.repo, w.prNumber);
+      if (!this.entries.has(w.id)) return; // removed while this poll was in flight
       const raw = toSnapshot(pr);
       const next = entry.snapshot ? carryForward(entry.snapshot, raw) : raw;
       const events = entry.snapshot ? diffSnapshots(entry.snapshot, next, pr, this.viewer) : [];
@@ -101,13 +118,16 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
       w.lastPolledAt = this.now().toISOString();
       w.lastError = null;
       if (pr.state !== 'OPEN') w.active = false;
-      this.setStatus({ state: 'ok' });
+      this.failing.delete(w.id);
+      this.updateStatus();
       this.save(entry);
       for (const e of events) this.emit('event', { ...w }, e);
     } catch (err) {
+      if (!this.entries.has(w.id)) return;
       const message = err instanceof Error ? err.message : String(err);
       w.lastError = message;
-      this.setStatus({ state: 'unavailable', message });
+      this.failing.set(w.id, message);
+      this.updateStatus();
       this.save(entry);
     }
   }
@@ -115,6 +135,17 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
   private save(entry: Entry): void {
     this.store.saveWatch(entry.watch, entry.snapshot);
     this.emit('watch', { ...entry.watch });
+  }
+
+  /** Unavailable only when every active watch is failing: one broken PR is that watch's problem, not gh's. */
+  private updateStatus(): void {
+    const active = [...this.entries.values()].filter((e) => e.watch.active);
+    const failures = active.filter((e) => this.failing.has(e.watch.id));
+    if (active.length > 0 && failures.length === active.length) {
+      this.setStatus({ state: 'unavailable', message: this.failing.get(failures.at(-1)!.watch.id)! });
+    } else {
+      this.setStatus({ state: 'ok' });
+    }
   }
 
   private setStatus(next: GhStatus): void {

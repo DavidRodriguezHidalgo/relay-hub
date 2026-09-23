@@ -123,7 +123,9 @@ export class RelayEngine {
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
     this.watcher.on('event', (watch, event) => this.onPrEvent(watch, event));
-    this.watcher.on('removed', (watchId) => this.publish({ type: 'watch-removed', watchId }));
+    this.watcher.on('removed', (watchId) => this.publish({ type: 'watch-removed', watchId, gh: this.watcher.ghStatus }));
+    // a watch whose session is gone (deleted, or its worktree removed) can never wake anything
+    index.on('changed', () => this.pruneWatches());
     this.bulk = new BulkRuns({ send: (req) => this.send(req), concurrency: bulkConcurrency }, loadedBulkRuns);
     this.bulk.on('changed', (run) => {
       this.store.saveBulkRun(run);
@@ -214,6 +216,7 @@ export class RelayEngine {
       opts.worktrees ?? { repoRoot, createWorktree },
       opts.createTimeoutMs ?? DEFAULT_CREATE_TIMEOUT_MS,
     );
+    engine.pruneWatches();
     engine.watcher.start();
     return engine;
   }
@@ -512,16 +515,27 @@ export class RelayEngine {
   private onPrEvent(watch: PrWatch, event: PrEvent): void {
     this.publish({ type: 'pr-event', sessionId: watch.sessionId, watchId: watch.id, event });
     if (event.kind === 'merged' || this.closing) return;
-    this.send({ sessionId: watch.sessionId, prompt: event.details, mode: 'queue', origin: `watch:${event.kind}` }).catch(
-      (err: unknown) => this.watcher.noteError(watch.id, err instanceof Error ? err.message : String(err)),
+    this.send({ sessionId: watch.sessionId, prompt: event.details, mode: 'queue', origin: `watch:${event.kind}` }).then(
+      () => this.watcher.clearWakeError(watch.id),
+      (err: unknown) => this.watcher.noteWakeError(watch.id, err instanceof Error ? err.message : String(err)),
     );
+  }
+
+  private pruneWatches(): void {
+    const live = new Set(this.listSessions().filter((s) => s.cwdExists).map((s) => s.id));
+    for (const w of this.watcher.list()) if (!live.has(w.sessionId)) this.watcher.remove(w.id);
   }
 
   private async listPrs(): Promise<PrListing[]> {
     const sessions = this.listSessions();
     const watches = this.watcher.list().filter((w) => w.active);
     return (await this.gh.listMyPrs()).map((p) => {
-      const session = sessions.find((s) => s.branch === p.headRefName) ?? null;
+      // branch names repeat across repos: prefer the session in the PR's repo, and never guess between several
+      const sameBranch = sessions.filter((s) => s.branch === p.headRefName);
+      const repoName = p.repo.split('/')[1] ?? p.repo;
+      const inRepo = sameBranch.filter((s) => s.repo === repoName);
+      const candidates = inRepo.length > 0 ? inRepo : sameBranch;
+      const session = candidates.length === 1 ? candidates[0]! : null;
       return {
         repo: p.repo,
         number: p.number,

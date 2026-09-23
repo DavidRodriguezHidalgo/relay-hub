@@ -25,8 +25,9 @@ class FakeGh implements GhClient {
   async findPrForBranch() {
     return this.found;
   }
+  mine: { repo: string; number: number; url: string; title: string; headRefName: string; state: string }[] = [];
   async listMyPrs() {
-    return [];
+    return this.mine;
   }
 }
 import { SessionBusyError } from '../src/runner/session-busy-error';
@@ -531,8 +532,8 @@ describe('RelayEngine', () => {
     holders = [99];
     gh.data = { ...gh.data, checks: [{ name: 'test', conclusion: 'FAILURE', status: 'COMPLETED' }] };
     await pollNow();
-    for (let i = 0; !engine!.runState().watches[0]!.lastError && i < 100; i += 1) await tick();
-    expect(engine!.runState().watches[0]!.lastError).toMatch(/open in another Claude process/);
+    for (let i = 0; !engine!.runState().watches[0]!.wakeError && i < 100; i += 1) await tick();
+    expect(engine!.runState().watches[0]!.wakeError).toMatch(/open in another Claude process/);
   });
 
   it('a merged PR notifies but does not wake the session', async () => {
@@ -579,7 +580,7 @@ describe('RelayEngine', () => {
     engine!.onEvent((e) => events.push(e));
     const w = await engine!.watchCreate('s-basic');
     engine!.watchDelete(w.id);
-    expect(events.at(-1)).toEqual({ type: 'watch-removed', watchId: w.id });
+    expect(events.at(-1)).toEqual({ type: 'watch-removed', watchId: w.id, gh: { state: 'ok' } });
   });
 
   function fakeWorktrees(roots: Record<string, string>) {
@@ -749,5 +750,26 @@ describe('RelayEngine', () => {
     expect(orchClient.received.filter((m) => m.origin === "watch:bulk-end").map((m) => m.text)).toEqual([
       `[bulk-end] run ${bulkRunId} was cancelled by the user; nothing ran.`,
     ]);
+  });
+
+  it("watches of sessions that no longer exist are dropped", async () => {
+    const gh = new FakeGh();
+    await startWithBasic(new FakeAgentClient(), undefined, { gh });
+    const w = await engine!.watchCreate("s-basic");
+    await rm(join(root, "wt-a"), { recursive: true });
+    await (engine as unknown as { index: { scan(): Promise<unknown>; emit(e: string, v: unknown): void; list(): unknown[] } }).index.scan();
+    (engine as unknown as { index: { emit(e: string, v: unknown): void; list(): unknown[] } }).index.emit("changed", []);
+    await tick();
+    expect(engine!.runState().watches.map((x) => x.id)).not.toContain(w.id);
+  });
+
+  it("list_prs matches a PR to the session in the same repo when a branch name repeats across repos", async () => {
+    const gh = new FakeGh();
+    await startWithBasic(new FakeAgentClient(), undefined, { gh, more: true });
+    gh.mine = [{ repo: "org/r", number: 1, url: "u1", title: "A", headRefName: "feat/a", state: "OPEN" }];
+    const listPrs = (engine as unknown as { listPrs(): Promise<{ sessionId: string | null }[]> }).listPrs.bind(engine);
+    // both fixture sessions record branch feat/a; the git fake reports repo "r" for both, so the repo narrows nothing
+    // and the first-by-activity rule is not used: ambiguous means no session
+    expect((await listPrs())[0]!.sessionId).toBeNull();
   });
 });

@@ -60,6 +60,7 @@ export function SessionPanel(p: Props) {
                 Stop watching
               </button>
               {p.watch.lastError && <span className="error"> {p.watch.lastError}</span>}
+              {p.watch.wakeError && <span className="error"> Could not wake the session: {p.watch.wakeError}</span>}
             </>
           ) : (
             <button type="button" className="btn-primary" onClick={p.onWatch}>

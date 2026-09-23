@@ -132,7 +132,7 @@ describe('App', () => {
     });
     expect(screen.getByText(/Watching PR #9/)).toBeInTheDocument();
     await act(async () => {
-      emit!({ type: 'watch-removed', watchId: 'w1' });
+      emit!({ type: 'watch-removed', watchId: 'w1', gh: { state: 'ok' } });
     });
     expect(screen.queryByText(/Watching PR #9/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Watch PR' })).toBeInTheDocument();

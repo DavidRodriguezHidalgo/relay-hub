@@ -76,7 +76,10 @@ export interface PrWatch {
   active: boolean;
   createdAt: string;
   lastPolledAt: string | null;
+  /** The last poll failed (gh unavailable, PR not found...). */
   lastError: string | null;
+  /** The last wake-up was refused (e.g. the session is open elsewhere); kept until a wake succeeds. */
+  wakeError?: string | null;
 }
 
 export type GhStatus = { state: 'ok' } | { state: 'unavailable'; message: string };
@@ -88,7 +91,7 @@ export type RunnerEvent =
   | { type: 'approval-resolved'; approvalId: string; decision: ApprovalDecision['kind'] }
   | { type: 'bulk'; run: BulkRun }
   | { type: 'watch'; watch: PrWatch; gh: GhStatus }
-  | { type: 'watch-removed'; watchId: string }
+  | { type: 'watch-removed'; watchId: string; gh: GhStatus }
   | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
 
 export interface RunState {
