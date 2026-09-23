@@ -54,7 +54,9 @@
   .badge { @apply rounded border border-line px-1 text-[11px] text-fg; }
 
   .orchestrator { @apply flex min-h-0 flex-col overflow-hidden px-5 pt-10; }
-  .session-panel { @apply overflow-auto border-l border-line bg-surface px-4 pt-10 pb-4; }
+  /* a column, so the dev box sits at the bottom even when the transcript is short */
+  .session-panel { @apply flex flex-col overflow-auto border-l border-line bg-surface px-4 pt-10; }
+  .session-panel > * { @apply shrink-0; }
   .placeholder { @apply text-muted; }
 
   .transcript { @apply m-0 list-none p-0; }
@@ -91,7 +93,7 @@
   .approval__actions { @apply mt-2 flex flex-wrap gap-1.5; }
 
   .error { @apply text-danger; }
-  .dev-send { @apply sticky bottom-0 bg-surface pt-2; }
+  .dev-send { @apply sticky bottom-0 -mx-4 mt-auto border-t border-line bg-surface px-4 pt-3 pb-4; }
   .dev-send textarea { @apply w-full; }
   .dev-send__row { @apply mt-1 flex gap-1.5; }
 
