@@ -21,7 +21,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true,
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(),
 };
 
 describe('SessionPanel', () => {
@@ -100,5 +100,36 @@ describe('SessionPanel', () => {
     );
     expect(screen.getByText('session not found')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Send to this session (dev)')).not.toBeInTheDocument();
+  });
+
+  it('offers Watch PR, and shows the watch with its last check and error once active', async () => {
+    const onWatch = vi.fn();
+    const withPr = { ...session, prNumber: 42, prUrl: 'https://github.com/o/r/pull/42' };
+    const { rerender } = render(
+      <SessionPanel {...base} session={withPr} onWatch={onWatch} entries={[]} liveEntries={[]} state={undefined} approvals={[]} />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Watch PR' }));
+    expect(onWatch).toHaveBeenCalled();
+    const onUnwatch = vi.fn();
+    rerender(
+      <SessionPanel
+        {...base}
+        session={withPr}
+        onUnwatch={onUnwatch}
+        entries={[]}
+        liveEntries={[]}
+        state={undefined}
+        approvals={[]}
+        watch={{
+          id: 'w1', sessionId: 'a', repo: 'o/r', prNumber: 42, prUrl: 'u', active: true, createdAt: 'x',
+          lastPolledAt: '2026-09-23T12:00:00.000Z', lastError: 'gh: offline',
+        }}
+      />,
+    );
+    expect(screen.getByText(/Watching PR #42/)).toBeInTheDocument();
+    expect(screen.getByText('gh: offline')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Watch PR' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Stop watching' }));
+    expect(onUnwatch).toHaveBeenCalledWith('w1');
   });
 });

@@ -48,6 +48,11 @@ export function App() {
 
   return (
     <div className="app">
+      {run.gh.state === 'unavailable' && (
+        <div role="alert" className="gh-banner">
+          GitHub CLI unavailable — PR watches paused: {run.gh.message}
+        </div>
+      )}
       <SessionList sessions={sessions} selectedId={selectedId} onSelect={setSelectedId} states={run.states} />
       <main className="orchestrator" aria-label="Orchestrator">
         <OrchestratorChat
@@ -87,6 +92,14 @@ export function App() {
             }
             onInterrupt={() => void window.relay.interrupt(selected.id)}
             devTools={import.meta.env.DEV}
+            watch={run.watches.find((w) => w.sessionId === selected.id && w.active) ?? null}
+            onWatch={() =>
+              void window.relay
+                .watchCreate(selected.id)
+                .then(() => setSendError(null))
+                .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
+            }
+            onUnwatch={(id) => void window.relay.watchDelete(id)}
           />
         ) : (
           <p className="placeholder">Select a session.</p>

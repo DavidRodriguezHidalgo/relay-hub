@@ -93,6 +93,28 @@ describe('App', () => {
     expect(relay.bulkConfirm).toHaveBeenCalledWith('r1', ['a', 'b']);
   });
 
+  it('Watch PR asks the engine, shows a failure, and a gh outage shows a banner', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    relay.watchCreate.mockRejectedValue(new Error('No pull request found for session "Alpha" (branch main)'));
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    await userEvent.click(screen.getByRole('button', { name: 'Watch PR' }));
+    expect(relay.watchCreate).toHaveBeenCalledWith('a');
+    expect(await screen.findByText(/No pull request found for session/)).toBeInTheDocument();
+    await act(async () => {
+      emit!({
+        type: 'watch',
+        watch: { id: 'w1', sessionId: 'b', repo: 'o/r', prNumber: 1, prUrl: 'u', active: true, createdAt: 'x', lastPolledAt: null, lastError: 'gh: not logged in' },
+        gh: { state: 'unavailable', message: 'gh: not logged in' },
+      });
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('gh: not logged in');
+  });
+
   it('re-fetches the transcript only when the selected session itself changed', async () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));

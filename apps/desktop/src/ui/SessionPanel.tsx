@@ -4,6 +4,7 @@ import type {
   DeliveryMode,
   LiveEntry,
   PendingApproval,
+  PrWatch,
   SessionSummary,
   TranscriptEntry,
 } from '@relay/shared';
@@ -23,6 +24,9 @@ interface Props {
   onSend: (prompt: string, mode: DeliveryMode) => void;
   onInterrupt: () => void;
   devTools: boolean;
+  watch: PrWatch | null;
+  onWatch: () => void;
+  onUnwatch: (watchId: string) => void;
 }
 
 export function SessionPanel(p: Props) {
@@ -45,6 +49,22 @@ export function SessionPanel(p: Props) {
             <a href={p.session.prUrl} target="_blank" rel="noreferrer">
               PR #{p.session.prNumber}
             </a>
+          )}{' '}
+          {p.watch ? (
+            <>
+              <span className="watch">
+                Watching PR #{p.watch.prNumber}
+                {p.watch.lastPolledAt && ` · checked ${new Date(p.watch.lastPolledAt).toLocaleTimeString()}`}
+              </span>{' '}
+              <button type="button" onClick={() => p.onUnwatch(p.watch!.id)}>
+                Stop watching
+              </button>
+              {p.watch.lastError && <span className="error"> {p.watch.lastError}</span>}
+            </>
+          ) : (
+            <button type="button" onClick={p.onWatch}>
+              Watch PR
+            </button>
           )}
         </p>
         {p.state?.error && <p className="error">{p.state.error}</p>}

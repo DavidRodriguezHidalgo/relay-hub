@@ -48,6 +48,9 @@ async function start(): Promise<void> {
   engine.onEvent((event) => {
     if (event.type === 'approval') {
       new Notification({ title: 'Relay Hub: approval needed', body: event.approval.summary }).show();
+    } else if (event.type === 'pr-event') {
+      const title = engine?.listSessions().find((s) => s.id === event.sessionId)?.title ?? event.sessionId;
+      new Notification({ title: `Relay Hub: ${event.event.summary}`, body: title }).show();
     } else if (event.type === 'state' && event.state === 'error') {
       new Notification({ title: 'Relay Hub: session error', body: event.error ?? 'unknown error' }).show();
     }
@@ -72,9 +75,32 @@ app.on('window-all-closed', () => {
 // Interrupt driven sessions and wait for them before exiting, so transcripts stay resumable
 // and no `claude` process is left orphaned mid-write.
 let quitting = false;
+let confirming = false;
+
+/** Asks before quitting while sessions are mid-turn; quitting interrupts them. */
+async function confirmQuit(active: { title: string; state: string }[]): Promise<boolean> {
+  if (active.length === 0) return true;
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['Quit', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: 'Sessions are still running',
+    detail: `${active.map((s) => `• ${s.title} (${s.state})`).join('\n')}\n\nQuitting interrupts them.`,
+  });
+  return response === 0;
+}
+
 app.on('before-quit', (event) => {
   if (quitting || !engine) return;
   event.preventDefault();
-  quitting = true;
-  void engine.close().finally(() => app.exit(0));
+  if (confirming) return;
+  confirming = true;
+  const current = engine;
+  void confirmQuit(current.activeSessions()).then((ok) => {
+    confirming = false;
+    if (!ok) return;
+    quitting = true;
+    void current.close().finally(() => app.exit(0));
+  });
 });

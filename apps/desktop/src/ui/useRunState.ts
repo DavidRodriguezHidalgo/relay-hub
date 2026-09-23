@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
-import type { BulkRun, LiveEntry, PendingApproval, RunState, RunnerEvent } from '@relay/shared';
+import type { BulkRun, GhStatus, LiveEntry, PendingApproval, PrWatch, RunState, RunnerEvent } from '@relay/shared';
 
 export interface RunView {
   states: RunState['states'];
   approvals: PendingApproval[];
   liveEntries: Record<string, LiveEntry[]>;
   bulkRuns: BulkRun[];
+  watches: PrWatch[];
+  gh: GhStatus;
 }
 
 /** Mirrors the engine's run state in the renderer: initial snapshot, then events. */
 export function useRunState(): RunView {
-  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [] });
+  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' } });
   useEffect(() => {
-    void window.relay.runState().then((s) => setView((v) => ({ ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns })));
+    void window.relay.runState().then((s) => setView((v) => ({ ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns, watches: s.watches, gh: s.gh })));
     return window.relay.onRunnerEvent((event: RunnerEvent) => {
       setView((v) => {
         switch (event.type) {
@@ -30,7 +32,10 @@ export function useRunState(): RunView {
             return { ...v, approvals: [...v.approvals, event.approval] };
           case 'approval-resolved':
             return { ...v, approvals: v.approvals.filter((a) => a.id !== event.approvalId) };
-          case 'watch':
+          case 'watch': {
+            const others = v.watches.filter((w) => w.id !== event.watch.id);
+            return { ...v, watches: [...others, event.watch], gh: event.gh };
+          }
           case 'pr-event':
             return v;
           case 'bulk': {

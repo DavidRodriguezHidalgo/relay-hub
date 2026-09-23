@@ -57,3 +57,5 @@ body { margin: 0; }
 .bulk-card__prompt, .bulk-card__detail { margin: 2px 0 0 22px; font-size: 12px; opacity: .75; white-space: pre-wrap; }
 .bulk-card__actions { display: flex; gap: 6px; margin-top: 8px; }
 .state--done { color: #2e9d57; } .state--queued, .state--skipped, .state--proposed { opacity: .6; }
+.gh-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 10; background: #d98a00; color: #000; padding: 4px 12px; font-size: 12px; text-align: center; }
+.watch { font-size: 11px; opacity: .8; }
