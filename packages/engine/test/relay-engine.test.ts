@@ -197,14 +197,13 @@ describe('RelayEngine', () => {
     await writeFile(join(own, 'o-1.jsonl'), src.replaceAll('/repo/wt-a', orchDir).replaceAll('s-basic', 'o-1'));
     const pushed: string[][] = [];
     engine!.onSessionsChanged((list) => pushed.push(list.map((x) => x.id)));
-    await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
+    const index = (engine as unknown as { index: { scan(): Promise<unknown>; list(): unknown[]; emit(e: string, v: unknown): void } }).index;
+    await index.scan();
     expect(engine!.listSessions().map((x) => x.id)).toEqual(['s-basic']);
-    // the watcher's change events go to the sidebar: they must be filtered too
-    for (let waited = 0; pushed.length === 0 && waited < 5_000; waited += 50) {
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    expect(pushed.length).toBeGreaterThan(0);
-    expect(pushed.at(-1)).toEqual(['s-basic']);
+    // the watcher's change events go to the sidebar and must be filtered too; emit one directly
+    // rather than waiting on FSEvents, which a loaded machine may coalesce or delay
+    index.emit('changed', index.list());
+    expect(pushed).toEqual([['s-basic']]);
     await expect(
       engine!.send({ sessionId: 'o-1', prompt: 'x', mode: 'steer', origin: 'user' }),
     ).rejects.toThrow(/unknown session/i);
