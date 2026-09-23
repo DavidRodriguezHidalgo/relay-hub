@@ -94,7 +94,7 @@ describe('SdkAgentClient', () => {
         type: 'tool-results', uuid: 'u1', timestamp: expect.any(String),
         blocks: [{ kind: 'tool_result', toolUseId: 't', text: 'ok', isError: false }],
       },
-      { type: 'result', isError: false, error: null, queuedTurns: null, settledSendIds: [] },
+      { type: 'result', isError: false, aborted: false, error: null, queuedTurns: null, settledSendIds: [] },
     ]);
     expect(interrupted).toBe(true);
   });
@@ -125,9 +125,9 @@ describe('SdkAgentClient', () => {
     const msgs = await collect(run.messages);
     expect(received).toEqual(['id-1', 'id-2']);
     expect(msgs).toEqual([
-      { type: 'result', isError: false, error: null, queuedTurns: 1, settledSendIds: ['id-1'] },
+      { type: 'result', isError: false, aborted: false, error: null, queuedTurns: 1, settledSendIds: ['id-1'] },
       // what the SDK really sends for an interrupted turn: is_error true, terminal_reason aborted_*
-      { type: 'result', isError: false, error: null, queuedTurns: 0, settledSendIds: ['id-1'] },
+      { type: 'result', isError: false, aborted: true, error: null, queuedTurns: 0, settledSendIds: ['id-1'] },
     ]);
   });
 
@@ -173,7 +173,7 @@ describe('SdkAgentClient', () => {
     const msgs = await collect(run.messages);
     expect(bridged).toEqual({ behavior: 'deny', message: 'no' });
     expect(msgs).toEqual([
-      { type: 'result', isError: true, error: 'error_during_execution: boom', queuedTurns: null, settledSendIds: [] },
+      { type: 'result', isError: true, aborted: false, error: 'error_during_execution: boom', queuedTurns: null, settledSendIds: [] },
     ]);
   });
 });

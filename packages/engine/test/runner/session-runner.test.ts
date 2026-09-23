@@ -253,7 +253,7 @@ describe('SessionRunner', () => {
     client.assistant('a2', 'final answer');
     client.result();
     await tick();
-    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: 'final answer', error: null }]);
+    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: 'final answer', error: null, aborted: false }]);
   });
 
   it('turn-end on error carries the reason', async () => {
@@ -264,6 +264,19 @@ describe('SessionRunner', () => {
     await tick();
     client.result('api error');
     await tick();
-    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: null, error: 'api error' }]);
+    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: null, error: 'api error', aborted: false }]);
+  });
+
+  it('an interrupted turn ends with aborted set', async () => {
+    const { client, runner } = setup();
+    const ends: unknown[] = [];
+    runner.on('turn-end', (e) => ends.push(e));
+    await runner.send('long', { mode: 'steer', origin: 'orchestrator' });
+    await tick();
+    client.assistant('a1', 'Starting the rebase, first I will');
+    await tick();
+    await runner.interrupt();
+    await tick();
+    expect(ends).toEqual([{ origins: ['orchestrator'], lastText: 'Starting the rebase, first I will', error: null, aborted: true }]);
   });
 });

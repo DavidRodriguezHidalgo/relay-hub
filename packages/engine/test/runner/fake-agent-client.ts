@@ -40,7 +40,7 @@ export class FakeAgentClient implements AgentClient {
       messages: messages(),
       interrupt: async () => {
         self.interrupts += 1;
-        self.result(null, 0);
+        self.result(null, 0, undefined, true);
       },
     };
   }
@@ -68,14 +68,14 @@ export class FakeAgentClient implements AgentClient {
   }
 
   /** Ends the current turn; every send received so far is settled unless `queuedTurns` says otherwise. */
-  result(error: string | null = null, queuedTurns = 0, settledSendIds: string[] = this.unsettled) {
+  result(error: string | null = null, queuedTurns = 0, settledSendIds: string[] = this.unsettled, aborted = false) {
     this.unsettled = this.unsettled.filter((id) => !settledSendIds.includes(id));
-    this.out.push({ type: 'result', isError: error !== null, error, queuedTurns, settledSendIds });
+    this.out.push({ type: 'result', isError: error !== null, aborted, error, queuedTurns, settledSendIds });
   }
 
   die(err: Error) {
     this.failWith = err;
-    this.out.push({ type: 'result', isError: false, error: null, queuedTurns: 0, settledSendIds: [] }); // wake the consumer
+    this.out.push({ type: 'result', isError: false, aborted: false, error: null, queuedTurns: 0, settledSendIds: [] }); // wake the consumer
   }
 }
 

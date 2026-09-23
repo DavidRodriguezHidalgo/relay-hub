@@ -26,7 +26,7 @@ function setup(concurrency = 3, refuse: Record<string, string> = {}) {
 
 const statuses = (r: BulkRun) => r.rows.map((x) => `${x.sessionId}:${x.status}`);
 const done = (runs: BulkRuns, runId: string, sessionId: string, text = 'ok') =>
-  runs.onTurnEnd(sessionId, { origins: [bulkOrigin(runId)], lastText: text, error: null });
+  runs.onTurnEnd(sessionId, { origins: [bulkOrigin(runId)], lastText: text, error: null, aborted: false });
 
 describe('BulkRuns', () => {
   it('proposes a run with every row proposed and sends nothing', () => {
@@ -60,7 +60,7 @@ describe('BulkRuns', () => {
     await tick();
     expect(sent.map((s) => s.sessionId)).toEqual(['a', 'b']);
     expect(finished).toEqual([]);
-    runs.onTurnEnd('b', { origins: [bulkOrigin(run.id)], lastText: null, error: 'api error' });
+    runs.onTurnEnd('b', { origins: [bulkOrigin(run.id)], lastText: null, error: 'api error', aborted: false });
     await tick();
     const last = runs.recent(1)[0]!;
     expect(last.status).toBe('finished');
@@ -84,9 +84,9 @@ describe('BulkRuns', () => {
     const run = runs.propose(targets('a'), 'steer');
     runs.confirm(run.id, ['a']);
     await tick();
-    runs.onTurnEnd('a', { origins: ['user'], lastText: 'x', error: null });
+    runs.onTurnEnd('a', { origins: ['user'], lastText: 'x', error: null, aborted: false });
     expect(statuses(runs.recent(1)[0]!)).toEqual(['a:running']);
-    runs.onTurnEnd('a', { origins: ['user', bulkOrigin(run.id)], lastText: 'y', error: null });
+    runs.onTurnEnd('a', { origins: ['user', bulkOrigin(run.id)], lastText: 'y', error: null, aborted: false });
     expect(statuses(runs.recent(1)[0]!)).toEqual(['a:done']);
   });
 
@@ -135,5 +135,26 @@ describe('repairLoadedRuns', () => {
       ['error', 'Relay was closed during the run'],
       ['error', 'Relay was closed during the run'],
     ]);
+  });
+
+  it('an interrupted row ends in error, not done', async () => {
+    const { runs } = setup();
+    const run = runs.propose(targets('a', 'b'), 'steer');
+    runs.confirm(run.id, ['a', 'b']);
+    await tick();
+    runs.onTurnEnd('a', { origins: [bulkOrigin(run.id)], lastText: 'Starting the rebase', error: null, aborted: true });
+    expect(runs.recent(1)[0]!.rows[0]).toMatchObject({ status: 'error', detail: 'Interrupted: Starting the rebase' });
+  });
+
+  it('after stop() nothing moves: no turn-ends are applied and no queued rows start', async () => {
+    const { runs, sent } = setup(1);
+    const run = runs.propose(targets('a', 'b'), 'steer');
+    runs.confirm(run.id, ['a', 'b']);
+    await tick();
+    runs.stop();
+    done(runs, run.id, 'a');
+    await tick();
+    expect(statuses(runs.recent(1)[0]!)).toEqual(['a:running', 'b:queued']);
+    expect(sent.map((s) => s.sessionId)).toEqual(['a']);
   });
 });

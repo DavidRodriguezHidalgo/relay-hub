@@ -56,6 +56,7 @@ function mapResult(m: ResultLike): AgentMessage {
   return {
     type: 'result',
     isError,
+    aborted,
     error,
     queuedTurns: typeof m.queued_turn_count === 'number' ? m.queued_turn_count : null,
     settledSendIds: Array.isArray(m.user_message_uuids) ? m.user_message_uuids : [],

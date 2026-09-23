@@ -51,6 +51,8 @@ export interface RelayEngineOptions {
   now?: () => Date;
   idleTimeoutMs?: number;
   registry?: SessionRegistry;
+  /** Rows of one bulk run that run at once; defaults to BULK_CONCURRENCY. */
+  bulkConcurrency?: number;
 }
 
 export interface SendOptions {
@@ -81,8 +83,9 @@ export class RelayEngine {
     private readonly registry: SessionRegistry,
     orchestratorDir: string,
     loadedBulkRuns: BulkRun[],
+    bulkConcurrency: number | undefined,
   ) {
-    this.bulk = new BulkRuns({ send: (req) => this.send(req) }, loadedBulkRuns);
+    this.bulk = new BulkRuns({ send: (req) => this.send(req), concurrency: bulkConcurrency }, loadedBulkRuns);
     this.bulk.on('changed', (run) => {
       this.store.saveBulkRun(run);
       this.publish({ type: 'bulk', run });
@@ -141,6 +144,7 @@ export class RelayEngine {
       opts.registry ?? new ClaudeSessionRegistry(),
       opts.orchestratorDir,
       loadedBulkRuns,
+      opts.bulkConcurrency,
     );
   }
 
@@ -229,6 +233,7 @@ export class RelayEngine {
     this.idleTimers.clear();
     // Sessions first, with the relay off: their interrupted turns must not wake the orchestrator.
     this.closing = true;
+    this.bulk.stop();
     await Promise.all([...this.runners.values()].map((r) => r.close()));
     await this.orchestrator.close();
     this.runners.clear();
@@ -297,7 +302,11 @@ export class RelayEngine {
     if (this.closing || !end.origins.includes('orchestrator')) return;
     const where = `session "${session.title}" (${session.id}${session.branch ? `, ${session.branch}` : ''})`;
     const reply = end.lastText ? clip(end.lastText, RELAY_TEXT_MAX) : '(no text)';
-    const outcome = end.error ? ` finished with an error: ${end.error}` : ` finished. Last reply: ${reply}`;
+    const outcome = end.error
+      ? ` finished with an error: ${end.error}`
+      : end.aborted
+        ? ` was interrupted. Last reply: ${reply}`
+        : ` finished. Last reply: ${reply}`;
     void this.orchestrator.send(`[turn-end] ${where}${outcome}`, { origin: 'watch:turn-end', mode: 'queue' });
   }
 

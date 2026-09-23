@@ -22,6 +22,8 @@ export interface TurnEnd {
   origins: MessageOrigin[];
   lastText: string | null;
   error: string | null;
+  /** The turn was interrupted before it completed. */
+  aborted: boolean;
 }
 
 type RunnerEvents = {
@@ -199,7 +201,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
             this.fail(m.error ?? 'unknown error');
             return;
           }
-          this.settleTurn(m.settledSendIds, m.queuedTurns);
+          this.settleTurn(m.settledSendIds, m.queuedTurns, m.aborted);
           break;
         case 'init':
           // emitted on every init: it also proves a resumed id is alive
@@ -214,7 +216,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
    * One result ends one turn. Sends the runtime names are settled; when it reports no
    * queued turns, every earlier send was folded into this turn and is settled too.
    */
-  private settleTurn(settledSendIds: string[], queuedTurns: number | null): void {
+  private settleTurn(settledSendIds: string[], queuedTurns: number | null, aborted: boolean): void {
+    const interrupted = aborted || this.aborting !== null;
     for (const id of settledSendIds) this.settle(id);
     if (this.aborting) {
       // the interrupted turn ends: it settles what it was running, not what was sent after the interrupt
@@ -225,7 +228,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     }
     if (this.outstanding.size === 0 && this.pendingIds.size === 0) {
       this.setState('idle');
-      this.emitTurnEnd(null);
+      this.emitTurnEnd(null, interrupted);
     }
   }
 
@@ -236,8 +239,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     if (origin && !this.settledOrigins.includes(origin)) this.settledOrigins.push(origin);
   }
 
-  private emitTurnEnd(error: string | null): void {
-    const end: TurnEnd = { origins: this.settledOrigins, lastText: this.lastText, error };
+  private emitTurnEnd(error: string | null, aborted = false): void {
+    const end: TurnEnd = { origins: this.settledOrigins, lastText: this.lastText, error, aborted };
     this.settledOrigins = [];
     this.lastText = null;
     this.emit('turn-end', end);

@@ -34,6 +34,8 @@ export type AgentMessage =
       /** One per turn, not per send: sends close together fold into one turn. */
       type: 'result';
       isError: boolean;
+      /** The turn was interrupted: a normal end, but its work did not complete. */
+      aborted: boolean;
       error: string | null;
       /** Turns the agent still has queued after this one, when the runtime reports it. */
       queuedTurns: number | null;

@@ -44,6 +44,8 @@ export class BulkRuns extends EventEmitter<BulkEvents> {
   private readonly runs = new Map<string, BulkRun>();
   private readonly now: () => Date;
   private readonly concurrency: number;
+  /** Set when Relay shuts down: interrupted rows stay running (repaired on next start) and nothing new starts. */
+  private stopped = false;
 
   constructor(
     private readonly deps: BulkRunsDeps,
@@ -83,15 +85,28 @@ export class BulkRuns extends EventEmitter<BulkEvents> {
     this.changed(run);
   }
 
+  stop(): void {
+    this.stopped = true;
+  }
+
   /** Every session turn-end goes through here; only rows of the run named in its origins move. */
   onTurnEnd(sessionId: string, end: TurnEnd): void {
+    if (this.stopped) return;
     for (const origin of end.origins) {
       if (!origin.startsWith('bulk:')) continue;
       const run = this.runs.get(origin.slice('bulk:'.length));
       const row = run?.rows.find((r) => r.sessionId === sessionId && r.status === 'running');
       if (!run || !row) continue;
-      row.status = end.error ? 'error' : 'done';
-      row.detail = end.error ?? end.lastText;
+      if (end.error) {
+        row.status = 'error';
+        row.detail = end.error;
+      } else if (end.aborted) {
+        row.status = 'error';
+        row.detail = end.lastText ? `Interrupted: ${end.lastText}` : 'Interrupted';
+      } else {
+        row.status = 'done';
+        row.detail = end.lastText;
+      }
       this.changed(run);
       this.pump(run);
     }
@@ -113,7 +128,7 @@ export class BulkRuns extends EventEmitter<BulkEvents> {
 
   /** Starts queued rows up to the cap; finishes the run once every row is settled. */
   private pump(run: BulkRun): void {
-    if (run.status !== 'running') return;
+    if (this.stopped || run.status !== 'running') return;
     let running = run.rows.filter((r) => r.status === 'running').length;
     for (const row of run.rows) {
       if (running >= this.concurrency) break;

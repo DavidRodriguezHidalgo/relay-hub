@@ -23,7 +23,12 @@ describe('RelayEngine', () => {
   async function startWithBasic(
     client: AgentClient,
     now = () => new Date('2026-09-23T00:00:00.000Z'),
-    extra: { idleTimeoutMs?: number; registry?: { foreignHolders(id: string): Promise<number[]> }; more?: boolean } = {},
+    extra: {
+      idleTimeoutMs?: number;
+      registry?: { foreignHolders(id: string): Promise<number[]> };
+      more?: boolean;
+      bulkConcurrency?: number;
+    } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
     const cwd = join(root, 'wt-a');
@@ -363,8 +368,22 @@ describe('RelayEngine', () => {
     expect(engine!.runState().bulkRuns).toEqual([]);
   });
 
-  it('a run still going when Relay closed is finished with errors on the next start', async () => {
-    const { orchClient, router } = routed();
+  function perSessionRouter() {
+    const orchClient = new FakeAgentClient();
+    const perSession = new Map<string, FakeAgentClient>();
+    const router: AgentClient = {
+      start: (opts) => {
+        if (opts.profile?.kind === 'orchestrator') return orchClient.start(opts);
+        const c = perSession.get(opts.sessionId!) ?? new FakeAgentClient();
+        perSession.set(opts.sessionId!, c);
+        return c.start(opts);
+      },
+    };
+    return { orchClient, perSession, router };
+  }
+
+  it('an interrupted bulk row is reported as an error, not done', async () => {
+    const { orchClient, perSession, router } = perSessionRouter();
     await startWithBasic(router, undefined, { more: true });
     await engine!.orchestratorSend('x');
     await tick();
@@ -373,7 +392,35 @@ describe('RelayEngine', () => {
     );
     engine!.bulkConfirm(bulkRunId, ['s-basic', 's-two']);
     await tick();
+    await tick();
+    perSession.get('s-basic')!.assistant('a1', 'Starting the rebase, first I will');
+    await tick();
+    await engine!.interrupt('s-basic');
+    await tick();
+    perSession.get('s-two')!.result();
+    await tick();
+    const run = engine!.runState().bulkRuns[0]!;
+    expect(run.rows.map((r) => [r.sessionId, r.status, r.detail])).toEqual([
+      ['s-basic', 'error', 'Interrupted: Starting the rebase, first I will'],
+      ['s-two', 'done', null],
+    ]);
+    expect(orchClient.received.find((m) => m.origin === 'watch:bulk-end')!.text).toContain('1 done, 1 error');
+  });
+
+  it('a run still going when Relay closed is finished with errors on the next start', async () => {
+    const { orchClient, perSession, router } = perSessionRouter();
+    await startWithBasic(router, undefined, { more: true, bulkConcurrency: 1 });
+    await engine!.orchestratorSend('x');
+    await tick();
+    const { bulkRunId } = JSON.parse(
+      (await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'p' })).text,
+    );
+    engine!.bulkConfirm(bulkRunId, ['s-basic', 's-two']);
+    await tick();
+    await tick();
     await engine!.close();
+    // the queued row must not be started while Relay shuts down
+    expect(perSession.has('s-two')).toBe(false);
     engine = await RelayEngine.start({
       projectsDir: join(root, 'projects'), dbPath: join(root, 'relay.db'), orchestratorDir: join(root, 'orch'),
       agent: new FakeAgentClient(), git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
@@ -381,6 +428,24 @@ describe('RelayEngine', () => {
     const run = engine.runState().bulkRuns[0]!;
     expect(run.id).toBe(bulkRunId);
     expect(run.status).toBe('finished');
-    expect(run.rows.every((r) => r.status === 'error' || r.status === 'done')).toBe(true);
+    expect(run.rows.map((r) => [r.sessionId, r.status, r.detail])).toEqual([
+      ['s-basic', 'error', 'Relay was closed during the run'],
+      ['s-two', 'error', 'Relay was closed during the run'],
+    ]);
+  });
+
+  it('a relay-only orchestrator turn cannot propose a bulk action', async () => {
+    const { orchClient, sessionClient, router } = routed();
+    await startWithBasic(router, undefined, { more: true });
+    await engine!.orchestratorSend('tell s-basic to add tests');
+    await tick();
+    await orchClient.callTool('send_to_session', { id: 's-basic', prompt: 'add tests' });
+    orchClient.result();
+    await tick();
+    sessionClient.result();
+    await tick();
+    const r = await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'more' });
+    expect(r).toMatchObject({ isError: true });
+    expect(engine!.runState().bulkRuns).toEqual([]);
   });
 });

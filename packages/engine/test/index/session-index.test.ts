@@ -130,11 +130,15 @@ describe('SessionIndex', () => {
     const events: number[] = [];
     idx.on('changed', (s) => events.push(s.length));
     idx.watch();
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 300)); // let FSEvents arm
     const file = join(projectsDir, 'proj-a', 's-basic.jsonl');
     await appendFile(file, '\n{"type":"mode","mode":"normal","sessionId":"s-basic"}');
     await appendFile(file, '\n{"type":"mode","mode":"normal","sessionId":"s-basic"}');
-    await new Promise((r) => setTimeout(r, 400));
+    // poll for the first event (a loaded machine delays FSEvents), then give a second one time to show up
+    for (let waited = 0; events.length === 0 && waited < 5_000; waited += 50) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await new Promise((r) => setTimeout(r, 300));
     expect(events).toEqual([2]);
   });
 });
