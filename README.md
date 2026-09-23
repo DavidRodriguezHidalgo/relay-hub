@@ -1,6 +1,6 @@
 # Relay Hub
 
-One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat. Milestone 4: bulk actions.
+One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat. Milestone 4: bulk actions. Milestone 5: PR watches.
 
 ## Run
 
@@ -36,6 +36,16 @@ Ask for many sessions at once ("rebase every mileage branch onto main"). Relay s
 card with one row per session; untick what you do not want and press **Run on N sessions**.
 Rows run three at a time with per-row progress, and Relay gives one summary at the end.
 Destructive commands still wait in the approvals drawer.
+
+## PR watches (M5)
+
+Press **Watch PR** in a session's panel (or ask Relay). Every 5 minutes Relay asks `gh` about
+that PR and wakes the session with a queued message when CI fails, someone else reviews or
+comments, or the PR falls behind or into conflict. A merged PR stops being watched. Polling is
+plain code and costs no tokens. Needs `gh auth login`; when `gh` is unavailable a banner says
+so and watches pause. Quitting while sessions are mid-turn asks first.
+
+Live read-only check: `RELAY_LIVE_GH=owner/repo#123 pnpm --filter @relay/engine test gh-live`.
 
 ## Layout
 
