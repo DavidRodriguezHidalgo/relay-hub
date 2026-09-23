@@ -34,7 +34,7 @@ them.
 - Electron + Vite + React + TypeScript, packaged with Electron Forge.
 - `@anthropic-ai/claude-agent-sdk` for both the sessions and the orchestrator.
 - `gh` CLI for pull request state.
-- SQLite (`better-sqlite3`) for Relay's own state.
+- SQLite through Node's built-in `node:sqlite` (`DatabaseSync`) for Relay's own state; Electron 44 bundles Node 24, so no native module rebuild is needed.
 - Vitest for unit tests; Playwright for one Electron smoke test.
 - pnpm workspaces.
 
@@ -62,7 +62,7 @@ Each component has one job and is testable on its own.
 | **ApprovalQueue** | Receives `canUseTool` callbacks from runners and holds them until the user decides. Applies rules: file edits pass (accept-edits already covers them); destructive git commands (`push --force`, `reset --hard`, `clean`, `branch -D`, history rewrites), and any command whose paths fall outside the session cwd, wait for approval. Decisions can be "allow once", "deny" or "allow this pattern for this run". | SessionRunner |
 | **Orchestrator** | A persistent SDK session whose tools are an in-process MCP server exposing Relay's operations (see below). It never reads transcripts directly. | Agent SDK, SessionIndex, SessionRunner, PrWatcher |
 | **PrWatcher** | For each watch, runs `gh pr view --json` on an interval (default 5 minutes), diffs against the last snapshot, and emits `ci_failed`, `review_comment`, `base_moved` or `merged`. Events wake the session through SessionRunner. | `gh`, SessionRunner, Store |
-| **Store** | SQLite: session metadata cache, orchestrator thread id, watches with last snapshots, bulk-run history, approval rules. | better-sqlite3 |
+| **Store** | SQLite: session metadata cache, orchestrator thread id, watches with last snapshots, bulk-run history, approval rules. | `node:sqlite` |
 
 ### Message delivery modes
 
