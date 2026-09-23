@@ -1,6 +1,6 @@
 # Relay Hub
 
-One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat.
+One place for all your Claude Code sessions. Milestone 1: index and read. Milestone 2: drive a session with approvals. Milestone 3: orchestrator chat. Milestone 4: bulk actions.
 
 ## Run
 
@@ -29,6 +29,13 @@ Ask in the middle column ("what is running?", "tell the mileage session to add t
 Relay lists and inspects sessions, sends to one session at a time and can interrupt it.
 When a session it drove finishes, it tells you. It has no shell or file tools of its own;
 everything it changes goes through a session, where approvals apply.
+
+## Bulk actions (M4)
+
+Ask for many sessions at once ("rebase every mileage branch onto main"). Relay shows a plan
+card with one row per session; untick what you do not want and press **Run on N sessions**.
+Rows run three at a time with per-row progress, and Relay gives one summary at the end.
+Destructive commands still wait in the approvals drawer.
 
 ## Layout
 

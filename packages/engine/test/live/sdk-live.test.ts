@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { copyFile, mkdir, mkdtemp, readdir, rm, utimes } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, rm, stat, utimes } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ORCHESTRATOR_KEY, type RunnerEvent } from '@relay/shared';
@@ -11,6 +11,8 @@ import { RelayEngine } from '../../src/relay-engine';
  * it spends tokens on the account logged into `claude`.
  */
 const LIVE = process.env.RELAY_LIVE;
+/** A second scratch session for the bulk case; skipped when it does not exist. */
+const LIVE_2 = process.env.RELAY_LIVE_2 ?? '-private-tmp-relay-scratch-2';
 
 describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
   let root: string;
@@ -47,13 +49,24 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
     await copyFile(join(source, files[0]!), copy);
     const old = new Date(Date.now() - 60_000);
     await utimes(copy, old, old);
+    const source2 = join(homedir(), '.claude', 'projects', LIVE_2);
+    const has2 = await stat(source2).then(() => true, () => false);
+    if (has2) {
+      const f2 = (await readdir(source2)).filter((f) => f.endsWith('.jsonl'));
+      if (f2[0]) {
+        await mkdir(join(root, 'projects', LIVE_2), { recursive: true });
+        const copy2 = join(root, 'projects', LIVE_2, f2[0]);
+        await copyFile(join(source2, f2[0]), copy2);
+        await utimes(copy2, old, old);
+      }
+    }
     engine = await RelayEngine.start({
       projectsDir: join(root, 'projects'),
       dbPath: join(root, 'relay.db'),
       orchestratorDir: join(root, 'orch'),
     });
     engine.onEvent((e) => events.push(e));
-    sessionId = engine.listSessions()[0]!.id;
+    sessionId = engine.listSessions().find((s) => s.filePath.includes(`/${LIVE!}/`))!.id;
   }, 60_000);
 
   afterAll(async () => {
@@ -128,4 +141,27 @@ describe.skipIf(!LIVE)('SdkAgentClient against a real session', () => {
       180_000,
     );
   }, 600_000);
+
+  it('the orchestrator proposes a bulk run over both scratch sessions; confirmed rows answer; one summary comes back', async () => {
+    const ids = engine.listSessions().map((x) => x.id);
+    if (ids.length < 2) {
+      console.warn(`bulk live case skipped: no second scratch session under ~/.claude/projects/${LIVE_2}`);
+      return;
+    }
+    events.length = 0;
+    await engine.orchestratorSend(
+      'Ask every session in repos relay-scratch and relay-scratch-2 to reply with exactly the word: bulked. Use one bulk action.',
+    );
+    await waitFor(() => engine.runState().bulkRuns.some((r) => r.status === 'proposed'), 180_000);
+    const run = engine.runState().bulkRuns.find((r) => r.status === 'proposed')!;
+    expect(run.rows).toHaveLength(2);
+    engine.bulkConfirm(run.id, run.rows.map((r) => r.sessionId));
+    await waitFor(() => engine.runState().bulkRuns.find((r) => r.id === run.id)?.status === 'finished', 300_000);
+    const finished = engine.runState().bulkRuns.find((r) => r.id === run.id)!;
+    expect(finished.rows.map((r) => r.status)).toEqual(['done', 'done']);
+    await waitFor(
+      () => events.some((e) => e.type === 'entry' && e.sessionId === ORCHESTRATOR_KEY && e.entry.origin === 'watch:bulk-end'),
+      120_000,
+    );
+  }, 800_000);
 });
