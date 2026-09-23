@@ -200,7 +200,9 @@ describe('RelayEngine', () => {
     await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
     expect(engine!.listSessions().map((x) => x.id)).toEqual(['s-basic']);
     // the watcher's change events go to the sidebar: they must be filtered too
-    await new Promise((r) => setTimeout(r, 700));
+    for (let waited = 0; pushed.length === 0 && waited < 5_000; waited += 50) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
     expect(pushed.length).toBeGreaterThan(0);
     expect(pushed.at(-1)).toEqual(['s-basic']);
     await expect(
