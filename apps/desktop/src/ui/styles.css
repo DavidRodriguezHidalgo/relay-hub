@@ -40,3 +40,7 @@ body { margin: 0; }
 .dev-send { position: sticky; bottom: 0; background: Canvas; padding-top: 8px; }
 .dev-send textarea { width: 100%; box-sizing: border-box; }
 .dev-send__row { display: flex; gap: 6px; margin-top: 4px; }
+.orchestrator { display: flex; flex-direction: column; }
+.approvals-drawer { position: sticky; bottom: 0; margin-top: auto; border-top: 1px solid #d98a00; padding-top: 8px; background: Canvas; }
+.approvals-drawer h2 { font-size: 12px; margin: 0 0 8px; }
+.link { background: none; border: 0; color: inherit; text-decoration: underline; cursor: pointer; padding: 0; margin-bottom: 4px; }

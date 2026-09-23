@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionSummary, TranscriptEntry } from '@relay/shared';
+import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { SessionList } from './SessionList';
 import { SessionPanel } from './SessionPanel';
 import { useRunState } from './useRunState';
@@ -60,6 +61,12 @@ export function App() {
       <SessionList sessions={sessions} selectedId={selectedId} onSelect={setSelectedId} states={run.states} />
       <main className="orchestrator" aria-label="Orchestrator">
         <p className="placeholder">Orchestrator chat arrives in milestone 3.</p>
+        <ApprovalsDrawer
+          approvals={run.approvals}
+          sessions={sessions}
+          onDecide={(id, d) => void window.relay.decide(id, d)}
+          onOpenSession={setSelectedId}
+        />
       </main>
       <section className="session-panel" aria-label="Session panel" ref={panelRef} onScroll={onPanelScroll}>
         {sendError && <p className="error">{sendError}</p>}
