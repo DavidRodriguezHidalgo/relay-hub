@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { SessionSummary, TranscriptEntry } from '@relay/shared';
+import type { DeliveryMode, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { createRelayTools, type RelayToolDeps } from '../../src/orchestrator/relay-tools';
 
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
@@ -19,6 +19,12 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
     getTranscript: async () => [],
     send: vi.fn(async () => 'm-1'),
     interrupt: vi.fn(async () => undefined),
+    proposeBulk: vi.fn(async (targets: { sessionId: string; prompt: string }[], mode: DeliveryMode) => ({
+      id: 'r1', createdAt: 'x', mode, status: 'proposed' as const,
+      rows: targets.map((t) => ({
+        sessionId: t.sessionId, title: 't', branch: null, prompt: t.prompt, status: 'proposed' as const, detail: null,
+      })),
+    })),
     ...over,
   };
 }
@@ -31,7 +37,7 @@ const call = async (d: RelayToolDeps, name: string, args: Record<string, unknown
 describe('relay tools', () => {
   it('exposes exactly the M3 tools', () => {
     expect(createRelayTools(deps()).map((t) => t.name)).toEqual([
-      'list_sessions', 'get_session', 'send_to_session', 'interrupt_session',
+      'list_sessions', 'get_session', 'send_to_session', 'interrupt_session', 'propose_bulk_action',
     ]);
   });
 
@@ -94,5 +100,27 @@ describe('relay tools', () => {
       },
     });
     expect(await call(bad, 'interrupt_session', { id: 'a' })).toEqual({ text: 'nope', isError: true });
+  });
+
+  it('propose_bulk_action proposes with per-target prompts falling back to the shared one', async () => {
+    const d = deps();
+    const r = await call(d, 'propose_bulk_action', {
+      targets: [{ id: 'a' }, { id: 'b', prompt: 'special' }], prompt: 'rebase onto main',
+    });
+    expect(d.proposeBulk).toHaveBeenCalledWith(
+      [{ sessionId: 'a', prompt: 'rebase onto main' }, { sessionId: 'b', prompt: 'special' }], 'steer',
+    );
+    expect(JSON.parse(r.text)).toMatchObject({ bulkRunId: 'r1', status: 'proposed', rows: 2 });
+  });
+
+  it('propose_bulk_action reports a refusal as a tool error', async () => {
+    const d = deps({
+      proposeBulk: async () => {
+        throw new Error('Unknown session zz');
+      },
+    });
+    expect(await call(d, 'propose_bulk_action', { targets: [{ id: 'a' }, { id: 'zz' }], prompt: 'x' })).toEqual({
+      text: 'Unknown session zz', isError: true,
+    });
   });
 });

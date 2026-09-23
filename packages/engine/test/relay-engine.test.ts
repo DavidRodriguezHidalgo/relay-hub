@@ -23,7 +23,7 @@ describe('RelayEngine', () => {
   async function startWithBasic(
     client: AgentClient,
     now = () => new Date('2026-09-23T00:00:00.000Z'),
-    extra: { idleTimeoutMs?: number; registry?: { foreignHolders(id: string): Promise<number[]> } } = {},
+    extra: { idleTimeoutMs?: number; registry?: { foreignHolders(id: string): Promise<number[]> }; more?: boolean } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
     const cwd = join(root, 'wt-a');
@@ -34,6 +34,14 @@ describe('RelayEngine', () => {
     await writeFile(file, src.replaceAll('/repo/wt-a', cwd));
     const old = new Date('2026-09-20T10:01:00.000Z');
     await utimes(file, old, old); // last written days ago: nobody else is driving it
+    const { more, ...engineExtra } = extra;
+    if (more) {
+      const cwdB = join(root, 'wt-b');
+      await mkdir(cwdB);
+      const two = join(root, 'projects', 'p', 's-two.jsonl');
+      await writeFile(two, src.replaceAll('/repo/wt-a', cwdB).replaceAll('s-basic', 's-two'));
+      await utimes(two, old, old);
+    }
     engine = await RelayEngine.start({
       projectsDir: join(root, 'projects'),
       dbPath: join(root, 'relay.db'),
@@ -41,7 +49,7 @@ describe('RelayEngine', () => {
       agent: client,
       now,
       orchestratorDir: join(root, 'orch'),
-      ...extra,
+      ...engineExtra,
     });
     return { cwd, file };
   }
@@ -281,5 +289,97 @@ describe('RelayEngine', () => {
     expect(r).toMatchObject({ isError: true });
     expect(r.text).toMatch(/ask the user/i);
     expect(sessionClient.received.map((m) => m.text)).toEqual(['add tests']);
+  });
+
+  it('a proposed bulk run sends nothing until confirmed, then sends every row with its bulk origin', async () => {
+    const { orchClient, sessionClient, router } = routed();
+    await startWithBasic(router, undefined, { more: true });
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    await engine!.orchestratorSend('rebase both');
+    await tick();
+    const r = await orchClient.callTool('propose_bulk_action', {
+      targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'rebase onto main',
+    });
+    const { bulkRunId } = JSON.parse(r.text);
+    await tick();
+    expect(sessionClient.starts).toHaveLength(0);
+    expect(engine!.runState().bulkRuns[0]).toMatchObject({ id: bulkRunId, status: 'proposed' });
+    expect(events.some((e) => e.type === 'bulk' && e.run.id === bulkRunId)).toBe(true);
+
+    engine!.bulkConfirm(bulkRunId, ['s-basic', 's-two']);
+    await tick();
+    await tick();
+    expect(sessionClient.received.map((m) => [m.text, m.origin])).toEqual([
+      ['rebase onto main', `bulk:${bulkRunId}`],
+      ['rebase onto main', `bulk:${bulkRunId}`],
+    ]);
+  });
+
+  it('relays one [bulk-end] summary when every confirmed row has settled, and none per row', async () => {
+    const orchClient = new FakeAgentClient();
+    const perSession = new Map<string, FakeAgentClient>();
+    const router: AgentClient = {
+      start: (opts) => {
+        if (opts.profile?.kind === 'orchestrator') return orchClient.start(opts);
+        const c = perSession.get(opts.sessionId!) ?? new FakeAgentClient();
+        perSession.set(opts.sessionId!, c);
+        return c.start(opts);
+      },
+    };
+    await startWithBasic(router, undefined, { more: true });
+    await engine!.orchestratorSend('rebase both');
+    await tick();
+    const { bulkRunId } = JSON.parse(
+      (await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'rebase' })).text,
+    );
+    engine!.bulkConfirm(bulkRunId, ['s-basic', 's-two']);
+    await tick();
+    await tick();
+    perSession.get('s-basic')!.assistant('a1', 'Rebased cleanly.');
+    perSession.get('s-basic')!.result();
+    await tick();
+    expect(orchClient.received.filter((m) => m.origin.startsWith('watch:'))).toHaveLength(0);
+    perSession.get('s-two')!.result('conflict in a.ts');
+    await tick();
+    const relayed = orchClient.received.filter((m) => m.origin === 'watch:bulk-end');
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0]!.text).toBe(
+      `[bulk-end] run ${bulkRunId}: 1 done, 1 error, 0 skipped.\n` +
+        '- "Add tests for the zero-rate case" (s-basic): done: Rebased cleanly.\n' +
+        '- "Add tests for the zero-rate case" (s-two): error: conflict in a.ts',
+    );
+    expect(engine!.runState().bulkRuns[0]!.status).toBe('finished');
+  });
+
+  it('propose_bulk_action refuses a plan with an unknown session', async () => {
+    const { orchClient, router } = routed();
+    await startWithBasic(router);
+    await engine!.orchestratorSend('x');
+    await tick();
+    const bad = await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 'nope' }], prompt: 'x' });
+    expect(bad).toMatchObject({ isError: true, text: 'Unknown session nope' });
+    expect(engine!.runState().bulkRuns).toEqual([]);
+  });
+
+  it('a run still going when Relay closed is finished with errors on the next start', async () => {
+    const { orchClient, router } = routed();
+    await startWithBasic(router, undefined, { more: true });
+    await engine!.orchestratorSend('x');
+    await tick();
+    const { bulkRunId } = JSON.parse(
+      (await orchClient.callTool('propose_bulk_action', { targets: [{ id: 's-basic' }, { id: 's-two' }], prompt: 'p' })).text,
+    );
+    engine!.bulkConfirm(bulkRunId, ['s-basic', 's-two']);
+    await tick();
+    await engine!.close();
+    engine = await RelayEngine.start({
+      projectsDir: join(root, 'projects'), dbPath: join(root, 'relay.db'), orchestratorDir: join(root, 'orch'),
+      agent: new FakeAgentClient(), git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
+    });
+    const run = engine.runState().bulkRuns[0]!;
+    expect(run.id).toBe(bulkRunId);
+    expect(run.status).toBe('finished');
+    expect(run.rows.every((r) => r.status === 'error' || r.status === 'done')).toBe(true);
   });
 });

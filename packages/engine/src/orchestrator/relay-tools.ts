@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { DeliveryMode, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, DeliveryMode, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
 import type { AgentTool, AgentToolResult } from '../runner/agent-client';
 
 const LIST_MAX = 50;
@@ -13,6 +13,7 @@ export interface RelayToolDeps {
   getTranscript(id: string): Promise<TranscriptEntry[]>;
   send(req: { sessionId: string; prompt: string; mode: DeliveryMode; origin: 'orchestrator' }): Promise<string>;
   interrupt(sessionId: string): Promise<void>;
+  proposeBulk(targets: { sessionId: string; prompt: string }[], mode: DeliveryMode): Promise<BulkRun>;
 }
 
 const ok = (value: unknown): AgentToolResult => ({ text: JSON.stringify(value) });
@@ -141,5 +142,38 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     },
   };
 
-  return [listSessions, getSession, sendToSession, interruptSession] as AgentTool[];
+  const proposeBulk: AgentTool<{
+    targets: z.ZodArray<z.ZodObject<{ id: z.ZodString; prompt: z.ZodOptional<z.ZodString> }>>;
+    prompt: z.ZodString;
+    mode: z.ZodOptional<z.ZodEnum<{ steer: 'steer'; queue: 'queue'; interrupt: 'interrupt' }>>;
+  }> = {
+    name: 'propose_bulk_action',
+    description:
+      'Propose one instruction for several sessions. The user sees a plan card, can untick rows, and must confirm; ' +
+      'nothing runs before that. A "[bulk-end]" message arrives when all confirmed rows finish. ' +
+      'A target may override the shared prompt.',
+    input: {
+      targets: z.array(z.object({ id: z.string(), prompt: z.string().optional() })).min(2),
+      prompt: z.string(),
+      mode: z.enum(['steer', 'queue', 'interrupt']).optional(),
+    },
+    handler: async ({ targets, prompt, mode }) => {
+      try {
+        const run = await deps.proposeBulk(
+          targets.map((t) => ({ sessionId: t.id, prompt: t.prompt ?? prompt })),
+          mode ?? 'steer',
+        );
+        return ok({
+          bulkRunId: run.id,
+          status: run.status,
+          rows: run.rows.length,
+          note: 'Waiting for the user to confirm the plan card. Do not send to these sessions yourself.',
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
+  return [listSessions, getSession, sendToSession, interruptSession, proposeBulk] as AgentTool[];
 }

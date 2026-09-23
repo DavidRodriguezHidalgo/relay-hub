@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import {
   ORCHESTRATOR_KEY,
   type ApprovalDecision,
+  type BulkRowStatus,
+  type BulkRun,
   type DeliveryMode,
   type MessageOrigin,
   type RunnerEvent,
@@ -11,6 +13,7 @@ import {
   type TranscriptEntry,
 } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
+import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
@@ -30,6 +33,13 @@ const OWN_WRITE_GRACE_MS = 1_000;
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
 const RELAY_TEXT_MAX = 600;
+/** Per-row detail in a bulk summary. */
+const BULK_DETAIL_MAX = 200;
+const RECENT_BULK_RUNS = 20;
+const RELAY_ONLY_REFUSAL =
+  'This turn was started by a session finishing, not by the user. Report the result and ask the user before sending anything else.';
+
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 export interface RelayEngineOptions {
   projectsDir: string;
@@ -57,6 +67,7 @@ export class RelayEngine {
   private readonly idleTimers = new Map<string, NodeJS.Timeout>();
   private readonly listeners = new Set<(e: RunnerEvent) => void>();
   private readonly orchestrator: Orchestrator;
+  private readonly bulk: BulkRuns;
   private readonly orchestratorCwd: string;
   private closing = false;
 
@@ -69,7 +80,14 @@ export class RelayEngine {
     private readonly idleTimeoutMs: number,
     private readonly registry: SessionRegistry,
     orchestratorDir: string,
+    loadedBulkRuns: BulkRun[],
   ) {
+    this.bulk = new BulkRuns({ send: (req) => this.send(req) }, loadedBulkRuns);
+    this.bulk.on('changed', (run) => {
+      this.store.saveBulkRun(run);
+      this.publish({ type: 'bulk', run });
+    });
+    this.bulk.on('finished', (run) => this.relayBulkEnd(run));
     this.orchestratorCwd = resolve(orchestratorDir);
     this.orchestrator = new Orchestrator({
       cwd: this.orchestratorCwd,
@@ -80,15 +98,13 @@ export class RelayEngine {
         listSessions: () => this.listSessions(),
         runState: () => this.runState(),
         getTranscript: (id) => this.getTranscript(id),
-        send: (req) => {
-          if (this.orchestrator.onlyRelayPending) {
-            return Promise.reject(
-              new Error(
-                'This turn was started by a session finishing, not by the user. Report the result and ask the user before sending anything else.',
-              ),
-            );
-          }
+        send: async (req) => {
+          this.refuseRelayOnly();
           return this.send(req);
+        },
+        proposeBulk: async (targets, mode) => {
+          this.refuseRelayOnly();
+          return this.proposeBulk(targets, mode);
         },
         interrupt: (id) => this.interrupt(id),
       }),
@@ -106,6 +122,8 @@ export class RelayEngine {
   static async start(opts: RelayEngineOptions): Promise<RelayEngine> {
     await mkdir(opts.orchestratorDir, { recursive: true });
     const store = new SessionStore(opts.dbPath);
+    const loadedBulkRuns = repairLoadedRuns(store.loadBulkRuns(RECENT_BULK_RUNS));
+    for (const run of loadedBulkRuns) store.saveBulkRun(run);
     const index = new SessionIndex({
       projectsDir: opts.projectsDir,
       store,
@@ -122,6 +140,7 @@ export class RelayEngine {
       opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       opts.registry ?? new ClaudeSessionRegistry(),
       opts.orchestratorDir,
+      loadedBulkRuns,
     );
   }
 
@@ -183,6 +202,14 @@ export class RelayEngine {
     }
   }
 
+  bulkConfirm(runId: string, sessionIds: string[]): void {
+    this.bulk.confirm(runId, sessionIds);
+  }
+
+  bulkCancel(runId: string): void {
+    this.bulk.cancel(runId);
+  }
+
   async interrupt(sessionId: string): Promise<void> {
     await this.runners.get(sessionId)?.interrupt();
   }
@@ -194,7 +221,7 @@ export class RelayEngine {
   runState(): RunState {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
-    return { states, approvals: this.approvals.pending(), bulkRuns: [] };
+    return { states, approvals: this.approvals.pending(), bulkRuns: this.bulk.recent(RECENT_BULK_RUNS) };
   }
 
   async close(): Promise<void> {
@@ -229,6 +256,7 @@ export class RelayEngine {
       this.scheduleIdleClose(sessionId, state);
     });
     runner.on('entry', (entry) => this.publish({ type: 'entry', sessionId, entry }));
+    runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));
     this.runners.set(sessionId, runner);
     return runner;
@@ -268,13 +296,40 @@ export class RelayEngine {
   private relayTurnEnd(session: SessionSummary, end: TurnEnd): void {
     if (this.closing || !end.origins.includes('orchestrator')) return;
     const where = `session "${session.title}" (${session.id}${session.branch ? `, ${session.branch}` : ''})`;
-    const reply = end.lastText
-      ? end.lastText.length > RELAY_TEXT_MAX
-        ? `${end.lastText.slice(0, RELAY_TEXT_MAX)}…`
-        : end.lastText
-      : '(no text)';
+    const reply = end.lastText ? clip(end.lastText, RELAY_TEXT_MAX) : '(no text)';
     const outcome = end.error ? ` finished with an error: ${end.error}` : ` finished. Last reply: ${reply}`;
     void this.orchestrator.send(`[turn-end] ${where}${outcome}`, { origin: 'watch:turn-end', mode: 'queue' });
+  }
+
+  /** The orchestrator must not act on its own after a relay: only the user starts sends. */
+  private refuseRelayOnly(): void {
+    if (this.orchestrator.onlyRelayPending) throw new Error(RELAY_ONLY_REFUSAL);
+  }
+
+  /** Resolves targets to listed sessions (the whole plan is refused on an unknown id) and proposes the run. */
+  private proposeBulk(targets: { sessionId: string; prompt: string }[], mode: DeliveryMode): BulkRun {
+    const known = this.listSessions();
+    const seen = new Set<string>();
+    const resolved = [];
+    for (const t of targets) {
+      if (seen.has(t.sessionId)) continue;
+      seen.add(t.sessionId);
+      const s = known.find((x) => x.id === t.sessionId);
+      if (!s) throw new Error(`Unknown session ${t.sessionId}`);
+      resolved.push({ sessionId: s.id, title: s.title, branch: s.branch, prompt: t.prompt });
+    }
+    return this.bulk.propose(resolved, mode);
+  }
+
+  /** One summary per finished bulk run; its rows never relay one by one. */
+  private relayBulkEnd(run: BulkRun): void {
+    if (this.closing) return;
+    const count = (s: BulkRowStatus) => run.rows.filter((r) => r.status === s).length;
+    const lines = run.rows
+      .filter((r) => r.status !== 'skipped')
+      .map((r) => `- "${r.title}" (${r.sessionId}): ${r.status}${r.detail ? `: ${clip(r.detail, BULK_DETAIL_MAX)}` : ''}`);
+    const head = `[bulk-end] run ${run.id}: ${count('done')} done, ${count('error')} error, ${count('skipped')} skipped.`;
+    void this.orchestrator.send([head, ...lines].join('\n'), { origin: 'watch:bulk-end', mode: 'queue' });
   }
 
   private publish(event: RunnerEvent): void {
