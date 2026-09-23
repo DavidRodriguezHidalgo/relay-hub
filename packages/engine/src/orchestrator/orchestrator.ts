@@ -28,7 +28,7 @@ type OrchestratorEvents = { state: [SessionState, string | null]; entry: [LiveEn
 export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   private readonly runner: SessionRunner;
   private readonly store: SessionStore;
-  /** A stored id not yet proven resumable; cleared once a turn succeeds on it. */
+  /** A stored id not yet proven resumable; an `init` for it proves it (a dead resume fails before init). */
   private unconfirmed: string | null;
 
   constructor(opts: OrchestratorOptions) {
@@ -43,14 +43,14 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       approvals: opts.approvals,
       profile: { kind: 'orchestrator', systemPrompt: ORCHESTRATOR_SYSTEM_PROMPT, tools: opts.tools },
     });
-    this.runner.on('session-id', (id) => this.store.setMeta(SESSION_ID_KEY, id));
+    this.runner.on('session-id', (id) => {
+      this.unconfirmed = null;
+      if (this.store.getMeta(SESSION_ID_KEY) !== id) this.store.setMeta(SESSION_ID_KEY, id);
+    });
     this.runner.on('state', (s, e) => this.emit('state', s, e));
     this.runner.on('entry', (e) => this.emit('entry', e));
     this.runner.on('turn-end', ({ error }) => {
-      if (!error) {
-        this.unconfirmed = null;
-        return;
-      }
+      if (!error) return;
       // A resume of a transcript that no longer exists fails every time; start over instead.
       if (this.unconfirmed && this.runner.resumeSessionId === this.unconfirmed) {
         this.store.setMeta(SESSION_ID_KEY, null);
@@ -66,6 +66,12 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
 
   get state(): SessionState {
     return this.runner.state;
+  }
+
+  /** True when every pending message was fed by Relay (a turn-end), none by the user. */
+  get onlyRelayPending(): boolean {
+    const origins = this.runner.outstandingOrigins;
+    return origins.length > 0 && origins.every((o) => o.startsWith('watch:'));
   }
 
   send(prompt: string, opts: { origin?: MessageOrigin; mode?: DeliveryMode } = {}): Promise<string> {

@@ -69,4 +69,15 @@ describe('OrchestratorChat', () => {
     await userEvent.type(screen.getByPlaceholderText('Ask Relay…'), '   {Enter}');
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("renders a tool result from a relay-started turn as a tool result, not as an update line", () => {
+    const toolResult: LiveEntry = {
+      uuid: "t1", role: "user", timestamp: "2026-09-23T10:00:00.000Z", isSidechain: false, isMeta: false,
+      blocks: [{ kind: "tool_result", toolUseId: "x", text: "[{\"id\":\"a\"}]", isError: false }],
+      origin: "watch:turn-end",
+    };
+    render(<OrchestratorChat history={[]} liveEntries={[toolResult]} state={undefined} onSend={vi.fn()} onInterrupt={vi.fn()} />);
+    expect(screen.queryByRole("status", { name: "Relay update" })).not.toBeInTheDocument();
+    expect(screen.getByText("[{\"id\":\"a\"}]")).toBeInTheDocument();
+  });
 });

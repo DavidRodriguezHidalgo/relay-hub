@@ -68,4 +68,15 @@ describe('Orchestrator', () => {
     expect(profile?.kind === 'orchestrator' && profile.tools).toBe(tools);
     expect(profile?.kind === 'orchestrator' && profile.systemPrompt.length).toBeGreaterThan(0);
   });
+
+  it('keeps a stored id that resumed fine when the first turn after restart hits a transient error', async () => {
+    const { client, store, o } = setup('orch-9');
+    await o.send('hello');
+    await tick();
+    client.init('orch-9');
+    client.assistant('a', 'hi');
+    client.result('overloaded_error');
+    await tick();
+    expect(store.getMeta('orchestrator.sessionId')).toBe('orch-9');
+  });
 });

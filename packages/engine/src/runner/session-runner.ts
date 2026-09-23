@@ -98,6 +98,14 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     return this.resumeId;
   }
 
+  /** Origins of sends no turn has settled yet. */
+  get outstandingOrigins(): MessageOrigin[] {
+    return [...this.outstanding].flatMap((id) => {
+      const o = this.originsById.get(id);
+      return o ? [o] : [];
+    });
+  }
+
   /** Forget the session id so the next run starts a fresh session. */
   resetSession(): void {
     this.resumeId = null;
@@ -194,10 +202,9 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
           this.settleTurn(m.settledSendIds, m.queuedTurns);
           break;
         case 'init':
-          if (m.sessionId !== this.resumeId) {
-            this.resumeId = m.sessionId;
-            this.emit('session-id', m.sessionId);
-          }
+          // emitted on every init: it also proves a resumed id is alive
+          this.resumeId = m.sessionId;
+          this.emit('session-id', m.sessionId);
           break;
       }
     }

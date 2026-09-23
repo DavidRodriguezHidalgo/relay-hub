@@ -58,6 +58,7 @@ export class RelayEngine {
   private readonly listeners = new Set<(e: RunnerEvent) => void>();
   private readonly orchestrator: Orchestrator;
   private readonly orchestratorCwd: string;
+  private closing = false;
 
   private constructor(
     private readonly store: SessionStore,
@@ -79,7 +80,16 @@ export class RelayEngine {
         listSessions: () => this.listSessions(),
         runState: () => this.runState(),
         getTranscript: (id) => this.getTranscript(id),
-        send: (req) => this.send(req),
+        send: (req) => {
+          if (this.orchestrator.onlyRelayPending) {
+            return Promise.reject(
+              new Error(
+                'This turn was started by a session finishing, not by the user. Report the result and ask the user before sending anything else.',
+              ),
+            );
+          }
+          return this.send(req);
+        },
         interrupt: (id) => this.interrupt(id),
       }),
     });
@@ -125,8 +135,9 @@ export class RelayEngine {
   }
 
   onSessionsChanged(listener: (sessions: SessionSummary[]) => void): () => void {
-    this.index.on('changed', listener);
-    return () => this.index.off('changed', listener);
+    const filtered = () => listener(this.listSessions());
+    this.index.on('changed', filtered);
+    return () => this.index.off('changed', filtered);
   }
 
   /** Non-fatal indexing problems (an unreadable transcript, a failed rescan). */
@@ -189,8 +200,10 @@ export class RelayEngine {
   async close(): Promise<void> {
     for (const t of this.idleTimers.values()) clearTimeout(t);
     this.idleTimers.clear();
-    await this.orchestrator.close();
+    // Sessions first, with the relay off: their interrupted turns must not wake the orchestrator.
+    this.closing = true;
     await Promise.all([...this.runners.values()].map((r) => r.close()));
+    await this.orchestrator.close();
     this.runners.clear();
     await this.index.close();
     this.store.close();
@@ -253,7 +266,7 @@ export class RelayEngine {
 
   /** Tells the orchestrator how a turn it started ended; turns the user started stay quiet. */
   private relayTurnEnd(session: SessionSummary, end: TurnEnd): void {
-    if (!end.origins.includes('orchestrator')) return;
+    if (this.closing || !end.origins.includes('orchestrator')) return;
     const where = `session "${session.title}" (${session.id}${session.branch ? `, ${session.branch}` : ''})`;
     const reply = end.lastText
       ? end.lastText.length > RELAY_TEXT_MAX

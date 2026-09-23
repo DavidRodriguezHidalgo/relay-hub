@@ -18,7 +18,9 @@ const RELAY_PREFIX = '[turn-end] ';
 function relayUpdate(e: ViewEntry): string | null {
   if (e.role !== 'user') return null;
   const first = e.blocks.find((b) => b.kind === 'text');
-  const text = first && first.kind === 'text' ? first.text : '';
+  // tool results in a relay-started turn carry its origin too, but have no text
+  if (!first || first.kind !== 'text') return null;
+  const text = first.text;
   if (e.origin?.startsWith('watch:') || text.startsWith(RELAY_PREFIX)) {
     return text.startsWith(RELAY_PREFIX) ? text.slice(RELAY_PREFIX.length) : text;
   }

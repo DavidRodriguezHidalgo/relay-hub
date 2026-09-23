@@ -187,8 +187,14 @@ describe('RelayEngine', () => {
     await mkdir(own, { recursive: true });
     const src = await readFile(fixture('basic.jsonl'), 'utf8');
     await writeFile(join(own, 'o-1.jsonl'), src.replaceAll('/repo/wt-a', orchDir).replaceAll('s-basic', 'o-1'));
+    const pushed: string[][] = [];
+    engine!.onSessionsChanged((list) => pushed.push(list.map((x) => x.id)));
     await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
     expect(engine!.listSessions().map((x) => x.id)).toEqual(['s-basic']);
+    // the watcher's change events go to the sidebar: they must be filtered too
+    await new Promise((r) => setTimeout(r, 700));
+    expect(pushed.length).toBeGreaterThan(0);
+    expect(pushed.at(-1)).toEqual(['s-basic']);
     await expect(
       engine!.send({ sessionId: 'o-1', prompt: 'x', mode: 'steer', origin: 'user' }),
     ).rejects.toThrow(/unknown session/i);
@@ -233,5 +239,47 @@ describe('RelayEngine', () => {
     sessionClient.result();
     await tick();
     expect(orchClient.received.filter((m) => m.origin === 'watch:turn-end')).toHaveLength(1);
+  });
+
+  function routed() {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    return { orchClient, sessionClient, router };
+  }
+
+  it('quitting while a driven session runs does not start a new orchestrator turn', async () => {
+    const { orchClient, router } = routed();
+    await startWithBasic(router);
+    await engine!.orchestratorSend('tell s-basic to add tests');
+    await tick();
+    await orchClient.callTool('send_to_session', { id: 's-basic', prompt: 'add tests' });
+    await tick();
+    orchClient.result(); // orchestrator idle, session still running
+    await tick();
+    await engine!.close();
+    engine = null;
+    expect(orchClient.starts).toHaveLength(1);
+    expect(orchClient.received.filter((m) => m.origin === 'watch:turn-end')).toHaveLength(0);
+  });
+
+  it('a turn started only by a relay cannot send to sessions on its own', async () => {
+    const { orchClient, sessionClient, router } = routed();
+    await startWithBasic(router);
+    await engine!.orchestratorSend('tell s-basic to add tests');
+    await tick();
+    await orchClient.callTool('send_to_session', { id: 's-basic', prompt: 'add tests' });
+    orchClient.result();
+    await tick();
+    sessionClient.assistant('a1', 'Done. Shall I also update the docs?');
+    sessionClient.result();
+    await tick();
+    // the orchestrator is now running a turn caused only by the [turn-end] relay
+    const r = await orchClient.callTool('send_to_session', { id: 's-basic', prompt: 'yes, update the docs' });
+    expect(r).toMatchObject({ isError: true });
+    expect(r.text).toMatch(/ask the user/i);
+    expect(sessionClient.received.map((m) => m.text)).toEqual(['add tests']);
   });
 });

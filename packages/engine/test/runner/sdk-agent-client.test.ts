@@ -43,6 +43,11 @@ describe('SdkAgentClient', () => {
       cwd: '/orch', tools: [], settingSources: [], systemPrompt: 'You route.', allowedTools: ['mcp__relay__echo'],
     });
     expect(Object.keys(o.mcpServers ?? {})).toEqual(['relay']);
+    expect(o.strictMcpConfig).toBe(true);
+    // defence in depth: anything that is not a Relay tool is refused before the approval rules see it
+    const toolOpts = { signal: new AbortController().signal } as Parameters<NonNullable<Options['canUseTool']>>[2];
+    expect(await o.canUseTool!('mcp__slack__post', {}, toolOpts)).toMatchObject({ behavior: 'deny' });
+    expect(await o.canUseTool!('mcp__relay__echo', {}, toolOpts)).toEqual({ behavior: 'allow' });
   });
 
   it('passes resume, cwd, acceptEdits and a canUseTool bridge to query(), and maps messages', async () => {

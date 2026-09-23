@@ -9,6 +9,9 @@ import {
 import { blocksFromContent } from '../transcript/parse-transcript';
 import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
 
+/** Tools on Relay's in-process MCP server; the orchestrator may use nothing else. */
+const RELAY_TOOL_PREFIX = 'mcp__relay__';
+
 /** The shape of `query` we depend on, so tests can inject a fake. */
 export type SdkQueryFn = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
@@ -89,6 +92,7 @@ function profileOptions(opts: AgentStartOptions): Options {
   }
   const server = createSdkMcpServer({
     name: 'relay',
+    alwaysLoad: true,
     tools: profile.tools.map((t) =>
       tool(t.name, t.description, t.input, async (args) => {
         // the zod generic is erased at the tool() boundary; the SDK validated args against t.input
@@ -101,9 +105,11 @@ function profileOptions(opts: AgentStartOptions): Options {
     ...base,
     tools: [],
     settingSources: [],
+    // only Relay's in-process server: no user, project or plugin MCP servers
+    strictMcpConfig: true,
     systemPrompt: profile.systemPrompt,
     mcpServers: { relay: server },
-    allowedTools: profile.tools.map((t) => `mcp__relay__${t.name}`),
+    allowedTools: profile.tools.map((t) => `${RELAY_TOOL_PREFIX}${t.name}`),
   };
 }
 
@@ -117,7 +123,9 @@ export class SdkAgentClient implements AgentClient {
       options: {
         ...profileOptions(opts),
         canUseTool: (toolName, input, { signal, blockedPath }) =>
-          opts.canUseTool(toolName, input, blockedPath, signal).then((o) =>
+          opts.profile?.kind === 'orchestrator' && !toolName.startsWith(RELAY_TOOL_PREFIX)
+            ? Promise.resolve({ behavior: 'deny' as const, message: 'The orchestrator may only use Relay tools.' })
+            :           opts.canUseTool(toolName, input, blockedPath, signal).then((o) =>
             o.behavior === 'allow'
               ? { behavior: 'allow' as const }
               : { behavior: 'deny' as const, message: o.message },
