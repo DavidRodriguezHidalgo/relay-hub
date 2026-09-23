@@ -6,3 +6,5 @@ export { SessionStore } from './store/session-store';
 export type { CachedSession } from './store/session-store';
 export { SessionIndex } from './index/session-index';
 export type { SessionIndexOptions } from './index/session-index';
+export { RelayEngine } from './relay-engine';
+export type { RelayEngineOptions } from './relay-engine';
