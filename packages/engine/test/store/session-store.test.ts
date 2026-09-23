@@ -88,4 +88,14 @@ describe('SessionStore', () => {
     store.deleteWatch('w1');
     expect(store.loadWatches()).toEqual([]);
   });
+
+  it("keeps only the newest 50 bulk runs on disk", () => {
+    const store = new SessionStore(":memory:");
+    for (let i = 0; i < 55; i += 1) {
+      store.saveBulkRun({ id: "r" + i, createdAt: "2026-09-23T10:" + String(i).padStart(2, "0") + ":00.000Z", mode: "steer", status: "finished", rows: [] });
+    }
+    const runs = store.loadBulkRuns(100);
+    expect(runs).toHaveLength(50);
+    expect(runs.at(-1)!.id).toBe("r5");
+  });
 });

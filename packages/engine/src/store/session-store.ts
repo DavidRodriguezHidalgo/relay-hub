@@ -10,6 +10,8 @@ export interface CachedSession {
 
 type Row = { file_path: string; mtime_ms: number; size: number; summary: string };
 
+const BULK_RUNS_ON_DISK = 50;
+
 /** Persists parsed session summaries keyed by transcript path, with the file signature used to skip re-parsing. */
 export class SessionStore {
   private readonly db: DatabaseSync;
@@ -77,6 +79,9 @@ export class SessionStore {
         'insert into bulk_runs (id, created_at, run) values (?, ?, ?) on conflict(id) do update set run = excluded.run',
       )
       .run(run.id, run.createdAt, JSON.stringify(run));
+    this.db
+      .prepare('delete from bulk_runs where id not in (select id from bulk_runs order by created_at desc limit ?)')
+      .run(BULK_RUNS_ON_DISK);
   }
 
   /** Newest first. */

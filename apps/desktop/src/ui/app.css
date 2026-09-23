@@ -114,6 +114,7 @@
   .bulk-card li { @apply mb-1.5; }
   .bulk-card__prompt, .bulk-card__detail { @apply mt-0.5 ml-6 text-[12px] whitespace-pre-wrap text-muted; }
   .bulk-card__actions { @apply mt-2 flex gap-1.5; }
+  .bulk-card__approvals { @apply ml-2 text-[11px] font-semibold text-waiting; }
 
   .gh-banner { @apply fixed inset-x-0 top-0 z-10 bg-accent px-3 py-1 text-center text-[12px] font-semibold text-on-accent; }
   .watch { @apply text-[11px] text-muted; }

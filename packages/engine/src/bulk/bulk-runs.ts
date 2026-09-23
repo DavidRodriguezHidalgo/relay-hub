@@ -21,7 +21,10 @@ export interface BulkRunsDeps {
   concurrency?: number;
 }
 
-type BulkEvents = { changed: [BulkRun]; finished: [BulkRun] };
+type BulkEvents = { changed: [BulkRun]; finished: [BulkRun]; cancelled: [BulkRun] };
+
+/** Runs kept in memory and on disk; older settled ones are dropped. */
+export const BULK_RUNS_KEPT = 50;
 
 const copy = (run: BulkRun): BulkRun => ({ ...run, rows: run.rows.map((r) => ({ ...r })) });
 const settled = (r: BulkRow) => r.status === 'done' || r.status === 'error' || r.status === 'skipped';
@@ -29,7 +32,9 @@ const settled = (r: BulkRow) => r.status === 'done' || r.status === 'error' || r
 /** Runs loaded after a restart: nothing is still running, and nothing waits for a confirm nobody can give. */
 export function repairLoadedRuns(runs: BulkRun[]): BulkRun[] {
   return runs.map((run) => {
-    if (run.status === 'proposed') return { ...copy(run), status: 'cancelled' };
+    if (run.status === 'proposed') {
+      return { ...run, status: 'cancelled', rows: run.rows.map((r) => ({ ...r, status: 'skipped' })) };
+    }
     if (run.status !== 'running') return copy(run);
     return {
       ...run,
@@ -82,7 +87,23 @@ export class BulkRuns extends EventEmitter<BulkEvents> {
   cancel(runId: string): void {
     const run = this.proposed(runId);
     run.status = 'cancelled';
+    for (const row of run.rows) row.status = 'skipped';
     this.changed(run);
+    this.emit('cancelled', copy(run));
+    this.prune();
+  }
+
+  /** Drops the oldest settled runs beyond BULK_RUNS_KEPT. */
+  private prune(): void {
+    const settledRuns = [...this.runs.values()]
+      .filter((r) => r.status === 'finished' || r.status === 'cancelled')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    let excess = this.runs.size - BULK_RUNS_KEPT;
+    for (const r of settledRuns) {
+      if (excess <= 0) break;
+      this.runs.delete(r.id);
+      excess -= 1;
+    }
   }
 
   stop(): void {
@@ -149,6 +170,7 @@ export class BulkRuns extends EventEmitter<BulkEvents> {
       run.status = 'finished';
       this.changed(run);
       this.emit('finished', copy(run));
+      this.prune();
     }
   }
 

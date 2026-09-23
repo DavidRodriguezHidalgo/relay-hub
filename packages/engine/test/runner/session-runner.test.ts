@@ -325,4 +325,17 @@ describe('SessionRunner', () => {
     await runner.close();
     expect(Date.now() - started).toBeLessThan(1_000);
   });
+
+  it("when the runtime names the sends a turn consumed, the others stay outstanding", async () => {
+    const { client, runner } = setup();
+    const a = await runner.send("user work", { mode: "steer", origin: "user" });
+    const b = await runner.send("bulk row", { mode: "steer", origin: "bulk:r1" });
+    await tick();
+    client.result(null, 0, [a]);
+    await tick();
+    expect(runner.state).toBe("running");
+    client.result(null, 0, [b]);
+    await tick();
+    expect(runner.state).toBe("idle");
+  });
 });

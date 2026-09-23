@@ -16,7 +16,7 @@ const run = (over: Partial<BulkRun> = {}): BulkRun => ({
 describe('BulkRunCard', () => {
   it('lets the user untick rows and confirms only the ticked ones', async () => {
     const onConfirm = vi.fn();
-    render(<BulkRunCard run={run()} onConfirm={onConfirm} onCancel={vi.fn()} />);
+    render(<BulkRunCard run={run()} onConfirm={onConfirm} onCancel={vi.fn()} approvals={[]} />);
     expect(screen.getByText('Plan: 2 sessions')).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText('OCR'));
     await userEvent.click(screen.getByRole('button', { name: 'Run on 1 session' }));
@@ -25,7 +25,7 @@ describe('BulkRunCard', () => {
 
   it('disables run when nothing is ticked, and cancel calls back', async () => {
     const onCancel = vi.fn();
-    render(<BulkRunCard run={run()} onConfirm={vi.fn()} onCancel={onCancel} />);
+    render(<BulkRunCard run={run()} onConfirm={vi.fn()} onCancel={onCancel} approvals={[]} />);
     await userEvent.click(screen.getByLabelText('Mileage'));
     await userEvent.click(screen.getByLabelText('OCR'));
     expect(screen.getByRole('button', { name: 'Run on 0 sessions' })).toBeDisabled();
@@ -45,6 +45,7 @@ describe('BulkRunCard', () => {
         })}
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
+        approvals={[]}
       />,
     );
     expect(screen.getByText('running · 1/2 done, 1 error')).toBeInTheDocument();
@@ -52,5 +53,26 @@ describe('BulkRunCard', () => {
     expect(screen.getByText('conflict in a.ts')).toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it("runs once even when double-clicked", async () => {
+    const onConfirm = vi.fn();
+    render(<BulkRunCard run={run()} onConfirm={onConfirm} onCancel={vi.fn()} approvals={[]} />);
+    const button = screen.getByRole("button", { name: "Run on 2 sessions" });
+    await userEvent.dblClick(button);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
+  });
+
+  it("shows how many approvals each running row is waiting on", () => {
+    render(
+      <BulkRunCard
+        run={run({ status: "running", rows: [{ sessionId: "a", title: "Mileage", branch: null, prompt: "p", status: "running", detail: null }] })}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        approvals={[{ id: "p1", sessionId: "a", toolName: "Bash", input: {}, summary: "git push -f", reason: "destructive-git", cwd: "/c", createdAt: "t" }]}
+      />,
+    );
+    expect(screen.getByText("1 approval waiting")).toBeInTheDocument();
   });
 });

@@ -735,4 +735,19 @@ describe('RelayEngine', () => {
     await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
     expect(engine!.listSessions().map((x) => x.id)).toEqual(["s-basic"]);
   });
+
+  it("a cancelled bulk plan tells the orchestrator, so it does not think the run is pending", async () => {
+    const { orchClient, router } = routed();
+    await startWithBasic(router, undefined, { more: true });
+    await engine!.orchestratorSend("x");
+    await tick();
+    const { bulkRunId } = JSON.parse(
+      (await orchClient.callTool("propose_bulk_action", { targets: [{ id: "s-basic" }, { id: "s-two" }], prompt: "p" })).text,
+    );
+    engine!.bulkCancel(bulkRunId);
+    await tick();
+    expect(orchClient.received.filter((m) => m.origin === "watch:bulk-end").map((m) => m.text)).toEqual([
+      `[bulk-end] run ${bulkRunId} was cancelled by the user; nothing ran.`,
+    ]);
+  });
 });

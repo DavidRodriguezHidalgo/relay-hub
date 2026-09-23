@@ -235,7 +235,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
       // the interrupted turn ends: it settles what it was running, not what was sent after the interrupt
       for (const id of this.aborting) this.settle(id);
       this.aborting = null;
-    } else if (queuedTurns === null || queuedTurns === 0) {
+    } else if (settledSendIds.length === 0 && (queuedTurns === null || queuedTurns === 0)) {
+      // no names from the runtime: a turn with nothing queued behind it consumed everything sent so far
       for (const id of [...this.outstanding]) this.settle(id);
     }
     // the next turn, if any, answers the oldest send still waiting

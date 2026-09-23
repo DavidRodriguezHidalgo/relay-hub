@@ -157,4 +157,20 @@ describe('repairLoadedRuns', () => {
     expect(statuses(runs.recent(1)[0]!)).toEqual(['a:running', 'b:queued']);
     expect(sent.map((s) => s.sessionId)).toEqual(['a']);
   });
+
+  it("cancelling marks every row skipped and announces it", async () => {
+    const { runs } = setup();
+    const cancelled: string[] = [];
+    runs.on("cancelled", (r) => cancelled.push(r.id));
+    const run = runs.propose(targets("a", "b"), "steer");
+    runs.cancel(run.id);
+    expect(statuses(runs.recent(1)[0]!)).toEqual(["a:skipped", "b:skipped"]);
+    expect(cancelled).toEqual([run.id]);
+  });
+
+  it("keeps at most 50 runs, dropping the oldest settled ones", async () => {
+    const { runs } = setup();
+    for (let i = 0; i < 55; i += 1) runs.cancel(runs.propose(targets("a"), "steer").id);
+    expect(runs.recent(100)).toHaveLength(50);
+  });
 });

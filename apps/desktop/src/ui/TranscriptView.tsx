@@ -39,7 +39,10 @@ function Block({ block }: { block: TranscriptBlock }) {
 }
 
 export function TranscriptView({ entries, hideSidechain }: Props) {
-  const visible = entries.filter((e) => !e.isMeta && (!hideSidechain || !e.isSidechain));
+  // thinking is never shown, so a frame holding only thinking would be an empty card
+  const visible = entries.filter(
+    (e) => !e.isMeta && (!hideSidechain || !e.isSidechain) && e.blocks.some((b) => b.kind !== 'thinking'),
+  );
   return (
     <ol className="transcript">
       {visible.map((e) => (

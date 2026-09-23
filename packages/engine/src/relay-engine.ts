@@ -130,6 +130,13 @@ export class RelayEngine {
       this.publish({ type: 'bulk', run });
     });
     this.bulk.on('finished', (run) => this.relayBulkEnd(run));
+    this.bulk.on('cancelled', (run) => {
+      if (this.closing) return;
+      void this.orchestrator.send(`[bulk-end] run ${run.id} was cancelled by the user; nothing ran.`, {
+        origin: 'watch:bulk-end',
+        mode: 'queue',
+      });
+    });
     this.orchestratorCwds = new Set([resolve(orchestratorDir), resolve(orchestratorRealDir)]);
     approvals.setMaxListeners(0); // every runner listens for its own approvals; they unsubscribe on close
     this.orchestrator = new Orchestrator({

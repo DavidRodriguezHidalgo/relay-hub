@@ -26,6 +26,7 @@ describe('OrchestratorChat', () => {
         bulkRuns={[]}
         onBulkConfirm={vi.fn()}
         onBulkCancel={vi.fn()}
+        approvals={[]}
       />,
     );
     expect(screen.getByText('hi')).toBeInTheDocument();
@@ -46,6 +47,7 @@ describe('OrchestratorChat', () => {
         bulkRuns={[]}
         onBulkConfirm={vi.fn()}
         onBulkCancel={vi.fn()}
+        approvals={[]}
       />,
     );
     expect(screen.getByRole('status', { name: 'Relay update' })).toHaveTextContent('session "B" finished');
@@ -55,7 +57,7 @@ describe('OrchestratorChat', () => {
     const onSend = vi.fn();
     const onInterrupt = vi.fn();
     const { rerender } = render(
-      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'idle', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />,
+      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'idle', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} approvals={[]} />,
     );
     const box = screen.getByPlaceholderText('Ask Relay…');
     await userEvent.type(box, 'line one{Shift>}{Enter}{/Shift}line two{Enter}');
@@ -63,7 +65,7 @@ describe('OrchestratorChat', () => {
     expect(box).toHaveValue('');
     expect(screen.queryByRole('button', { name: 'Interrupt' })).not.toBeInTheDocument();
     rerender(
-      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'running', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />,
+      <OrchestratorChat history={[]} liveEntries={[]} state={{ state: 'running', error: null }} onSend={onSend} onInterrupt={onInterrupt} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} approvals={[]} />,
     );
     await userEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
     expect(onInterrupt).toHaveBeenCalled();
@@ -71,7 +73,7 @@ describe('OrchestratorChat', () => {
 
   it('does not send an empty message', async () => {
     const onSend = vi.fn();
-    render(<OrchestratorChat history={[]} liveEntries={[]} state={undefined} onSend={onSend} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />);
+    render(<OrchestratorChat history={[]} liveEntries={[]} state={undefined} onSend={onSend} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} approvals={[]} />);
     await userEvent.type(screen.getByPlaceholderText('Ask Relay…'), '   {Enter}');
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -82,7 +84,7 @@ describe('OrchestratorChat', () => {
       blocks: [{ kind: "tool_result", toolUseId: "x", text: "[{\"id\":\"a\"}]", isError: false }],
       origin: "watch:turn-end",
     };
-    render(<OrchestratorChat history={[]} liveEntries={[toolResult]} state={undefined} onSend={vi.fn()} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} />);
+    render(<OrchestratorChat history={[]} liveEntries={[toolResult]} state={undefined} onSend={vi.fn()} onInterrupt={vi.fn()} bulkRuns={[]} onBulkConfirm={vi.fn()} onBulkCancel={vi.fn()} approvals={[]} />);
     expect(screen.queryByRole("status", { name: "Relay update" })).not.toBeInTheDocument();
     expect(screen.getByText("[{\"id\":\"a\"}]")).toBeInTheDocument();
   });
@@ -106,6 +108,7 @@ describe('OrchestratorChat', () => {
         bulkRuns={[run]}
         onBulkConfirm={vi.fn()}
         onBulkCancel={vi.fn()}
+        approvals={[]}
       />,
     );
     const before = screen.getByText("rebase both");

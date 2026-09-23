@@ -48,6 +48,10 @@ async function start(): Promise<void> {
   engine.onEvent((event) => {
     if (event.type === 'approval') {
       new Notification({ title: 'Relay Hub: approval needed', body: event.approval.summary }).show();
+    } else if (event.type === 'bulk' && event.run.status === 'finished') {
+      const done = event.run.rows.filter((r) => r.status === 'done').length;
+      const errors = event.run.rows.filter((r) => r.status === 'error').length;
+      new Notification({ title: 'Relay Hub: bulk run finished', body: `${done} done, ${errors} error${errors === 1 ? '' : 's'}` }).show();
     } else if (event.type === 'pr-event') {
       const title = engine?.listSessions().find((s) => s.id === event.sessionId)?.title ?? event.sessionId;
       new Notification({ title: `Relay Hub: ${event.event.summary}`, body: title }).show();

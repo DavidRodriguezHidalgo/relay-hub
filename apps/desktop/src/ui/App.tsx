@@ -62,8 +62,9 @@ export function App() {
           onSend={(p) => void window.relay.orchestratorSend(p)}
           onInterrupt={() => void window.relay.orchestratorInterrupt()}
           bulkRuns={run.bulkRuns}
-          onBulkConfirm={(id, ids) => void window.relay.bulkConfirm(id, ids)}
-          onBulkCancel={(id) => void window.relay.bulkCancel(id)}
+          onBulkConfirm={(id, ids) => void window.relay.bulkConfirm(id, ids).catch(() => undefined)}
+          onBulkCancel={(id) => void window.relay.bulkCancel(id).catch(() => undefined)}
+          approvals={run.approvals}
         />
         <ApprovalsDrawer
           approvals={run.approvals}

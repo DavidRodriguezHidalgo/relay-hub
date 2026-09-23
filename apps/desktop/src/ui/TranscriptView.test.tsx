@@ -32,4 +32,13 @@ describe('TranscriptView', () => {
     render(<TranscriptView entries={entries} hideSidechain={false} />);
     expect(screen.getByText('SIDE')).toBeInTheDocument();
   });
+
+  it("skips entries with nothing to show (thinking-only frames), so no empty cards appear", () => {
+    const thinkingOnly: TranscriptEntry = {
+      uuid: "t1", role: "assistant", timestamp: "2026-09-20T10:00:09.000Z", isSidechain: false, isMeta: false,
+      blocks: [{ kind: "thinking" }],
+    };
+    const { container } = render(<TranscriptView entries={[thinkingOnly, entries[0]!]} hideSidechain />);
+    expect(container.querySelectorAll("li.entry")).toHaveLength(1);
+  });
 });

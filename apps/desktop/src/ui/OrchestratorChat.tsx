@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { BulkRun, LiveEntry, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, LiveEntry, PendingApproval, TranscriptEntry } from '@relay/shared';
 import { BulkRunCard } from './BulkRunCard';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView, type ViewEntry } from './TranscriptView';
@@ -14,6 +14,7 @@ interface Props {
   bulkRuns: BulkRun[];
   onBulkConfirm: (runId: string, sessionIds: string[]) => void;
   onBulkCancel: (runId: string) => void;
+  approvals: PendingApproval[];
 }
 
 type Item = { kind: 'entry'; at: string; entry: ViewEntry } | { kind: 'bulk'; at: string; run: BulkRun };
@@ -42,6 +43,7 @@ export function OrchestratorChat({
   bulkRuns,
   onBulkConfirm,
   onBulkCancel,
+  approvals,
 }: Props) {
   const [draft, setDraft] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -82,6 +84,7 @@ export function OrchestratorChat({
                 run={run}
                 onConfirm={(ids) => onBulkConfirm(run.id, ids)}
                 onCancel={() => onBulkCancel(run.id)}
+                approvals={approvals}
               />
             );
           }
