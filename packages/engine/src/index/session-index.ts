@@ -17,8 +17,10 @@ export interface SessionIndexOptions {
   debounceMs?: number;
 }
 
+type IndexEvents = { changed: [SessionSummary[]]; error: [Error] };
+
 /** Discovers Claude Code sessions on disk, caches their summaries and reports changes. */
-export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> {
+export class SessionIndex extends EventEmitter<IndexEvents> {
   private readonly opts: Required<SessionIndexOptions>;
   private watcher: FSWatcher | null = null;
   private rescanTimer: NodeJS.Timeout | null = null;
@@ -29,12 +31,17 @@ export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> 
     this.opts = { now: () => new Date(), debounceMs: 300, ...opts };
   }
 
+  /** A file that cannot be read or parsed is skipped; one bad transcript never hides the rest. */
   async scan(): Promise<SessionSummary[]> {
     const files = await this.listTranscriptFiles();
     const summaries: SessionSummary[] = [];
     for (const filePath of files) {
-      const summary = await this.summarize(filePath);
-      if (summary) summaries.push(summary);
+      try {
+        const summary = await this.summarize(filePath);
+        if (summary) summaries.push(summary);
+      } catch (err) {
+        this.report(err);
+      }
     }
     this.opts.store.removeMissing(files);
     this.sessions = new Map(summaries.map((s) => [s.id, s]));
@@ -62,7 +69,9 @@ export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> 
       if (this.rescanTimer) clearTimeout(this.rescanTimer);
       this.rescanTimer = setTimeout(() => {
         this.rescanTimer = null;
-        void this.scan().then((s) => this.emit('changed', s));
+        this.scan()
+          .then((s) => this.emit('changed', s))
+          .catch((err: unknown) => this.report(err));
       }, this.opts.debounceMs);
     };
     this.watcher.on('add', schedule).on('change', schedule).on('unlink', schedule);
@@ -98,13 +107,18 @@ export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> 
     return files;
   }
 
+  /**
+   * Cache hits still re-check that the cwd exists: a finished session's transcript never changes,
+   * but its worktree can be deleted (or restored) at any time.
+   */
   private async summarize(filePath: string): Promise<SessionSummary | null> {
     const st = await stat(filePath);
     const cached = this.opts.store.get(filePath);
     if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
-      return this.refreshStale(cached.summary);
+      const cwdExists = await exists(cached.summary.cwd);
+      if (cwdExists === cached.summary.cwdExists) return this.refreshStale(cached.summary);
     }
-    const parsed = await readTranscript(filePath);
+    const parsed = await readTranscript(filePath, { entries: false });
     if (!parsed.cwd || !parsed.lastActivity) return null;
     const cwdExists = await exists(parsed.cwd);
     const git = cwdExists ? await this.opts.git.inspect(parsed.cwd) : { branch: null, repo: null };
@@ -114,7 +128,8 @@ export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> 
       cwd: parsed.cwd,
       cwdExists,
       repo: git.repo ?? basename(parsed.cwd),
-      branch: cwdExists ? (git.branch ?? parsed.gitBranch) : null,
+      // The transcript's own branch identifies the session; the live checkout only helps when it is missing.
+      branch: cwdExists ? (parsed.gitBranch ?? git.branch) : null,
       title: parsed.title,
       lastActivity: parsed.lastActivity,
       messageCount: parsed.messageCount,
@@ -126,6 +141,11 @@ export class SessionIndex extends EventEmitter<{ changed: [SessionSummary[]] }> 
     const fresh = this.refreshStale(summary);
     this.opts.store.upsert({ summary: fresh, mtimeMs: st.mtimeMs, size: st.size });
     return fresh;
+  }
+
+  /** Node throws on an unlistened 'error' emit, so only report when someone is listening. */
+  private report(err: unknown): void {
+    if (this.listenerCount('error') > 0) this.emit('error', err instanceof Error ? err : new Error(String(err)));
   }
 
   private refreshStale(summary: SessionSummary): SessionSummary {

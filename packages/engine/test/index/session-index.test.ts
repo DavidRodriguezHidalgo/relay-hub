@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,7 +59,7 @@ describe('SessionIndex', () => {
   it('uses live git info for an existing cwd and marks it fresh', async () => {
     const [, basic] = await make().scan();
     expect(basic).toMatchObject({
-      id: 's-basic', cwd: cwdA, cwdExists: true, repo: 'myrepo', branch: 'feat/live',
+      id: 's-basic', cwd: cwdA, cwdExists: true, repo: 'myrepo', branch: 'feat/a',
       title: 'Add tests for the zero-rate case', prNumber: 42, isStale: false, messageCount: 4,
     });
     expect(git.calls).toEqual([cwdA]);
@@ -79,6 +79,12 @@ describe('SessionIndex', () => {
   });
 
   it('re-parses only changed files on a second scan', async () => {
+    // a second session in the same (existing) cwd: re-parsing it too would call git twice
+    const basic = await readFile(fixture('basic.jsonl'), 'utf8');
+    await writeFile(
+      join(projectsDir, 'proj-a', 's-other.jsonl'),
+      basic.replaceAll('/repo/wt-a', cwdA).replaceAll('s-basic', 's-other'),
+    );
     const idx = make();
     await idx.scan();
     git.calls = [];
@@ -89,6 +95,26 @@ describe('SessionIndex', () => {
     const sessions = await idx.scan();
     expect(sessions.find((s) => s.id === 's-basic')?.messageCount).toBe(5);
     expect(git.calls).toEqual([cwdA]); // no-prompt session was served from cache
+  });
+
+  it('notices a worktree deleted after the session was cached', async () => {
+    const idx = make();
+    await idx.scan();
+    await rm(cwdA, { recursive: true });
+    const [, basic] = await idx.scan();
+    expect(basic).toMatchObject({ id: 's-basic', cwdExists: false, branch: null, isStale: true });
+    // and the reverse: the worktree comes back
+    await mkdir(cwdA);
+    const [, again] = await idx.scan();
+    expect(again).toMatchObject({ id: 's-basic', cwdExists: true, branch: 'feat/a', repo: 'myrepo', isStale: false });
+  });
+
+  it('keeps indexing when one transcript cannot be read', async () => {
+    const bad = join(projectsDir, 'proj-a', 's-bad.jsonl');
+    await writeFile(bad, '{"type":"user"}\n');
+    await chmod(bad, 0o000);
+    const sessions = await make().scan();
+    expect(sessions.map((s) => s.id)).toEqual(['s-noprompt', 's-basic']);
   });
 
   it('returns the transcript entries for a session', async () => {

@@ -15,6 +15,11 @@ export interface ParsedTranscript {
   entries: TranscriptEntry[];
 }
 
+export interface ParseOptions {
+  /** When false, entries are counted but not kept; use for summaries of large files. */
+  entries?: boolean;
+}
+
 const TITLE_MAX = 80;
 const UNTITLED = 'Untitled session';
 
@@ -88,14 +93,9 @@ function toolResultText(content: unknown): string {
   return '';
 }
 
-function firstText(blocks: TranscriptBlock[]): string | null {
-  const t = blocks.find((b) => b.kind === 'text');
-  return t && t.kind === 'text' ? t.text : null;
-}
-
-/** Parses transcript lines; unparsable lines (e.g. a write in progress) are skipped. */
-export function parseTranscriptLines(lines: Iterable<string>): ParsedTranscript {
-  const out: ParsedTranscript = {
+/** Incremental transcript parser: feed lines one at a time, then `finish()`. */
+export class TranscriptParser {
+  private readonly out: ParsedTranscript = {
     sessionId: null,
     cwd: null,
     gitBranch: null,
@@ -107,33 +107,40 @@ export function parseTranscriptLines(lines: Iterable<string>): ParsedTranscript 
     continuedIn: null,
     entries: [],
   };
-  let aiTitle: string | null = null;
-  let customTitle: string | null = null;
-  let promptTitle: string | null = null;
-  let relocatedCwd: string | null = null;
+  private aiTitle: string | null = null;
+  private customTitle: string | null = null;
+  private promptTitle: string | null = null;
+  private relocatedCwd: string | null = null;
+  private readonly keepEntries: boolean;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  constructor(opts: ParseOptions = {}) {
+    this.keepEntries = opts.entries ?? true;
+  }
+
+  /** Unparsable lines (e.g. a write in progress) are skipped. */
+  push(line: string): void {
+    if (!line.trim()) return;
     let raw: RawLine;
     try {
       raw = JSON.parse(line) as RawLine;
     } catch {
-      continue;
+      return;
     }
+    const out = this.out;
     out.sessionId ??= raw.sessionId ?? null;
     switch (raw.type) {
       case 'ai-title':
-        aiTitle = raw.aiTitle ?? aiTitle;
+        this.aiTitle = raw.aiTitle ?? this.aiTitle;
         break;
       case 'custom-title':
-        customTitle = raw.customTitle ?? customTitle;
+        this.customTitle = raw.customTitle ?? this.customTitle;
         break;
       case 'pr-link':
         out.prNumber = raw.prNumber ?? out.prNumber;
         out.prUrl = raw.prUrl ?? out.prUrl;
         break;
       case 'relocated':
-        relocatedCwd = raw.relocatedCwd ?? relocatedCwd;
+        this.relocatedCwd = raw.relocatedCwd ?? this.relocatedCwd;
         break;
       case 'continued-in':
         out.continuedIn = raw.continuedInSessionId ?? out.continuedIn;
@@ -141,44 +148,56 @@ export function parseTranscriptLines(lines: Iterable<string>): ParsedTranscript 
       case 'user':
       case 'assistant': {
         if (!raw.uuid || !raw.timestamp) break;
-        const entry: TranscriptEntry = {
-          uuid: raw.uuid,
-          role: raw.type,
-          timestamp: raw.timestamp,
-          isSidechain: raw.isSidechain === true,
-          isMeta: raw.isMeta === true,
-          blocks: toBlocks(raw.message?.content),
-        };
-        out.entries.push(entry);
-        if (!entry.isSidechain) {
+        const isSidechain = raw.isSidechain === true;
+        const isMeta = raw.isMeta === true;
+        const content = raw.message?.content;
+        const wantsTitle =
+          this.promptTitle === null &&
+          raw.type === 'user' &&
+          !isSidechain &&
+          !isMeta &&
+          typeof content === 'string';
+        if (this.keepEntries) {
+          out.entries.push({
+            uuid: raw.uuid,
+            role: raw.type,
+            timestamp: raw.timestamp,
+            isSidechain,
+            isMeta,
+            blocks: toBlocks(content),
+          });
+        }
+        if (!isSidechain) {
           out.messageCount += 1;
           out.lastActivity = raw.timestamp;
           if (raw.cwd) out.cwd = raw.cwd;
           if (raw.gitBranch) out.gitBranch = raw.gitBranch;
-          if (
-            promptTitle === null &&
-            entry.role === 'user' &&
-            !entry.isMeta &&
-            typeof raw.message?.content === 'string'
-          ) {
-            promptTitle = firstText(entry.blocks);
-          }
+          if (wantsTitle) this.promptTitle = content;
         }
         break;
       }
     }
   }
 
-  if (relocatedCwd) out.cwd = relocatedCwd;
-  const title = customTitle ?? aiTitle ?? promptTitle;
-  out.title = title ? title.trim().slice(0, TITLE_MAX) || UNTITLED : UNTITLED;
-  return out;
+  finish(): ParsedTranscript {
+    const out = this.out;
+    if (this.relocatedCwd) out.cwd = this.relocatedCwd;
+    const title = this.customTitle ?? this.aiTitle ?? this.promptTitle;
+    out.title = title ? title.trim().slice(0, TITLE_MAX) || UNTITLED : UNTITLED;
+    return out;
+  }
 }
 
-/** Streams a JSONL transcript from disk; large files are never read whole. */
-export async function readTranscript(filePath: string): Promise<ParsedTranscript> {
-  const lines: string[] = [];
+export function parseTranscriptLines(lines: Iterable<string>, opts?: ParseOptions): ParsedTranscript {
+  const parser = new TranscriptParser(opts);
+  for (const line of lines) parser.push(line);
+  return parser.finish();
+}
+
+/** Streams a JSONL transcript from disk line by line; the file is never held whole in memory. */
+export async function readTranscript(filePath: string, opts?: ParseOptions): Promise<ParsedTranscript> {
+  const parser = new TranscriptParser(opts);
   const rl = createInterface({ input: createReadStream(filePath, 'utf8'), crlfDelay: Infinity });
-  for await (const line of rl) lines.push(line);
-  return parseTranscriptLines(lines);
+  for await (const line of rl) parser.push(line);
+  return parser.finish();
 }

@@ -36,6 +36,12 @@ export class RelayEngine {
     return this.index.getTranscript(id);
   }
 
+  /** Non-fatal indexing problems (an unreadable transcript, a failed rescan). */
+  onError(listener: (error: Error) => void): () => void {
+    this.index.on('error', listener);
+    return () => this.index.off('error', listener);
+  }
+
   onSessionsChanged(listener: (sessions: SessionSummary[]) => void): () => void {
     this.index.on('changed', listener);
     return () => this.index.off('changed', listener);

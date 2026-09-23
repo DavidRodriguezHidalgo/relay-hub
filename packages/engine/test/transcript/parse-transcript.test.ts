@@ -56,4 +56,12 @@ describe('readTranscript', () => {
     const t = parseTranscriptLines(lines);
     expect(t.title).toBe('x'.repeat(80));
   });
+
+  it("can summarise without materialising entries", async () => {
+    const t = await readTranscript(fixture("basic.jsonl"), { entries: false });
+    expect(t.entries).toEqual([]);
+    expect(t.messageCount).toBe(4);
+    expect(t.title).toBe("Add tests for the zero-rate case");
+    expect(t.lastActivity).toBe("2026-09-20T10:01:00.000Z");
+  });
 });
