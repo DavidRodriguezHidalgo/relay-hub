@@ -5,6 +5,10 @@ export type { RelayApi } from './ipc';
 export type {
   ApprovalDecision,
   ApprovalReason,
+  BulkRow,
+  BulkRowStatus,
+  BulkRun,
+  BulkRunStatus,
   DeliveryMode,
   LiveEntry,
   MessageOrigin,

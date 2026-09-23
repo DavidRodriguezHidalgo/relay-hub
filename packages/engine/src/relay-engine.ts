@@ -194,7 +194,7 @@ export class RelayEngine {
   runState(): RunState {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
-    return { states, approvals: this.approvals.pending() };
+    return { states, approvals: this.approvals.pending(), bulkRuns: [] };
   }
 
   async close(): Promise<void> {

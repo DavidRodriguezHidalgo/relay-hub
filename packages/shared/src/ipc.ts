@@ -14,6 +14,8 @@ export const IPC = {
   orchestratorSend: 'relay:orchestratorSend',
   orchestratorInterrupt: 'relay:orchestratorInterrupt',
   orchestratorHistory: 'relay:orchestratorHistory',
+  bulkConfirm: 'relay:bulkConfirm',
+  bulkCancel: 'relay:bulkCancel',
 } as const;
 
 export interface SendRequest {
@@ -36,4 +38,6 @@ export interface RelayApi {
   orchestratorSend(prompt: string): Promise<string>;
   orchestratorInterrupt(): Promise<void>;
   orchestratorHistory(): Promise<TranscriptEntry[]>;
+  bulkConfirm(runId: string, sessionIds: string[]): Promise<void>;
+  bulkCancel(runId: string): Promise<void>;
 }

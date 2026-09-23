@@ -19,6 +19,8 @@ const api: RelayApi = {
   orchestratorSend: (prompt) => ipcRenderer.invoke(IPC.orchestratorSend, prompt),
   orchestratorInterrupt: () => ipcRenderer.invoke(IPC.orchestratorInterrupt),
   orchestratorHistory: () => ipcRenderer.invoke(IPC.orchestratorHistory),
+  bulkConfirm: (runId, sessionIds) => ipcRenderer.invoke(IPC.bulkConfirm, runId, sessionIds),
+  bulkCancel: (runId) => ipcRenderer.invoke(IPC.bulkCancel, runId),
 };
 
 contextBridge.exposeInMainWorld('relay', api);

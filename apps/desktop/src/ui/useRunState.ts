@@ -29,6 +29,8 @@ export function useRunState(): RunView {
             return { ...v, approvals: [...v.approvals, event.approval] };
           case 'approval-resolved':
             return { ...v, approvals: v.approvals.filter((a) => a.id !== event.approvalId) };
+          case 'bulk':
+            return v;
         }
       });
     });

@@ -15,7 +15,7 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
       s({ id: 'b', title: 'OCR ideas', lastActivity: '2026-09-21T00:00:00.000Z' }),
       s({ id: 'c', title: 'Old', isStale: true }),
     ],
-    runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [] }),
+    runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [], bulkRuns: [] }),
     getTranscript: async () => [],
     send: vi.fn(async () => 'm-1'),
     interrupt: vi.fn(async () => undefined),
