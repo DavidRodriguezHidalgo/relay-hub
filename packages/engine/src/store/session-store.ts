@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { BulkRun, SessionSummary } from '@relay/shared';
+import type { BulkRun, PrWatch, SessionSummary } from '@relay/shared';
+import type { PrSnapshot } from '../pr/snapshot';
 
 export interface CachedSession {
   summary: SessionSummary;
@@ -24,6 +25,7 @@ export class SessionStore {
       );
       create table if not exists meta (key text primary key, value text not null);
       create table if not exists bulk_runs (id text primary key, created_at text not null, run text not null);
+      create table if not exists pr_watches (id text primary key, created_at text not null, watch text not null, snapshot text);
     `);
   }
 
@@ -83,6 +85,31 @@ export class SessionStore {
       run: string;
     }[];
     return rows.map((r) => JSON.parse(r.run) as BulkRun);
+  }
+
+  saveWatch(watch: PrWatch, snapshot: PrSnapshot | null): void {
+    this.db
+      .prepare(
+        'insert into pr_watches (id, created_at, watch, snapshot) values (?, ?, ?, ?) ' +
+          'on conflict(id) do update set watch = excluded.watch, snapshot = excluded.snapshot',
+      )
+      .run(watch.id, watch.createdAt, JSON.stringify(watch), snapshot ? JSON.stringify(snapshot) : null);
+  }
+
+  /** Oldest first. */
+  loadWatches(): { watch: PrWatch; snapshot: PrSnapshot | null }[] {
+    const rows = this.db.prepare('select watch, snapshot from pr_watches order by created_at').all() as {
+      watch: string;
+      snapshot: string | null;
+    }[];
+    return rows.map((r) => ({
+      watch: JSON.parse(r.watch) as PrWatch,
+      snapshot: r.snapshot ? (JSON.parse(r.snapshot) as PrSnapshot) : null,
+    }));
+  }
+
+  deleteWatch(id: string): void {
+    this.db.prepare('delete from pr_watches where id = ?').run(id);
   }
 
   close(): void {

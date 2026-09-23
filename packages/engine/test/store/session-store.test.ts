@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BulkRun, SessionSummary } from '@relay/shared';
+import type { BulkRun, PrWatch, SessionSummary } from '@relay/shared';
 import { SessionStore } from '../../src/store/session-store';
 
 const summary = (over: Partial<SessionSummary> = {}): SessionSummary => ({
@@ -68,5 +68,24 @@ describe('SessionStore', () => {
     store.saveBulkRun(run('a', '2026-09-23T10:00:00.000Z', 'running'));
     expect(store.loadBulkRuns(10).map((r) => [r.id, r.status])).toEqual([['b', 'proposed'], ['a', 'running']]);
     expect(store.loadBulkRuns(1).map((r) => r.id)).toEqual(['b']);
+  });
+
+  it('saves, updates, loads and deletes PR watches with their snapshot', () => {
+    const store = new SessionStore(':memory:');
+    const w: PrWatch = {
+      id: 'w1', sessionId: 's1', repo: 'o/r', prNumber: 7, prUrl: 'u', active: true,
+      createdAt: '2026-09-23T10:00:00.000Z', lastPolledAt: null, lastError: null,
+    };
+    store.saveWatch(w, null);
+    expect(store.loadWatches()).toEqual([{ watch: w, snapshot: null }]);
+    store.saveWatch({ ...w, lastPolledAt: '2026-09-23T10:05:00.000Z' }, {
+      state: 'OPEN', headRefOid: 'h', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN',
+      failingChecks: [], lastFeedbackAt: '',
+    });
+    const [loaded] = store.loadWatches();
+    expect(loaded!.watch.lastPolledAt).toBe('2026-09-23T10:05:00.000Z');
+    expect(loaded!.snapshot?.headRefOid).toBe('h');
+    store.deleteWatch('w1');
+    expect(store.loadWatches()).toEqual([]);
   });
 });
