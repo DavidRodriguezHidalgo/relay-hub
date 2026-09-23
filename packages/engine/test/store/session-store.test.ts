@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SessionSummary } from '@relay/shared';
 import { SessionStore } from '../../src/store/session-store';
 
@@ -30,5 +33,27 @@ describe('SessionStore', () => {
     store.upsert({ summary: summary({ id: 's2', filePath: '/p/s2.jsonl' }), mtimeMs: 1, size: 1 });
     store.removeMissing(['/p/s2.jsonl']);
     expect(store.all().map((c) => c.summary.id)).toEqual(['s2']);
+  });
+
+  it('stores, overwrites and deletes metadata values', () => {
+    const store = new SessionStore(':memory:');
+    expect(store.getMeta('orchestrator.sessionId')).toBeNull();
+    store.setMeta('orchestrator.sessionId', 'a');
+    store.setMeta('orchestrator.sessionId', 'b');
+    expect(store.getMeta('orchestrator.sessionId')).toBe('b');
+    store.setMeta('orchestrator.sessionId', null);
+    expect(store.getMeta('orchestrator.sessionId')).toBeNull();
+  });
+
+  it('keeps metadata across reopen of the same file', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'relay-store-'));
+    const path = join(dir, 'relay.db');
+    const a = new SessionStore(path);
+    a.setMeta('k', 'v');
+    a.close();
+    const b = new SessionStore(path);
+    expect(b.getMeta('k')).toBe('v');
+    b.close();
+    await rm(dir, { recursive: true, force: true });
   });
 });

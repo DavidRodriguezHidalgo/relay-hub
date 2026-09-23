@@ -21,7 +21,8 @@ export class SessionStore {
         mtime_ms real not null,
         size integer not null,
         summary text not null
-      )
+      );
+      create table if not exists meta (key text primary key, value text not null);
     `);
   }
 
@@ -48,6 +49,22 @@ export class SessionStore {
     const del = this.db.prepare('delete from sessions where file_path = ?');
     for (const row of this.db.prepare('select file_path from sessions').all() as Pick<Row, 'file_path'>[]) {
       if (!present.has(row.file_path)) del.run(row.file_path);
+    }
+  }
+
+  getMeta(key: string): string | null {
+    const row = this.db.prepare('select value from meta where key = ?').get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  /** `null` deletes the key. */
+  setMeta(key: string, value: string | null): void {
+    if (value === null) {
+      this.db.prepare('delete from meta where key = ?').run(key);
+    } else {
+      this.db
+        .prepare('insert into meta (key, value) values (?, ?) on conflict(key) do update set value = excluded.value')
+        .run(key, value);
     }
   }
 
