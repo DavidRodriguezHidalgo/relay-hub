@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionSummary } from '@relay/shared';
+import type { BulkRun, SessionSummary } from '@relay/shared';
 import { SessionStore } from '../../src/store/session-store';
 
 const summary = (over: Partial<SessionSummary> = {}): SessionSummary => ({
@@ -55,5 +55,18 @@ describe('SessionStore', () => {
     expect(b.getMeta('k')).toBe('v');
     b.close();
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it('saves bulk runs by id and loads the newest first', () => {
+    const store = new SessionStore(':memory:');
+    const run = (id: string, createdAt: string, status: BulkRun['status'] = 'proposed'): BulkRun => ({
+      id, createdAt, mode: 'steer', status,
+      rows: [{ sessionId: 's1', title: 'T', branch: null, prompt: 'p', status: 'proposed', detail: null }],
+    });
+    store.saveBulkRun(run('a', '2026-09-23T10:00:00.000Z'));
+    store.saveBulkRun(run('b', '2026-09-23T11:00:00.000Z'));
+    store.saveBulkRun(run('a', '2026-09-23T10:00:00.000Z', 'running'));
+    expect(store.loadBulkRuns(10).map((r) => [r.id, r.status])).toEqual([['b', 'proposed'], ['a', 'running']]);
+    expect(store.loadBulkRuns(1).map((r) => r.id)).toEqual(['b']);
   });
 });

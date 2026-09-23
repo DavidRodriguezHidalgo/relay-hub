@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { SessionSummary } from '@relay/shared';
+import type { BulkRun, SessionSummary } from '@relay/shared';
 
 export interface CachedSession {
   summary: SessionSummary;
@@ -23,6 +23,7 @@ export class SessionStore {
         summary text not null
       );
       create table if not exists meta (key text primary key, value text not null);
+      create table if not exists bulk_runs (id text primary key, created_at text not null, run text not null);
     `);
   }
 
@@ -66,6 +67,22 @@ export class SessionStore {
         .prepare('insert into meta (key, value) values (?, ?) on conflict(key) do update set value = excluded.value')
         .run(key, value);
     }
+  }
+
+  saveBulkRun(run: BulkRun): void {
+    this.db
+      .prepare(
+        'insert into bulk_runs (id, created_at, run) values (?, ?, ?) on conflict(id) do update set run = excluded.run',
+      )
+      .run(run.id, run.createdAt, JSON.stringify(run));
+  }
+
+  /** Newest first. */
+  loadBulkRuns(limit: number): BulkRun[] {
+    const rows = this.db.prepare('select run from bulk_runs order by created_at desc limit ?').all(limit) as {
+      run: string;
+    }[];
+    return rows.map((r) => JSON.parse(r.run) as BulkRun);
   }
 
   close(): void {
