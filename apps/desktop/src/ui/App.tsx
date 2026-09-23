@@ -15,7 +15,9 @@ export function App() {
     return window.relay.onSessionsChanged(setSessions);
   }, []);
 
-  // Re-fetch when the watcher reports a change so a live session's panel stays current.
+  // Re-fetch only when the selected session itself changed; other sessions' activity must not
+  // re-send a large transcript over IPC.
+  const selectedVersion = selected ? `${selected.lastActivity}:${selected.messageCount}` : null;
   useEffect(() => {
     if (!selectedId) return;
     let cancelled = false;
@@ -25,7 +27,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId, sessions]);
+  }, [selectedId, selectedVersion]);
 
   return (
     <div className="app">
