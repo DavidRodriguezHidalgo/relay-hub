@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PrData } from '../../src/pr/gh-client';
-import { diffSnapshots, toSnapshot } from '../../src/pr/snapshot';
+import { carryForward, diffSnapshots, toSnapshot } from '../../src/pr/snapshot';
 
 const pr = (over: Partial<PrData> = {}): PrData => ({
   number: 7, url: 'https://github.com/o/r/pull/7', title: 'Mileage', state: 'OPEN',
-  headRefName: 'feat/m', headRefOid: 'h1', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN',
+  headRefName: 'feat/m', headRefOid: 'h1', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED',
   checks: [{ name: 'lint', conclusion: 'SUCCESS', status: 'COMPLETED' }], feedback: [], ...over,
 });
 const diff = (a: PrData, b: PrData, viewer = 'me') => diffSnapshots(toSnapshot(a), toSnapshot(b), b, viewer);
@@ -36,8 +36,9 @@ describe('diffSnapshots', () => {
     expect(kinds(pushedGreen, failedAgain)).toEqual(['ci_failed']);
   });
 
-  it('counts TIMED_OUT, CANCELLED, ACTION_REQUIRED, STARTUP_FAILURE and status ERROR as failing', () => {
-    for (const conclusion of ['TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR', 'FAILURE']) {
+  it('counts TIMED_OUT, ACTION_REQUIRED, STARTUP_FAILURE and status ERROR as failing, never CANCELLED', () => {
+    expect(kinds(pr(), pr({ checks: [{ name: 'x', conclusion: 'CANCELLED', status: 'COMPLETED' }] }))).toEqual([]);
+    for (const conclusion of ['TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR', 'FAILURE']) {
       expect(kinds(pr(), pr({ checks: [{ name: 'x', conclusion, status: 'COMPLETED' }] }))).toEqual(['ci_failed']);
     }
     expect(kinds(pr(), pr({ checks: [{ name: 'x', conclusion: 'SKIPPED', status: 'COMPLETED' }] }))).toEqual([]);
@@ -45,18 +46,19 @@ describe('diffSnapshots', () => {
 
   it('review_comment for new feedback from others, never from the viewer or bots', () => {
     const at = (m: number) => `2026-09-23T10:0${m}:00Z`;
-    const base = pr({ feedback: [{ id: 'old', author: 'ana', body: 'old', at: at(0) }] });
-    const mine = pr({ feedback: [...base.feedback, { id: 'm', author: 'me', body: 'I replied', at: at(1) }] });
+    const base = pr({ feedback: [{ id: 'old', author: 'ana', body: 'old', at: at(0), bot: false }] });
+    const mine = pr({ feedback: [...base.feedback, { id: 'm', author: 'me', body: 'I replied', at: at(1), bot: false }] });
     expect(kinds(base, mine)).toEqual([]);
     const bots = pr({
       feedback: [
         ...base.feedback,
-        { id: 'b1', author: 'github-actions', body: 'coverage', at: at(2) },
-        { id: 'b2', author: 'mergify[bot]', body: 'queued', at: at(3) },
+        { id: 'b1', author: 'github-actions', body: 'coverage', at: at(2), bot: false }, // known bot login without a type
+        { id: 'b2', author: 'coderabbitai[bot]', body: 'Walkthrough', at: at(3), bot: true }, // REST user.type Bot
+        { id: 'b3', author: 'chatgpt-codex-connector', body: 'Suggestion', at: at(3), bot: true }, // plain login, typed Bot
       ],
     });
     expect(kinds(base, bots)).toEqual([]);
-    const review = pr({ feedback: [...base.feedback, { id: 'r', author: 'bob', body: 'Please rename x', at: at(4) }] });
+    const review = pr({ feedback: [...base.feedback, { id: 'r', author: 'bob', body: 'Please rename x', at: at(4), bot: false }] });
     const events = diff(base, review);
     expect(events.map((e) => e.kind)).toEqual(['review_comment']);
     expect(events[0]!.details).toContain('bob');
@@ -72,5 +74,20 @@ describe('diffSnapshots', () => {
 
   it('merged when the state becomes MERGED; nothing else is reported with it', () => {
     expect(kinds(pr(), pr({ state: 'MERGED', checks: failing('late') }))).toEqual(['merged']);
+  });
+
+  it('does not wake for failing checks when GitHub already reports the PR as mergeable (CLEAN)', () => {
+    expect(kinds(pr(), pr({ mergeStateStatus: 'CLEAN', checks: failing('optional') }))).toEqual([]);
+    expect(kinds(pr(), pr({ mergeStateStatus: 'UNSTABLE', checks: failing('t') }))).toEqual(['ci_failed']);
+  });
+
+  it('a transient UNKNOWN between two conflicting polls does not wake again', () => {
+    const conflicting = toSnapshot(pr({ mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' }));
+    const unknownPr = pr({ mergeable: 'UNKNOWN', mergeStateStatus: 'UNKNOWN' });
+    const unknown = carryForward(conflicting, toSnapshot(unknownPr));
+    expect(unknown).toMatchObject({ mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' });
+    expect(diffSnapshots(conflicting, unknown, unknownPr, 'me')).toEqual([]);
+    const againPr = pr({ mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' });
+    expect(diffSnapshots(unknown, carryForward(unknown, toSnapshot(againPr)), againPr, 'me')).toEqual([]);
   });
 });

@@ -36,6 +36,8 @@ export function useRunState(): RunView {
             const others = v.watches.filter((w) => w.id !== event.watch.id);
             return { ...v, watches: [...others, event.watch], gh: event.gh };
           }
+          case 'watch-removed':
+            return { ...v, watches: v.watches.filter((w) => w.id !== event.watchId) };
           case 'pr-event':
             return v;
           case 'bulk': {

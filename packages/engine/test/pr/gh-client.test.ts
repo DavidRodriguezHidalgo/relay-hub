@@ -13,31 +13,46 @@ function fake(responses: Record<string, unknown>) {
 }
 
 describe('ExecGhClient', () => {
-  it('views a PR and unifies checks and feedback', async () => {
+  it('views a PR: checks keyed by workflow, feedback from REST with inline comments and bot flags', async () => {
     const { run, calls } = fake({
       'pr view': {
         number: 7, url: 'https://github.com/o/r/pull/7', title: 'Mileage', state: 'OPEN',
-        headRefName: 'feat/m', headRefOid: 'abc', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN',
+        headRefName: 'feat/m', headRefOid: 'abc', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED',
         statusCheckRollup: [
-          { __typename: 'CheckRun', name: 'test', conclusion: 'FAILURE', status: 'COMPLETED' },
+          { __typename: 'CheckRun', name: 'test', workflowName: 'CI', conclusion: 'FAILURE', status: 'COMPLETED' },
           { __typename: 'StatusContext', context: 'ci/legacy', state: 'ERROR' },
         ],
-        reviews: [
-          { id: 'R1', author: { login: 'ana' }, body: '', state: 'APPROVED', submittedAt: '2026-09-23T10:00:00Z' },
-          { id: 'R2', author: { login: 'ana' }, body: '', state: 'COMMENTED', submittedAt: '2026-09-23T10:01:00Z' },
-        ],
-        comments: [{ id: 'C1', author: { login: 'bob' }, body: 'nit', createdAt: '2026-09-23T10:02:00Z' }],
       },
+      // the shapes gh api returns (one page each, --slurp wraps pages in an array)
+      'api repos/o/r/pulls/7/reviews': [[
+        { id: 1, user: { login: 'ana', type: 'User' }, body: '', state: 'APPROVED', submitted_at: '2026-09-23T10:00:00Z' },
+        // an inline-only review: empty body, its substance is in the review comments below
+        { id: 2, user: { login: 'carl', type: 'User' }, body: '', state: 'COMMENTED', submitted_at: '2026-09-23T10:01:00Z' },
+      ]],
+      'api repos/o/r/pulls/7/comments': [[
+        { id: 20, user: { login: 'carl', type: 'User' }, body: '[P1] off by one', path: 'src/a.ts', line: 12, created_at: '2026-09-23T10:01:00Z' },
+      ]],
+      'api repos/o/r/issues/7/comments': [[
+        { id: 30, user: { login: 'coderabbitai[bot]', type: 'Bot' }, body: 'Walkthrough', created_at: '2026-09-23T10:02:00Z' },
+        { id: 31, user: { login: 'bob', type: 'User' }, body: 'nit', created_at: '2026-09-23T10:03:00Z' },
+      ]],
     });
     const pr = await new ExecGhClient(run).viewPr('o/r', 7);
     expect(calls[0]!.args.slice(0, 5)).toEqual(['pr', 'view', '7', '--repo', 'o/r']);
+    expect(calls.slice(1).map((c) => c.args.slice(0, 4))).toEqual([
+      ['api', 'repos/o/r/pulls/7/reviews', '--paginate', '--slurp'],
+      ['api', 'repos/o/r/pulls/7/comments', '--paginate', '--slurp'],
+      ['api', 'repos/o/r/issues/7/comments', '--paginate', '--slurp'],
+    ]);
     expect(pr.checks).toEqual([
-      { name: 'test', conclusion: 'FAILURE', status: 'COMPLETED' },
+      { name: 'CI / test', conclusion: 'FAILURE', status: 'COMPLETED' },
       { name: 'ci/legacy', conclusion: 'ERROR', status: 'COMPLETED' },
     ]);
     expect(pr.feedback).toEqual([
-      { id: 'R1', author: 'ana', body: 'APPROVED', at: '2026-09-23T10:00:00Z' },
-      { id: 'C1', author: 'bob', body: 'nit', at: '2026-09-23T10:02:00Z' },
+      { id: 'review-1', author: 'ana', body: 'APPROVED', at: '2026-09-23T10:00:00Z', bot: false },
+      { id: 'inline-20', author: 'carl', body: 'src/a.ts:12: [P1] off by one', at: '2026-09-23T10:01:00Z', bot: false },
+      { id: 'comment-30', author: 'coderabbitai[bot]', body: 'Walkthrough', at: '2026-09-23T10:02:00Z', bot: true },
+      { id: 'comment-31', author: 'bob', body: 'nit', at: '2026-09-23T10:03:00Z', bot: false },
     ]);
   });
 

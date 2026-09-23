@@ -88,6 +88,7 @@ export type RunnerEvent =
   | { type: 'approval-resolved'; approvalId: string; decision: ApprovalDecision['kind'] }
   | { type: 'bulk'; run: BulkRun }
   | { type: 'watch'; watch: PrWatch; gh: GhStatus }
+  | { type: 'watch-removed'; watchId: string }
   | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
 
 export interface RunState {

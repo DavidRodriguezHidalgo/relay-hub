@@ -11,14 +11,16 @@ import type { GhClient, PrData, PrRef } from '../src/pr/gh-client';
 class FakeGh implements GhClient {
   data: PrData = {
     number: 42, url: 'https://github.com/org/repo/pull/42', title: 'M', state: 'OPEN', headRefName: 'feat/a',
-    headRefOid: 'h1', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', checks: [], feedback: [],
+    headRefOid: 'h1', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', checks: [], feedback: [],
   };
   found: PrRef | null = null;
+  /** Per-number overrides; anything else reads `data`. */
+  prs: Record<number, PrData> = {};
   async viewer() {
     return 'me';
   }
-  async viewPr() {
-    return this.data;
+  async viewPr(_repo: string, n: number) {
+    return this.prs[n] ?? this.data;
   }
   async findPrForBranch() {
     return this.found;
@@ -552,5 +554,28 @@ describe('RelayEngine', () => {
     await engine!.send({ sessionId: 's-basic', prompt: 'x', mode: 'steer', origin: 'user' });
     await tick();
     expect(engine!.activeSessions()).toEqual([{ id: 's-basic', title: 'Add tests for the zero-rate case', state: 'running' }]);
+  });
+
+  it('a recorded PR that is merged is not watched: falls back to the open PR for the branch, else says so', async () => {
+    const gh = new FakeGh();
+    await startWithBasic(new FakeAgentClient(), undefined, { gh });
+    gh.data = { ...gh.data, state: 'MERGED' };
+    gh.found = null;
+    await expect(engine!.watchCreate('s-basic')).rejects.toThrow(/PR #42 is merged/);
+    expect(engine!.runState().watches).toEqual([]);
+    gh.found = { repo: 'org/repo', number: 43, url: 'https://github.com/org/repo/pull/43' };
+    gh.prs[42] = { ...gh.data, number: 42, state: 'MERGED' };
+    gh.data = { ...gh.data, state: 'OPEN', number: 43 };
+    expect(await engine!.watchCreate('s-basic')).toMatchObject({ prNumber: 43, active: true });
+  });
+
+  it('deleting a watch publishes its removal', async () => {
+    const gh = new FakeGh();
+    await startWithBasic(new FakeAgentClient(), undefined, { gh });
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    const w = await engine!.watchCreate('s-basic');
+    engine!.watchDelete(w.id);
+    expect(events.at(-1)).toEqual({ type: 'watch-removed', watchId: w.id });
   });
 });

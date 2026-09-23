@@ -6,7 +6,7 @@ import { SessionStore } from '../../src/store/session-store';
 
 const pr = (over: Partial<PrData> = {}): PrData => ({
   number: 7, url: 'https://github.com/o/r/pull/7', title: 'M', state: 'OPEN', headRefName: 'feat/m', headRefOid: 'h1',
-  baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', checks: [], feedback: [], ...over,
+  baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'BLOCKED', checks: [], feedback: [], ...over,
 });
 
 class FakeGh implements GhClient {
@@ -110,5 +110,14 @@ describe('PrWatcher', () => {
     gh.views = 0;
     await Promise.all([w.pollAll(), w.pollAll()]);
     expect(gh.views).toBe(1);
+  });
+
+  it('remove announces the removal so the UI can drop it', async () => {
+    const { w } = setup();
+    const removed: string[] = [];
+    w.on('removed', (id) => removed.push(id));
+    const watch = await w.add(ref);
+    w.remove(watch.id);
+    expect(removed).toEqual([watch.id]);
   });
 });

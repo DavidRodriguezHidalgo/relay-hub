@@ -115,6 +115,29 @@ describe('App', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('gh: not logged in');
   });
 
+  it('a removed watch disappears from the panel and Watch PR comes back', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    await act(async () => {
+      emit!({
+        type: 'watch',
+        watch: { id: 'w1', sessionId: 'a', repo: 'o/r', prNumber: 9, prUrl: 'u', active: true, createdAt: 'x', lastPolledAt: null, lastError: null },
+        gh: { state: 'ok' },
+      });
+    });
+    expect(screen.getByText(/Watching PR #9/)).toBeInTheDocument();
+    await act(async () => {
+      emit!({ type: 'watch-removed', watchId: 'w1' });
+    });
+    expect(screen.queryByText(/Watching PR #9/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Watch PR' })).toBeInTheDocument();
+  });
+
   it('re-fetches the transcript only when the selected session itself changed', async () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));

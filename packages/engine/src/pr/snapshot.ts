@@ -1,7 +1,7 @@
 import type { PrEvent } from '@relay/shared';
 import type { PrData } from './gh-client';
 
-/** GitHub does not flag every bot as one; these logins are ignored as review feedback. */
+/** Bots GitHub does not always type as one (e.g. in `gh pr view` data); ignored as review feedback. */
 export const BOT_LOGINS: readonly string[] = [
   'github-actions',
   'dependabot',
@@ -12,7 +12,8 @@ export const BOT_LOGINS: readonly string[] = [
   'sonarcloud',
   'linear',
 ];
-const FAILING = new Set(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR']);
+/** A cancelled job is superseded or stopped, not a failure to fix. */
+const FAILING = new Set(['FAILURE', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'ERROR']);
 const BODY_MAX = 800;
 
 /** What one poll of a PR is compared on. */
@@ -29,8 +30,21 @@ export interface PrSnapshot {
 }
 
 const clip = (t: string) => (t.length > BODY_MAX ? `${t.slice(0, BODY_MAX)}…` : t);
-const isBot = (login: string) => login.endsWith('[bot]') || BOT_LOGINS.includes(login.toLowerCase());
+const isBot = (f: PrData['feedback'][number]) =>
+  f.bot || f.author.endsWith('[bot]') || BOT_LOGINS.includes(f.author.toLowerCase());
 const blocked = (s: PrSnapshot) => s.mergeable === 'CONFLICTING' || s.mergeStateStatus === 'BEHIND';
+
+/**
+ * GitHub recomputes mergeability lazily and reports UNKNOWN meanwhile; keep the last known value
+ * so CONFLICTING → UNKNOWN → CONFLICTING is not a new conflict.
+ */
+export function carryForward(prev: PrSnapshot, next: PrSnapshot): PrSnapshot {
+  return {
+    ...next,
+    mergeable: next.mergeable === 'UNKNOWN' ? prev.mergeable : next.mergeable,
+    mergeStateStatus: next.mergeStateStatus === 'UNKNOWN' ? prev.mergeStateStatus : next.mergeStateStatus,
+  };
+}
 
 export function toSnapshot(pr: PrData): PrSnapshot {
   return {
@@ -58,7 +72,8 @@ export function diffSnapshots(prev: PrSnapshot, next: PrSnapshot, pr: PrData, vi
   // a new head commit starts from a clean slate: its failures are all new
   const before = prev.headRefOid === next.headRefOid ? new Set(prev.failingChecks) : new Set<string>();
   const newlyFailing = next.failingChecks.filter((n) => !before.has(n));
-  if (newlyFailing.length > 0) {
+  // CLEAN means GitHub already considers the PR mergeable: whatever failed is not required
+  if (newlyFailing.length > 0 && next.mergeStateStatus !== 'CLEAN') {
     events.push({
       kind: 'ci_failed',
       summary: `CI failed on PR #${pr.number}: ${newlyFailing.join(', ')}`,
@@ -69,7 +84,7 @@ export function diffSnapshots(prev: PrSnapshot, next: PrSnapshot, pr: PrData, vi
     });
   }
 
-  const fresh = pr.feedback.filter((f) => f.at > prev.lastFeedbackAt && f.author !== viewer && !isBot(f.author));
+  const fresh = pr.feedback.filter((f) => f.at > prev.lastFeedbackAt && f.author !== viewer && !isBot(f));
   if (fresh.length > 0) {
     const lines = fresh.map((f) => `- ${f.author}: ${clip(f.body)}`).join('\n');
     events.push({

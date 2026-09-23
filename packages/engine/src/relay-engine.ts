@@ -98,6 +98,7 @@ export class RelayEngine {
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
     this.watcher.on('event', (watch, event) => this.onPrEvent(watch, event));
+    this.watcher.on('removed', (watchId) => this.publish({ type: 'watch-removed', watchId }));
     this.bulk = new BulkRuns({ send: (req) => this.send(req), concurrency: bulkConcurrency }, loadedBulkRuns);
     this.bulk.on('changed', (run) => {
       this.store.saveBulkRun(run);
@@ -238,14 +239,24 @@ export class RelayEngine {
     const session = this.listSessions().find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
     let ref: PrRef | null = null;
+    let closedRecorded: string | null = null;
     const recordedRepo = session.prUrl ? repoFromPrUrl(session.prUrl) : null;
     if (session.prUrl && session.prNumber !== null && recordedRepo) {
-      ref = { repo: recordedRepo, number: session.prNumber, url: session.prUrl };
-    } else if (session.branch && session.cwdExists) {
+      // the transcript remembers the last PR it linked; it may be merged and the branch moved on
+      const recorded = await this.gh.viewPr(recordedRepo, session.prNumber);
+      if (recorded.state === 'OPEN') ref = { repo: recordedRepo, number: session.prNumber, url: session.prUrl };
+      else closedRecorded = `PR #${session.prNumber} is ${recorded.state.toLowerCase()}`;
+    }
+    if (!ref && session.branch && session.cwdExists) {
       ref = await this.gh.findPrForBranch(session.cwd, session.branch);
     }
     if (!ref) {
-      throw new Error(`No pull request found for session "${session.title}" (branch ${session.branch ?? 'none'})`);
+      const branch = `branch ${session.branch ?? 'none'}`;
+      throw new Error(
+        closedRecorded
+          ? `${closedRecorded} and there is no open pull request for session "${session.title}" (${branch})`
+          : `No pull request found for session "${session.title}" (${branch})`,
+      );
     }
     return this.watcher.add({ sessionId, repo: ref.repo, prNumber: ref.number, prUrl: ref.url });
   }

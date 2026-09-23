@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const VIEW_FIELDS =
-  'number,url,title,state,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,reviews,comments';
+  'number,url,title,state,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus,statusCheckRollup';
 
 export interface PrCheck {
   name: string;
@@ -16,6 +16,8 @@ export interface PrFeedback {
   author: string;
   body: string;
   at: string;
+  /** GitHub marks the author as a bot (REST `user.type`). */
+  bot: boolean;
 }
 
 /** What Relay needs to know about one PR, with CheckRuns/StatusContexts and reviews/comments unified. */
@@ -74,20 +76,19 @@ export function repoFromPrUrl(url: string): string | null {
 type RawCheck = {
   __typename?: string;
   name?: string;
+  workflowName?: string;
   context?: string;
   conclusion?: string | null;
   status?: string | null;
   state?: string;
 };
 
-type RawFeedback = {
-  id: string;
-  author?: { login?: string };
-  body?: string;
-  state?: string;
-  submittedAt?: string;
-  createdAt?: string;
-};
+/** REST shapes: reviews, inline review comments and PR (issue) comments. */
+type RestUser = { login?: string; type?: string };
+type RestReview = { id: number; user?: RestUser; body?: string | null; state?: string; submitted_at?: string | null };
+type RestComment = { id: number; user?: RestUser; body?: string; created_at?: string; path?: string; line?: number | null };
+
+const isBotUser = (u?: RestUser) => u?.type === 'Bot';
 
 /** Talks to GitHub through the `gh` CLI, so it acts with the user's own login. */
 export class ExecGhClient implements GhClient {
@@ -104,23 +105,14 @@ export class ExecGhClient implements GhClient {
     const checks = ((raw.statusCheckRollup as RawCheck[] | null) ?? []).map((c) =>
       c.__typename === 'StatusContext'
         ? { name: c.context ?? '', conclusion: c.state ?? null, status: 'COMPLETED' }
-        : { name: c.name ?? '', conclusion: c.conclusion ?? null, status: c.status ?? null },
+        : {
+            // names repeat across workflows; the workflow tells them apart
+            name: c.workflowName ? `${c.workflowName} / ${c.name ?? ''}` : (c.name ?? ''),
+            conclusion: c.conclusion ?? null,
+            status: c.status ?? null,
+          },
     );
-    // a bare COMMENTED review with no body is just the envelope of inline comments; skip it
-    const reviews = ((raw.reviews as RawFeedback[] | null) ?? [])
-      .filter((r) => (r.body ?? '').trim() !== '' || r.state !== 'COMMENTED')
-      .map((r) => ({
-        id: r.id,
-        author: r.author?.login ?? '',
-        body: (r.body ?? '').trim() || (r.state ?? ''),
-        at: r.submittedAt ?? '',
-      }));
-    const comments = ((raw.comments as RawFeedback[] | null) ?? []).map((c) => ({
-      id: c.id,
-      author: c.author?.login ?? '',
-      body: c.body ?? '',
-      at: c.createdAt ?? '',
-    }));
+    const feedback = await this.feedback(repo, number);
     return {
       number: raw.number as number,
       url: raw.url as string,
@@ -132,8 +124,48 @@ export class ExecGhClient implements GhClient {
       mergeable: raw.mergeable as PrData['mergeable'],
       mergeStateStatus: raw.mergeStateStatus as string,
       checks,
-      feedback: [...reviews, ...comments].sort((a, b) => a.at.localeCompare(b.at)),
+      feedback,
     };
+  }
+
+  /**
+   * Reviews, inline review comments and PR comments, from REST: `gh pr view` has no inline comments
+   * and no bot flag on authors.
+   */
+  private async feedback(repo: string, number: number): Promise<PrFeedback[]> {
+    const pages = async <T>(path: string): Promise<T[]> =>
+      (JSON.parse(await this.run(['api', path, '--paginate', '--slurp'])) as T[][]).flat();
+    const [reviews, inline, comments] = await Promise.all([
+      pages<RestReview>(`repos/${repo}/pulls/${number}/reviews`),
+      pages<RestComment>(`repos/${repo}/pulls/${number}/comments`),
+      pages<RestComment>(`repos/${repo}/issues/${number}/comments`),
+    ]);
+    return [
+      // an empty COMMENTED review is only the envelope of its inline comments, which come below
+      ...reviews
+        .filter((r) => (r.body ?? '').trim() !== '' || (r.state !== 'COMMENTED' && r.state !== 'PENDING'))
+        .map((r) => ({
+          id: `review-${r.id}`,
+          author: r.user?.login ?? '',
+          body: (r.body ?? '').trim() || (r.state ?? ''),
+          at: r.submitted_at ?? '',
+          bot: isBotUser(r.user),
+        })),
+      ...inline.map((c) => ({
+        id: `inline-${c.id}`,
+        author: c.user?.login ?? '',
+        body: c.path ? `${c.path}${c.line ? `:${c.line}` : ''}: ${c.body ?? ''}` : (c.body ?? ''),
+        at: c.created_at ?? '',
+        bot: isBotUser(c.user),
+      })),
+      ...comments.map((c) => ({
+        id: `comment-${c.id}`,
+        author: c.user?.login ?? '',
+        body: c.body ?? '',
+        at: c.created_at ?? '',
+        bot: isBotUser(c.user),
+      })),
+    ].sort((x, y) => x.at.localeCompare(y.at));
   }
 
   async findPrForBranch(cwd: string, branch: string): Promise<PrRef | null> {

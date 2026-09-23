@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import type { GhStatus, PrEvent, PrWatch } from '@relay/shared';
 import type { SessionStore } from '../store/session-store';
 import type { GhClient } from './gh-client';
-import { diffSnapshots, toSnapshot, type PrSnapshot } from './snapshot';
+import { carryForward, diffSnapshots, toSnapshot, type PrSnapshot } from './snapshot';
 
 export const PR_POLL_INTERVAL_MS = 300_000;
 
 export interface PrWatcherOptions { gh: GhClient; store: SessionStore; intervalMs?: number; now?: () => Date }
 
-type WatcherEvents = { watch: [PrWatch]; event: [PrWatch, PrEvent]; gh: [GhStatus] };
+type WatcherEvents = { watch: [PrWatch]; event: [PrWatch, PrEvent]; gh: [GhStatus]; removed: [string] };
 type Entry = { watch: PrWatch; snapshot: PrSnapshot | null };
 
 /** Polls `gh` for each watched PR, diffs against the last snapshot, and emits what changed. */
@@ -64,6 +64,7 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
   remove(watchId: string): void {
     this.entries.delete(watchId);
     this.store.deleteWatch(watchId);
+    this.emit('removed', watchId);
   }
 
   pollAll(): Promise<void> {
@@ -93,7 +94,8 @@ export class PrWatcher extends EventEmitter<WatcherEvents> {
     try {
       this.viewer ??= await this.gh.viewer();
       const pr = await this.gh.viewPr(w.repo, w.prNumber);
-      const next = toSnapshot(pr);
+      const raw = toSnapshot(pr);
+      const next = entry.snapshot ? carryForward(entry.snapshot, raw) : raw;
       const events = entry.snapshot ? diffSnapshots(entry.snapshot, next, pr, this.viewer) : [];
       entry.snapshot = next;
       w.lastPolledAt = this.now().toISOString();
