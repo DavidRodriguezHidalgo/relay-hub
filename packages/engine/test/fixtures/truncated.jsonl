@@ -1,0 +1,4 @@
+{"type":"custom-title","customTitle":"My own title","sessionId":"s-trunc"}
+{"type":"ai-title","aiTitle":"Ignored ai title","sessionId":"s-trunc"}
+{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":false,"timestamp":"2026-09-21T08:00:00.000Z","cwd":"/repo/wt-b","gitBranch":"feat/b","sessionId":"s-trunc","message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","isSidechain":false,"timestamp":"2026-09-21T08:00:0

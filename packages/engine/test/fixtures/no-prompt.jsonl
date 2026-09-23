@@ -1,0 +1,3 @@
+{"type":"user","uuid":"m1","parentUuid":null,"isSidechain":false,"isMeta":true,"timestamp":"2026-09-22T08:00:00.000Z","cwd":"/repo/wt-c","gitBranch":"main","sessionId":"s-noprompt","message":{"role":"user","content":"<system-reminder>context</system-reminder>"}}
+{"type":"user","uuid":"t1","parentUuid":"m1","isSidechain":false,"timestamp":"2026-09-22T08:00:01.000Z","cwd":"/repo/wt-c","gitBranch":"main","sessionId":"s-noprompt","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"x","content":"ok"}]}}
+{"type":"relocated","sessionId":"s-noprompt","relocatedCwd":"/repo/wt-c-moved"}

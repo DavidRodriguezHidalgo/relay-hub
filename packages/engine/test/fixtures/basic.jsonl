@@ -1,0 +1,9 @@
+{"type":"permission-mode","permissionMode":"auto","sessionId":"s-basic"}
+{"type":"ai-title","aiTitle":"Add tests for the zero-rate case","sessionId":"s-basic"}
+{"type":"user","uuid":"u1","parentUuid":null,"isSidechain":false,"timestamp":"2026-09-20T10:00:00.000Z","cwd":"/repo/wt-a","gitBranch":"feat/a","sessionId":"s-basic","message":{"role":"user","content":"add tests for the zero-rate case please"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","isSidechain":false,"timestamp":"2026-09-20T10:00:05.000Z","cwd":"/repo/wt-a","gitBranch":"feat/a","sessionId":"s-basic","message":{"role":"assistant","content":[{"type":"thinking","thinking":"..."},{"type":"text","text":"Looking at the tests."},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/repo/wt-a/a.ts"}}]}}
+{"type":"user","uuid":"u2","parentUuid":"a1","isSidechain":false,"timestamp":"2026-09-20T10:00:06.000Z","cwd":"/repo/wt-a","gitBranch":"feat/a","sessionId":"s-basic","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"export const a = 1;"}]}}
+{"type":"user","uuid":"side1","parentUuid":null,"isSidechain":true,"timestamp":"2026-09-20T10:00:07.000Z","cwd":"/repo/wt-a","gitBranch":"feat/a","sessionId":"s-basic","message":{"role":"user","content":"subagent prompt"}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","isSidechain":false,"timestamp":"2026-09-20T10:01:00.000Z","cwd":"/repo/wt-a","gitBranch":"feat/a","sessionId":"s-basic","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}
+{"type":"pr-link","sessionId":"s-basic","prNumber":42,"prUrl":"https://github.com/org/repo/pull/42","prRepository":"org/repo","timestamp":"2026-09-20T10:01:30.000Z"}
+{"type":"system","subtype":"turn_duration","durationMs":1,"uuid":"sys1","timestamp":"2026-09-20T10:01:31.000Z","sessionId":"s-basic","isSidechain":false}
