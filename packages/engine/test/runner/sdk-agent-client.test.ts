@@ -89,10 +89,12 @@ describe('SdkAgentClient', () => {
       {
         type: 'assistant', uuid: 'a1', timestamp: expect.any(String),
         blocks: [{ kind: 'text', text: 'hi' }, { kind: 'tool_use', id: 't', name: 'Bash', input: { command: 'ls' } }],
+        sendId: null, sidechain: false,
       },
       {
         type: 'tool-results', uuid: 'u1', timestamp: expect.any(String),
         blocks: [{ kind: 'tool_result', toolUseId: 't', text: 'ok', isError: false }],
+        sendId: null, sidechain: false,
       },
       { type: 'result', isError: false, aborted: false, error: null, queuedTurns: null, settledSendIds: [] },
     ]);
@@ -174,6 +176,29 @@ describe('SdkAgentClient', () => {
     expect(bridged).toEqual({ behavior: 'deny', message: 'no' });
     expect(msgs).toEqual([
       { type: 'result', isError: true, aborted: false, error: 'error_during_execution: boom', queuedTurns: null, settledSendIds: [] },
+    ]);
+  });
+
+  it("maps the send an assistant frame answers and flags subagent frames", async () => {
+    const fakeQuery = (() => {
+      async function* gen() {
+        yield { type: "assistant", uuid: "a1", session_id: "s", parent_tool_use_id: null, user_message_uuid: "send-1",
+          message: { role: "assistant", content: [{ type: "text", text: "main" }] } };
+        yield { type: "assistant", uuid: "a2", session_id: "s", parent_tool_use_id: "tool-9",
+          message: { role: "assistant", content: [{ type: "text", text: "sub" }] } };
+        yield { type: "user", uuid: "u2", session_id: "s", parent_tool_use_id: "tool-9",
+          message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "ok" }] } };
+      }
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    const run = new SdkAgentClient(fakeQuery).start({ sessionId: "s", cwd: "/r", input: new AsyncQueue(), canUseTool: async () => ({ behavior: "allow" }) });
+    const msgs = await collect(run.messages);
+    expect(msgs.map((m) => (m.type === "assistant" || m.type === "tool-results" ? [m.uuid, m.sendId, m.sidechain] : null))).toEqual([
+      ["a1", "send-1", false],
+      ["a2", null, true],
+      ["u2", null, true],
     ]);
   });
 });

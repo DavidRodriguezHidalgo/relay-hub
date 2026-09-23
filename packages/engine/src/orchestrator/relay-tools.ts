@@ -6,13 +6,16 @@ const LIST_MAX = 50;
 const RECENT_MAX = 20;
 const TEXT_MAX = 400;
 const RESULT_MAX = 200;
+const BLOCKS_MAX = 12;
+const SUMMARY_MAX = 300;
 
 export interface RelayToolDeps {
   listSessions(): SessionSummary[];
   runState(): RunState;
   getTranscript(id: string): Promise<TranscriptEntry[]>;
   send(req: { sessionId: string; prompt: string; mode: DeliveryMode; origin: 'orchestrator' }): Promise<string>;
-  interrupt(sessionId: string): Promise<void>;
+  /** false when the session was not running. */
+  interrupt(sessionId: string): Promise<boolean>;
   proposeBulk(targets: { sessionId: string; prompt: string }[], mode: DeliveryMode): Promise<BulkRun>;
   listPrs(): Promise<PrListing[]>;
   createWatch(sessionId: string): Promise<PrWatch>;
@@ -39,6 +42,7 @@ const fail = (err: unknown): AgentToolResult => ({
   isError: true,
 });
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
+const clipOrNull = (text: string | null) => (text === null ? null : clip(text, SUMMARY_MAX));
 
 function row(s: SessionSummary, run: RunState) {
   return {
@@ -112,11 +116,16 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
           .map((e) => ({
             role: e.role,
             timestamp: e.timestamp,
-            content: e.blocks.map(compact).filter((c) => c !== null),
+            content: [
+              ...e.blocks.slice(0, BLOCKS_MAX).map(compact).filter((c) => c !== null),
+              ...(e.blocks.length > BLOCKS_MAX ? [{ more: e.blocks.length - BLOCKS_MAX }] : []),
+            ],
           }));
         return ok({
-          session: { ...row(session, run), cwd: session.cwd, error: run.states[id]?.error ?? null },
-          approvals: run.approvals.filter((a) => a.sessionId === id).map((a) => ({ id: a.id, summary: a.summary, reason: a.reason })),
+          session: { ...row(session, run), cwd: session.cwd, error: clipOrNull(run.states[id]?.error ?? null) },
+          approvals: run.approvals
+            .filter((a) => a.sessionId === id)
+            .map((a) => ({ id: a.id, summary: clip(a.summary, SUMMARY_MAX), reason: a.reason })),
           recent,
         });
       } catch (err) {
@@ -151,8 +160,8 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     input: { id: z.string() },
     handler: async ({ id }) => {
       try {
-        await deps.interrupt(id);
-        return ok({ interrupted: true });
+        const interrupted = await deps.interrupt(id);
+        return ok(interrupted ? { interrupted: true } : { interrupted: false, note: 'That session was not running.' });
       } catch (err) {
         return fail(err);
       }

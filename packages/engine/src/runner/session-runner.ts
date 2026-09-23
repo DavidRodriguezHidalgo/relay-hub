@@ -53,7 +53,10 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   private readonly outstanding = new Set<string>();
   /** Sends in flight when the current interrupt fired; the aborted turn's result settles only these. */
   private aborting: Set<string> | null = null;
-  private lastOrigin: MessageOrigin | null = null;
+  /** Who started the turn in progress: its entries carry this origin. */
+  private turnOrigin: MessageOrigin | null = null;
+  /** Set while fail() tears down, so cancelled approvals do not flip the state back to running. */
+  private failing = false;
   /** Ids of this session's approvals still waiting for a decision. */
   private readonly pendingIds = new Set<string>();
   private _state: SessionState = 'idle';
@@ -66,7 +69,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.setState('waiting-approval');
   };
   private readonly onResolved = (id: string) => {
-    if (!this.pendingIds.delete(id)) return;
+    if (!this.pendingIds.delete(id) || this.failing) return;
     if (this.pendingIds.size === 0 && this._state === 'waiting-approval') this.setState('running');
   };
 
@@ -129,7 +132,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     const id = randomUUID();
     this.outstanding.add(id);
     this.originsById.set(id, opts.origin);
-    this.lastOrigin = opts.origin;
+    // a send to an idle session starts its turn; one sent mid-turn waits (or folds in) and is re-attributed later
+    if (this.outstanding.size === 1 || this.turnOrigin === null) this.turnOrigin = opts.origin;
     this.emit('entry', {
       uuid: id,
       role: 'user',
@@ -157,13 +161,11 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.approvals.forgetSession(this.sessionId);
     this.approvals.off('pending', this.onPending);
     this.approvals.off('resolved', this.onResolved);
-    if (this.run && this._state !== 'idle') {
-      await this.run.interrupt().catch(() => undefined);
-    }
+    const bounded = (p: Promise<unknown>) =>
+      Promise.race([p.catch(() => undefined), new Promise((r) => setTimeout(r, this.closeTimeoutMs))]);
+    if (this.run && this._state !== 'idle') await bounded(this.run.interrupt());
     this.input?.end();
-    if (this.consuming) {
-      await Promise.race([this.consuming, new Promise((r) => setTimeout(r, this.closeTimeoutMs))]);
-    }
+    if (this.consuming) await bounded(this.consuming);
     this.run = null;
     this.input = null;
   }
@@ -191,7 +193,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
         case 'tool-results':
           // Output means a turn is in progress, whatever the last result said.
           if (this._state === 'idle') this.setState('running');
-          if (m.type === 'assistant') {
+          if (m.sendId) this.turnOrigin = this.originsById.get(m.sendId) ?? this.turnOrigin;
+          if (m.type === 'assistant' && !m.sidechain) {
             const text = m.blocks.flatMap((b) => (b.kind === 'text' && b.text.trim() ? [b.text] : [])).join('\n');
             if (text) this.lastText = text;
           }
@@ -199,10 +202,10 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
             uuid: m.uuid,
             role: m.type === 'assistant' ? 'assistant' : 'user',
             timestamp: m.timestamp,
-            isSidechain: false,
+            isSidechain: m.sidechain,
             isMeta: false,
             blocks: m.blocks,
-            origin: this.lastOrigin,
+            origin: this.turnOrigin,
           });
           break;
         case 'result':
@@ -235,6 +238,9 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     } else if (queuedTurns === null || queuedTurns === 0) {
       for (const id of [...this.outstanding]) this.settle(id);
     }
+    // the next turn, if any, answers the oldest send still waiting
+    const next = this.outstanding.values().next();
+    this.turnOrigin = next.done ? null : (this.originsById.get(next.value) ?? null);
     if (this.outstanding.size === 0 && this.pendingIds.size === 0) {
       this.setState('idle');
       this.emitTurnEnd(null, interrupted);
@@ -259,7 +265,9 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   private fail(reason: string): void {
     const dropped = this.outstanding.size;
     for (const id of [...this.outstanding]) this.settle(id);
+    this.failing = true;
     this.approvals.cancelSession(this.sessionId, reason);
+    this.failing = false;
     this.input?.end();
     this.run = null;
     this.input = null;

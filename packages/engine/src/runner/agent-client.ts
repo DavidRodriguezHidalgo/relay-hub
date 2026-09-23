@@ -28,8 +28,16 @@ export interface AgentInput {
 
 export type AgentMessage =
   | { type: 'init'; sessionId: string }
-  | { type: 'assistant'; uuid: string; timestamp: string; blocks: TranscriptBlock[] }
-  | { type: 'tool-results'; uuid: string; timestamp: string; blocks: TranscriptBlock[] }
+  | {
+      type: 'assistant' | 'tool-results';
+      uuid: string;
+      timestamp: string;
+      blocks: TranscriptBlock[];
+      /** The send this frame answers, when the runtime stamps it (first frame of a turn, folds). */
+      sendId: string | null;
+      /** A subagent's frame, not the main thread. */
+      sidechain: boolean;
+    }
   | {
       /** One per turn, not per send: sends close together fold into one turn. */
       type: 'result';

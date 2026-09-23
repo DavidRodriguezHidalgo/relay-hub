@@ -279,4 +279,50 @@ describe('SessionRunner', () => {
     await tick();
     expect(ends).toEqual([{ origins: ['orchestrator'], lastText: 'Starting the rebase, first I will', error: null, aborted: true }]);
   });
+
+  it("tags a queued send's turn with its own origin, and a running turn keeps the origin that started it", async () => {
+    const { client, runner, entries } = setup();
+    const first = await runner.send("user work", { mode: "steer", origin: "user" });
+    await runner.send("ci failed", { mode: "queue", origin: "watch:ci_failed" });
+    await tick();
+    client.out.push({ type: "assistant", uuid: "a1", timestamp: "t", blocks: [{ kind: "text", text: "on it" }], sendId: first, sidechain: false });
+    await tick();
+    expect(entries.find((e) => e.uuid === "a1")?.origin).toBe("user");
+    const second = client.received[1]!.id;
+    client.result(null, 1, [first]);
+    client.out.push({ type: "assistant", uuid: "a2", timestamp: "t", blocks: [{ kind: "text", text: "fixing ci" }], sendId: second, sidechain: false });
+    await tick();
+    expect(entries.find((e) => e.uuid === "a2")?.origin).toBe("watch:ci_failed");
+  });
+
+  it("marks subagent frames as sidechain", async () => {
+    const { client, runner, entries } = setup();
+    await runner.send("x", { mode: "steer", origin: "user" });
+    await tick();
+    client.out.push({ type: "assistant", uuid: "s1", timestamp: "t", blocks: [{ kind: "text", text: "sub" }], sendId: null, sidechain: true });
+    await tick();
+    expect(entries.find((e) => e.uuid === "s1")?.isSidechain).toBe(true);
+  });
+
+  it("dying while waiting for approval goes straight to error, without a running blip", async () => {
+    const { client, runner, states } = setup();
+    await runner.send("x", { mode: "steer", origin: "user" });
+    await tick();
+    void client.askTool("Bash", { command: "git clean -fd" });
+    await tick();
+    client.die(new Error("process exited"));
+    await tick();
+    await tick();
+    expect(states).toEqual(["running", "waiting-approval", "error"]);
+  });
+
+  it("close gives up on an interrupt that never answers", async () => {
+    const { client, runner } = setup(30);
+    await runner.send("x", { mode: "steer", origin: "user" });
+    await tick();
+    client.hangInterrupt = true;
+    const started = Date.now();
+    await runner.close();
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
 });

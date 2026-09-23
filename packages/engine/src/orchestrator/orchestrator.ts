@@ -68,6 +68,10 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     return this.runner.state;
   }
 
+  get error(): string | null {
+    return this.runner.error;
+  }
+
   /** True when every pending message was fed by Relay (a turn-end), none by the user. */
   get onlyRelayPending(): boolean {
     const origins = this.runner.outstandingOrigins;

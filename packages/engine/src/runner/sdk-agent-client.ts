@@ -69,12 +69,26 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
     case 'system':
       return m.subtype === 'init' ? { type: 'init', sessionId: m.session_id } : null;
     case 'assistant':
-      return { type: 'assistant', uuid: m.uuid, timestamp: now, blocks: blocksFromContent(m.message.content) };
+      return {
+        type: 'assistant',
+        uuid: m.uuid,
+        timestamp: now,
+        blocks: blocksFromContent(m.message.content),
+        sendId: (m as { user_message_uuid?: string }).user_message_uuid ?? null,
+        sidechain: m.parent_tool_use_id !== null,
+      };
     case 'user': {
       const content = m.message.content;
       if (typeof content === 'string') return null; // our own prompt echoed back
       const uuid = 'uuid' in m && typeof m.uuid === 'string' ? m.uuid : `${now}-tool-results`;
-      return { type: 'tool-results', uuid, timestamp: now, blocks: blocksFromContent(content) };
+      return {
+        type: 'tool-results',
+        uuid,
+        timestamp: now,
+        blocks: blocksFromContent(content),
+        sendId: null,
+        sidechain: m.parent_tool_use_id !== null,
+      };
     }
     case 'result':
       return mapResult(m as ResultLike);

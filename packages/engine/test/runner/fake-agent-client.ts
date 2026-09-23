@@ -13,6 +13,8 @@ export class FakeAgentClient implements AgentClient {
   interrupts = 0;
   failWith: Error | null = null;
   lastOpts: AgentStartOptions | null = null;
+  /** Makes interrupt() never resolve, like an SDK that stopped answering. */
+  hangInterrupt = false;
   /** Ids of sends the fake has received and not yet settled with a result. */
   private unsettled: string[] = [];
 
@@ -40,6 +42,7 @@ export class FakeAgentClient implements AgentClient {
       messages: messages(),
       interrupt: async () => {
         self.interrupts += 1;
+        if (self.hangInterrupt) return new Promise<void>(() => undefined);
         self.result(null, 0, undefined, true);
       },
     };
@@ -64,7 +67,9 @@ export class FakeAgentClient implements AgentClient {
   }
 
   assistant(uuid: string, text: string) {
-    this.out.push({ type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }] });
+    this.out.push({
+      type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }], sendId: null, sidechain: false,
+    });
   }
 
   /** Ends the current turn; every send received so far is settled unless `queuedTurns` says otherwise. */

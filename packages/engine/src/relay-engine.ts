@@ -99,7 +99,8 @@ export class RelayEngine {
   private readonly orchestrator: Orchestrator;
   private readonly bulk: BulkRuns;
   private readonly watcher: PrWatcher;
-  private readonly orchestratorCwd: string;
+  /** The orchestrator dir as given and with symlinks resolved (transcripts record the real path). */
+  private readonly orchestratorCwds: Set<string>;
   private closing = false;
 
   private constructor(
@@ -111,6 +112,7 @@ export class RelayEngine {
     private readonly idleTimeoutMs: number,
     private readonly registry: SessionRegistry,
     orchestratorDir: string,
+    orchestratorRealDir: string,
     loadedBulkRuns: BulkRun[],
     bulkConcurrency: number | undefined,
     private readonly gh: GhClient,
@@ -128,9 +130,10 @@ export class RelayEngine {
       this.publish({ type: 'bulk', run });
     });
     this.bulk.on('finished', (run) => this.relayBulkEnd(run));
-    this.orchestratorCwd = resolve(orchestratorDir);
+    this.orchestratorCwds = new Set([resolve(orchestratorDir), resolve(orchestratorRealDir)]);
+    approvals.setMaxListeners(0); // every runner listens for its own approvals; they unsubscribe on close
     this.orchestrator = new Orchestrator({
-      cwd: this.orchestratorCwd,
+      cwd: orchestratorRealDir,
       client: agent,
       approvals,
       store,
@@ -176,6 +179,7 @@ export class RelayEngine {
 
   static async start(opts: RelayEngineOptions): Promise<RelayEngine> {
     await mkdir(opts.orchestratorDir, { recursive: true });
+    const orchestratorRealDir = await realpath(opts.orchestratorDir);
     const store = new SessionStore(opts.dbPath);
     const loadedBulkRuns = repairLoadedRuns(store.loadBulkRuns(RECENT_BULK_RUNS));
     for (const run of loadedBulkRuns) store.saveBulkRun(run);
@@ -195,6 +199,7 @@ export class RelayEngine {
       opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       opts.registry ?? new ClaudeSessionRegistry(),
       opts.orchestratorDir,
+      orchestratorRealDir,
       loadedBulkRuns,
       opts.bulkConcurrency,
       opts.gh ?? new ExecGhClient(),
@@ -208,7 +213,7 @@ export class RelayEngine {
 
   /** Every session except the orchestrator's own, which must never be listed or targeted. */
   listSessions(): SessionSummary[] {
-    return this.index.list().filter((s) => resolve(s.cwd) !== this.orchestratorCwd);
+    return this.index.list().filter((s) => !this.orchestratorCwds.has(resolve(s.cwd)));
   }
 
   getTranscript(id: string): Promise<TranscriptEntry[]> {
@@ -380,8 +385,15 @@ export class RelayEngine {
     this.bulk.cancel(runId);
   }
 
-  async interrupt(sessionId: string): Promise<void> {
-    await this.runners.get(sessionId)?.interrupt();
+  /** Stops a session's current turn; false when it was not running. */
+  async interrupt(sessionId: string): Promise<boolean> {
+    if (!this.listSessions().some((s) => s.id === sessionId) && !this.runners.has(sessionId)) {
+      throw new Error(`Unknown session ${sessionId}`);
+    }
+    const runner = this.runners.get(sessionId);
+    if (!runner || runner.state === 'idle' || runner.state === 'error') return false;
+    await runner.interrupt();
+    return true;
   }
 
   decide(approvalId: string, decision: ApprovalDecision): void {
@@ -391,6 +403,9 @@ export class RelayEngine {
   runState(): RunState {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
+    if (this.orchestrator.state !== 'idle' || this.orchestrator.error) {
+      states[ORCHESTRATOR_KEY] = { state: this.orchestrator.state, error: this.orchestrator.error };
+    }
     return { states, approvals: this.approvals.pending(), bulkRuns: this.bulk.recent(RECENT_BULK_RUNS),
       watches: this.watcher.list(),
       gh: this.watcher.ghStatus,

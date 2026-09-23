@@ -256,7 +256,8 @@ describe('RelayEngine', () => {
     engine!.onEvent((e) => events.push(e));
     await engine!.orchestratorSend('what is running?');
     await tick();
-    expect(client.starts[0]).toMatchObject({ sessionId: null, cwd: join(root, 'orch'), profile: { kind: 'orchestrator' } });
+    const { realpath } = await import('node:fs/promises');
+    expect(client.starts[0]).toMatchObject({ sessionId: null, cwd: await realpath(join(root, 'orch')), profile: { kind: 'orchestrator' } });
     expect(events[0]).toMatchObject({ type: 'entry', sessionId: 'orchestrator', entry: { role: 'user' } });
     expect(await engine!.orchestratorHistory()).toEqual([]);
   });
@@ -695,5 +696,43 @@ describe('RelayEngine', () => {
     );
     await expect(engine!.createSession({ project: repo, prompt: 'x', origin: 'orchestrator' })).rejects.toThrow(/main checkout/i);
     expect(client.starts).toHaveLength(0);
+  });
+
+  it("interrupting a session that is not running says so instead of claiming success", async () => {
+    await startWithBasic(new FakeAgentClient());
+    expect(await engine!.interrupt("s-basic")).toBe(false);
+    await expect(engine!.interrupt("nope")).rejects.toThrow(/unknown session/i);
+  });
+
+  it("runState includes the orchestrator, so a reloaded window knows it is running", async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await engine!.orchestratorSend("x");
+    await tick();
+    expect(engine!.runState().states["orchestrator"]).toEqual({ state: "running", error: null });
+  });
+
+  it("many driven sessions do not trip the EventEmitter listener warning", async () => {
+    const warnings: string[] = [];
+    const onWarning = (w: Error) => warnings.push(w.name);
+    process.on("warning", onWarning);
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const approvals = (engine as unknown as { approvals: import("node:events").EventEmitter }).approvals;
+    expect(approvals.getMaxListeners()).toBe(0);
+    process.off("warning", onWarning);
+    expect(warnings).not.toContain("MaxListenersExceededWarning");
+  });
+
+  it("hides the orchestrator's sessions even when the transcript records the real path of a symlinked dir", async () => {
+    await startWithBasic(new FakeAgentClient());
+    const { realpath } = await import("node:fs/promises");
+    const real = await realpath(join(root, "orch"));
+    const own = join(root, "projects", "orch-real");
+    await mkdir(own, { recursive: true });
+    const src = await readFile(fixture("basic.jsonl"), "utf8");
+    await writeFile(join(own, "o-2.jsonl"), src.replaceAll("/repo/wt-a", real).replaceAll("s-basic", "o-2"));
+    await (engine as unknown as { index: { scan(): Promise<unknown> } }).index.scan();
+    expect(engine!.listSessions().map((x) => x.id)).toEqual(["s-basic"]);
   });
 });

@@ -18,7 +18,7 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
     runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } }),
     getTranscript: async () => [],
     send: vi.fn(async () => 'm-1'),
-    interrupt: vi.fn(async () => undefined),
+    interrupt: vi.fn(async () => true),
     proposeBulk: vi.fn(async (targets: { sessionId: string; prompt: string }[], mode: DeliveryMode) => ({
       id: 'r1', createdAt: 'x', mode, status: 'proposed' as const,
       rows: targets.map((t) => ({
@@ -165,5 +165,22 @@ describe('relay tools', () => {
       },
     });
     expect(await call(bad, 'create_session', { project: 'factorial', branch: 'feat/x', prompt: 'x' })).toMatchObject({ isError: true });
+  });
+
+  it("get_session caps blocks per entry and clips approval summaries", async () => {
+    const entries = [{
+      uuid: "e", role: "user" as const, timestamp: "t", isSidechain: false, isMeta: false,
+      blocks: Array.from({ length: 40 }, (_, i) => ({ kind: "tool_result" as const, toolUseId: String(i), text: "x".repeat(300), isError: false })),
+    }];
+    const d = deps({
+      getTranscript: async () => entries,
+      runState: () => ({
+        states: {}, bulkRuns: [], watches: [], gh: { state: "ok" as const },
+        approvals: [{ id: "p", sessionId: "a", toolName: "Bash", input: {}, summary: "y".repeat(2000), reason: "destructive-git" as const, cwd: "/c", createdAt: "t" }],
+      }),
+    });
+    const r = JSON.parse((await call(d, "get_session", { id: "a" })).text);
+    expect(r.recent[0].content.length).toBeLessThanOrEqual(13); // 12 blocks + a "more" marker
+    expect(r.approvals[0].summary.length).toBeLessThanOrEqual(301);
   });
 });
