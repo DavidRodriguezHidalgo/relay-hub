@@ -4,3 +4,5 @@ export { ExecGitInfoProvider } from './git/git-info';
 export type { GitInfo, GitInfoProvider } from './git/git-info';
 export { SessionStore } from './store/session-store';
 export type { CachedSession } from './store/session-store';
+export { SessionIndex } from './index/session-index';
+export type { SessionIndexOptions } from './index/session-index';
