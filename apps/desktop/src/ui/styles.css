@@ -1,0 +1,17 @@
+:root { color-scheme: light dark; font: 13px/1.4 -apple-system, system-ui, sans-serif; }
+body { margin: 0; }
+.app { display: grid; grid-template-columns: 300px 1fr 420px; height: 100vh; }
+.session-list { border-right: 1px solid color-mix(in srgb, currentColor 15%, transparent); overflow: auto; padding: 40px 8px 8px; }
+.session-list__controls { display: flex; gap: 8px; margin-bottom: 8px; }
+.session-list__controls input[type="search"] { flex: 1; }
+.session-list h2 { font-size: 11px; text-transform: uppercase; opacity: .6; margin: 12px 8px 4px; }
+.session-list ul { list-style: none; margin: 0; padding: 0; }
+.session-row { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; color: inherit; cursor: pointer; }
+.session-row:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+.session-row--selected { background: color-mix(in srgb, currentColor 14%, transparent); }
+.session-row__title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row__meta { display: flex; gap: 6px; font-size: 11px; opacity: .7; }
+.badge { border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+.orchestrator, .session-panel { overflow: auto; padding: 40px 16px 16px; }
+.session-panel { border-left: 1px solid color-mix(in srgb, currentColor 15%, transparent); }
+.placeholder { opacity: .5; }
