@@ -52,11 +52,12 @@ type RawLine = {
   continuedInSessionId?: string;
 };
 
-function toBlocks(content: string | RawBlock[] | undefined): TranscriptBlock[] {
+/** Flattens Anthropic message content (string or block array) into renderable blocks. */
+export function blocksFromContent(content: unknown): TranscriptBlock[] {
   if (typeof content === 'string') return [{ kind: 'text', text: content }];
   if (!Array.isArray(content)) return [];
   const blocks: TranscriptBlock[] = [];
-  for (const b of content) {
+  for (const b of content as RawBlock[]) {
     switch (b.type) {
       case 'text':
         blocks.push({ kind: 'text', text: b.text ?? '' });
@@ -164,7 +165,7 @@ export class TranscriptParser {
             timestamp: raw.timestamp,
             isSidechain,
             isMeta,
-            blocks: toBlocks(content),
+            blocks: blocksFromContent(content),
           });
         }
         if (!isSidechain) {
