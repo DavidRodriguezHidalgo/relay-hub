@@ -280,4 +280,34 @@ describe('SessionPanel', () => {
     expect(onDecide).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
   });
+  it('sends on Enter and starts a new line on Shift+Enter', async () => {
+    const onSend = vi.fn();
+    renderPanel({ onSend });
+    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    await userEvent.click(box);
+    await userEvent.keyboard('first{Shift>}{Enter}{/Shift}second');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue('first\nsecond');
+    await userEvent.keyboard('{Enter}');
+    expect(onSend).toHaveBeenCalledWith('first\nsecond', 'steer');
+    expect(box).toHaveValue('');
+  });
+
+  it('will not send an empty box on Enter', async () => {
+    const onSend = vi.fn();
+    renderPanel({ onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('   {Enter}');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('Enter takes the highlighted command while the menu is open, rather than sending', async () => {
+    const onSend = vi.fn();
+    renderPanel({ onSend, commands });
+    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    await userEvent.click(box);
+    await userEvent.keyboard('/rev{Enter}');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue('/review ');
+  });
 });

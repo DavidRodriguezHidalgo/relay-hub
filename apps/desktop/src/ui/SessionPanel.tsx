@@ -62,7 +62,14 @@ export function SessionPanel(p: Props) {
     }
   };
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (matches.length === 0) return;
+    if (matches.length === 0) {
+      // Enter sends; Shift+Enter is how you get a new line. Mid-composition Enter belongs to the IME.
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        submit();
+      }
+      return;
+    }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const step = e.key === 'ArrowDown' ? 1 : -1;
