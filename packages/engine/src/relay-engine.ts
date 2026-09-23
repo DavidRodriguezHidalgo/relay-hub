@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, stat } from 'node:fs/promises';
+import { access, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import {
   ORCHESTRATOR_KEY,
@@ -330,6 +330,7 @@ export class RelayEngine {
     origin: MessageOrigin;
   }): Promise<{ sessionId: string; cwd: string }> {
     const dir = await this.resolveProject(req.project);
+    if (!req.branch) await this.refuseMainCheckout(dir);
     // a new branch gets a worktree of the main repo; without one the session runs exactly where asked
     const cwd = req.branch
       ? await this.worktrees.createWorktree((await this.worktrees.repoRoot(dir)) ?? dir, req.branch)
@@ -509,6 +510,17 @@ export class RelayEngine {
         watched: watches.some((w) => w.repo === p.repo && w.prNumber === p.number),
       };
     });
+  }
+
+  /** The user works live in main clones: a session there would auto-accept edits under their feet. */
+  private async refuseMainCheckout(dir: string): Promise<void> {
+    const root = await this.worktrees.repoRoot(dir);
+    const real = await realpath(dir).catch(() => dir);
+    if (root && (resolve(root) === resolve(dir) || resolve(root) === resolve(real))) {
+      throw new Error(
+        `${dir} is the main checkout; give a new branch (a worktree will be created) or the path of an existing worktree`,
+      );
+    }
   }
 
   /** An existing absolute directory as given, or a project name that must match exactly one known repo root. */

@@ -256,8 +256,9 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     name: 'create_session',
     description:
       'Start a new Claude session. project: a name from list_projects or an absolute directory. ' +
-      'branch: a new branch to create a fresh git worktree for (normal case); without it the session starts ' +
-      'in the project directory itself. prompt: its first instruction, complete on its own.',
+      'branch: the branch to create a fresh git worktree for (normal case; an existing origin branch is checked out). ' +
+      'Without a branch, project must be the absolute path of an existing worktree: main checkouts are refused. ' +
+      'prompt: its first instruction, complete on its own.',
     input: { project: z.string(), branch: z.string().optional(), prompt: z.string() },
     handler: async ({ project, branch, prompt }) => {
       try {

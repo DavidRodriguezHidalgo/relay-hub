@@ -11,6 +11,7 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-text);
   --color-on-accent: var(--on-accent);
+  --color-focus: var(--focus);
   --color-running: var(--running);
   --color-waiting: var(--waiting);
   --color-danger: var(--danger);
@@ -24,12 +25,12 @@
   body { @apply m-0 bg-bg text-fg font-sans text-[14px] leading-[1.45] antialiased; }
   button {
     @apply cursor-pointer rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] text-fg transition-colors
-      hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+      hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus
       disabled:cursor-not-allowed disabled:opacity-50;
   }
   input[type='search'], textarea, select {
     @apply rounded-md border border-line bg-surface px-2 py-1.5 text-fg placeholder:text-muted
-      focus:border-accent focus:outline-none;
+      focus:border-focus focus:outline-none;
   }
   input[type='checkbox'] { @apply accent-accent; }
   code { @apply font-mono text-[12px] text-muted; }
@@ -59,7 +60,8 @@
   .transcript { @apply m-0 list-none p-0; }
   .entry { @apply mb-3 rounded-lg px-3 py-2 text-[15px] leading-[1.55]; }
   .entry--user { @apply border border-line bg-surface-2; }
-  .entry--sidechain { @apply opacity-70; }
+  /* marked by position and a dashed rule, not by fading: faded text would fail the contrast rules */
+  .entry--sidechain { @apply ml-3 border-l-2 border-dashed border-line; }
   .entry header { @apply mb-1 flex justify-between gap-2 text-[11px] text-muted; }
   .block-text { @apply m-0 mb-1.5 whitespace-pre-wrap; }
   .block-tool { @apply font-mono text-[12px] text-muted; }

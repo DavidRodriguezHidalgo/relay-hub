@@ -9,6 +9,8 @@
   --accent: #ffa500;
   --accent-text: #ffa500;
   --on-accent: #000000;
+  /* focus ring / focused field border: non-text, checked at 3:1 */
+  --focus: #ffa500;
   --running: #ffa500;
   --waiting: #ff7ab6;
   --danger: #ff5c5c;
@@ -27,6 +29,7 @@
     --accent: #ffa500;
     --accent-text: #8a5200;
     --on-accent: #000000;
+    --focus: #8a5200;
     --running: #8a5200;
     --waiting: #b0266b;
     --danger: #c62828;

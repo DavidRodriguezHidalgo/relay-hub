@@ -39,9 +39,25 @@ describe.each([
   ['light', '@media (prefers-color-scheme: light)'],
 ])('%s theme', (_name, marker) => {
   const t = tokens(marker);
+  it.each(['bg', 'surface', 'surface-2'])('the focus ring is visible on %s (3:1, non-text)', (bg) => {
+    expect(t['focus'], 'missing --focus').toBeDefined();
+    expect(contrast(t['focus']!, t[bg]!)).toBeGreaterThanOrEqual(3);
+  });
+
   it.each(PAIRS)('%s on %s reaches WCAG AA (4.5:1)', (fg, bg) => {
     expect(t[fg], `missing --${fg}`).toBeDefined();
     expect(t[bg], `missing --${bg}`).toBeDefined();
     expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('app.css', () => {
+  const app = readFileSync(fileURLToPath(new URL('./app.css', import.meta.url)), 'utf8');
+  it('never dims text with opacity (it would undercut the contrast checked above), except disabled controls', () => {
+    const dimmed = app.split('\n').filter((l) => /opacity-\d/.test(l) && !l.includes('disabled:'));
+    expect(dimmed).toEqual([]);
+  });
+  it('draws focus with the focus token, never the raw accent', () => {
+    expect(app).not.toMatch(/focus[^;]*\b(outline|border)-accent(?![-\w])/);
   });
 });

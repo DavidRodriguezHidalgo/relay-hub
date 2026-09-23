@@ -682,4 +682,18 @@ describe('RelayEngine', () => {
     client.init('w-1');
     expect(await creating).toEqual({ sessionId: 'w-1', cwd: worktree });
   });
+
+  it('refuses to start a session in a main clone: a project name, or its path, without a branch', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') || cwd === repo ? repo : null);
+    await expect(engine!.createSession({ project: 'myrepo', prompt: 'x', origin: 'orchestrator' })).rejects.toThrow(
+      /main checkout.*give a new branch/i,
+    );
+    await expect(engine!.createSession({ project: repo, prompt: 'x', origin: 'orchestrator' })).rejects.toThrow(/main checkout/i);
+    expect(client.starts).toHaveLength(0);
+  });
 });

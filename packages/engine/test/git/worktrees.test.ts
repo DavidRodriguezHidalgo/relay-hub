@@ -52,4 +52,16 @@ describe('worktrees', () => {
     await expect(createWorktree(clone, 'feat/z')).rejects.toThrow(/already exists: .*feat-z/);
     await expect(createWorktree(tmpdir(), 'feat/q')).rejects.toThrow(/not a git repository/);
   });
+
+  it('a branch that exists only on origin gets a worktree tracking it, keeping its commits', async () => {
+    const other = join(root, 'other');
+    await run('git', ['clone', '-q', join(root, 'origin.git'), other], { env });
+    await git(other, 'checkout', '-q', '-b', 'feat/remote');
+    await git(other, 'commit', '-q', '--allow-empty', '-m', 'remote work');
+    await git(other, 'push', '-q', 'origin', 'feat/remote');
+    const pushed = (await git(other, 'rev-parse', 'HEAD')).stdout.trim();
+    const dir = await createWorktree(clone, 'feat/remote');
+    expect((await git(dir, 'rev-parse', 'HEAD')).stdout.trim()).toBe(pushed);
+    expect((await git(dir, 'rev-parse', '--abbrev-ref', '@{upstream}')).stdout.trim()).toBe('origin/feat/remote');
+  });
 });

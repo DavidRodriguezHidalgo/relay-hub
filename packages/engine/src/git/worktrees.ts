@@ -40,13 +40,27 @@ async function defaultBranch(root: string): Promise<string> {
   }
 }
 
-/** A new worktree on a new branch off the freshly fetched default branch; the main checkout is untouched. */
+/**
+ * A worktree for `branch`: tracking it when it already exists on origin (e.g. a PR branch), else a
+ * new branch off the freshly fetched default branch. The main checkout is never touched.
+ */
 export async function createWorktree(root: string, branch: string): Promise<string> {
   if ((await repoRoot(root)) === null) throw new Error(`${root} is not a git repository`);
-  const known = await git(root, ['branch', '--list', branch]);
+  try {
+    await git(root, ['check-ref-format', '--branch', branch]);
+  } catch {
+    throw new Error(`"${branch}" is not a valid branch name`);
+  }
+  const known = await git(root, ['branch', '--list', '--', branch]);
   if (known !== '') throw new Error(`The branch ${branch} already exists; pick another name or use its worktree`);
   const dir = worktreePath(root, branch);
   if (await exists(dir)) throw new Error(`Worktree directory already exists: ${dir}`);
+  const onOrigin = await git(root, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]);
+  if (onOrigin !== '') {
+    await git(root, ['fetch', '-q', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`]);
+    await git(root, ['worktree', 'add', '-q', '--track', '-b', branch, dir, `origin/${branch}`]);
+    return dir;
+  }
   const base = await defaultBranch(root);
   await git(root, ['fetch', '-q', 'origin', base]);
   await git(root, ['worktree', 'add', '-q', '-b', branch, dir, `origin/${base}`]);
