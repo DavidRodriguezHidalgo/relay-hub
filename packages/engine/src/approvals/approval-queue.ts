@@ -30,6 +30,12 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
   /** Per session: pattern keys the user allowed for the life of its runner. */
   private readonly allowed = new Map<string, Set<string>>();
 
+  /** True when the call must wait for the user, whatever the session's own settings allow. */
+  needsApproval(req: Omit<ApprovalRequest, 'signal'>): boolean {
+    const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
+    return verdict.outcome === 'ask' && !this.allowed.get(req.sessionId)?.has(verdict.patternKey);
+  }
+
   request(req: ApprovalRequest): Promise<PermissionOutcome> {
     const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
     if (verdict.outcome === 'allow') return Promise.resolve({ behavior: 'allow' });

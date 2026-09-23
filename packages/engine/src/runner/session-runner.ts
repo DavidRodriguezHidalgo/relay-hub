@@ -180,6 +180,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
       profile: this.profile,
       canUseTool: (toolName, input, blockedPath, signal) =>
         this.approvals.request({ sessionId: this.sessionId, toolName, input, cwd: this.cwd, blockedPath, signal }),
+      needsApproval: (toolName, input) =>
+        this.approvals.needsApproval({ sessionId: this.sessionId, toolName, input, cwd: this.cwd }),
     });
     this.consuming = this.consume(this.run).catch((err: unknown) =>
       this.fail(err instanceof Error ? err.message : String(err)),

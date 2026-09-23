@@ -103,6 +103,19 @@ describe('SessionRunner', () => {
     expect(states).toEqual(['running', 'waiting-approval', 'running']);
   });
 
+  it("tells the agent which calls need the user, per this session's allowed patterns", async () => {
+    const { client, approvals, runner } = setup();
+    await runner.send('x', { mode: 'steer', origin: 'user' });
+    await tick();
+    const needs = client.lastOpts!.needsApproval!;
+    expect(needs('Bash', { command: 'ls' })).toBe(false);
+    expect(needs('Bash', { command: 'git push --force' })).toBe(true);
+    const outcome = client.askTool('Bash', { command: 'git push --force' });
+    approvals.decide(approvals.pending()[0]!.id, { kind: 'allow-pattern' });
+    await outcome;
+    expect(needs('Bash', { command: 'git push --force' })).toBe(false);
+  });
+
   it('interrupt denies pending approvals and the aborted turn ends normally, not in error', async () => {
     const { client, approvals, runner, states } = setup();
     await runner.send('x', { mode: 'steer', origin: 'user' });

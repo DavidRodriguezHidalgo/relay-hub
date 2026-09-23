@@ -82,7 +82,7 @@ describe('SdkAgentClient', () => {
     const msgs = await collect(run.messages);
     await run.interrupt();
 
-    expect(seen!.options).toMatchObject({ resume: 'abc', cwd: '/r', permissionMode: 'acceptEdits', settingSources: ['project'] });
+    expect(seen!.options).toMatchObject({ resume: 'abc', cwd: '/r', permissionMode: 'acceptEdits', settingSources: ['user', 'project', 'local'] });
     expect(typeof seen!.options!.canUseTool).toBe('function');
     expect(msgs).toEqual([
       { type: 'init', sessionId: 'abc' },
@@ -155,6 +155,37 @@ describe('SdkAgentClient', () => {
       { type: 'user', uuid: 'u1', message: { role: 'user', content: 'do x' }, parent_tool_use_id: null, priority: 'now', origin: { kind: 'human' } },
       { type: 'user', uuid: 'u2', message: { role: 'user', content: 'then y' }, parent_tool_use_id: null, priority: 'next', origin: { kind: 'human' } },
     ]);
+  });
+
+  it("loads the user's skills, commands and plugins, and sends calls Relay must approve to canUseTool even when settings allow them", async () => {
+    let seen: Parameters<SdkQueryFn>[0] | null = null;
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      seen = params;
+      async function* gen() {}
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    const asked: unknown[] = [];
+    new SdkAgentClient(fakeQuery).start({
+      sessionId: 's', cwd: '/r', input: new AsyncQueue(), canUseTool: async () => ({ behavior: 'allow' }),
+      needsApproval: (toolName, input) => {
+        asked.push([toolName, input]);
+        return input.command === 'git reset --hard';
+      },
+    });
+    const [matcher] = seen!.options!.hooks!.PreToolUse!;
+    const hook = (command: string) =>
+      matcher!.hooks[0]!(
+        { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 't' } as never,
+        't',
+        { signal: new AbortController().signal },
+      );
+    expect(await hook('git reset --hard')).toEqual({
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: 'Relay approval' },
+    });
+    expect(await hook('ls')).toEqual({});
+    expect(asked).toEqual([['Bash', { command: 'git reset --hard' }], ['Bash', { command: 'ls' }]]);
   });
 
   it('maps an error result and a deny from canUseTool', async () => {

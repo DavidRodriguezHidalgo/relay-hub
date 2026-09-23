@@ -21,10 +21,26 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null,
 };
 
 describe('SessionPanel', () => {
+  it('shows why a send failed inside the send box, which stays on screen', () => {
+    render(
+      <SessionPanel
+        {...base}
+        notice="Session a is open in another Claude process (pid 4034)"
+        entries={[entry('e1', 'from file')]}
+        liveEntries={[]}
+        state={undefined}
+        approvals={[]}
+      />,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Session a is open in another Claude process (pid 4034)');
+    expect(alert.closest('form')).toBe(screen.getByPlaceholderText('Send to this session (dev)').closest('form'));
+  });
+
   it('shows state, merges live entries by uuid and tags their origin', () => {
     render(
       <SessionPanel

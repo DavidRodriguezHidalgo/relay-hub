@@ -23,6 +23,10 @@
 @layer base {
   html, body, #root { @apply h-full; }
   body { @apply m-0 bg-bg text-fg font-sans text-[14px] leading-[1.45] antialiased; }
+  /* thin, quiet scrollbars that only show a thumb; the gutter is reserved so content never jumps */
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+  *:hover { scrollbar-color: var(--scrollbar-hover) transparent; }
+  .session-list, .session-panel, .chat { scrollbar-gutter: stable; }
   button {
     @apply cursor-pointer rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] text-fg transition-colors
       hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus
@@ -69,7 +73,7 @@
 
   .orchestrator { @apply flex min-h-0 flex-col overflow-hidden px-5 pt-10; }
   /* a column, so the dev box sits at the bottom even when the transcript is short */
-  .session-panel { @apply flex flex-col overflow-auto border-l border-line bg-surface px-4 pt-10; }
+  .session-panel { @apply flex flex-col overflow-auto border-l border-line bg-surface pl-6 pr-4 pt-10; }
   .session-panel > * { @apply shrink-0; }
   .placeholder { @apply text-muted; }
 
@@ -111,7 +115,7 @@
   .approval__actions { @apply mt-2 flex flex-wrap gap-1.5; }
 
   .error { @apply text-danger; }
-  .dev-send { @apply sticky bottom-0 -mx-4 mt-auto border-t border-line bg-surface px-4 pt-3 pb-4; }
+  .dev-send { @apply sticky bottom-0 -mr-4 -ml-6 mt-auto border-t border-line bg-surface pr-4 pl-6 pt-3 pb-4; }
   .dev-send textarea { @apply w-full; }
   .dev-send__row { @apply mt-1 flex gap-1.5; }
 

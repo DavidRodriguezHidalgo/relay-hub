@@ -96,7 +96,6 @@ export function App() {
         />
       </main>
       <section className="session-panel" aria-label="Session panel" ref={panelRef} onScroll={onPanelScroll}>
-        {sendError && <p className="error">{sendError}</p>}
         {selected ? (
           <SessionPanel
             session={selected}
@@ -123,6 +122,7 @@ export function App() {
                 .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
+            notice={sendError}
           />
         ) : (
           <p className="placeholder">Select a session.</p>

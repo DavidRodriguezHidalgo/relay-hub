@@ -69,6 +69,8 @@ export interface AgentStartOptions {
   cwd: string;
   input: AsyncIterable<AgentInput>;
   canUseTool: CanUseToolFn;
+  /** Calls that must reach `canUseTool` even when the session's settings would pre-approve them. */
+  needsApproval?: (toolName: string, input: Record<string, unknown>) => boolean;
   profile?: AgentProfile;
 }
 

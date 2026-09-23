@@ -103,6 +103,18 @@ describe('ApprovalQueue', () => {
     expect(q.pending()).toEqual([]);
   });
 
+  it('says which calls must reach the user, so a settings allow-list cannot pre-approve them', async () => {
+    const q = new ApprovalQueue();
+    const needs = (command: string, sessionId = 's1') => q.needsApproval({ sessionId, toolName: 'Bash', input: { command }, cwd });
+    expect(needs('pnpm test')).toBe(false);
+    expect(needs('git reset --hard')).toBe(true);
+    const first = req(q, 'git reset --hard');
+    q.decide(q.pending()[0]!.id, { kind: 'allow-pattern' });
+    await first;
+    expect(needs('git reset --hard origin/main')).toBe(false);
+    expect(needs('git reset --hard', 's2')).toBe(true);
+  });
+
   it('decide throws for an unknown id', () => {
     expect(() => new ApprovalQueue().decide('nope', { kind: 'allow-once' })).toThrow(/unknown approval/i);
   });

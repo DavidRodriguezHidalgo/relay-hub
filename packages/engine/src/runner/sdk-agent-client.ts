@@ -101,9 +101,40 @@ function profileOptions(opts: AgentStartOptions): Options {
   const base: Options = { cwd: opts.cwd, ...(opts.sessionId ? { resume: opts.sessionId } : {}) };
   const profile = opts.profile ?? { kind: 'session' };
   if (profile.kind === 'session') {
-    // Project settings and CLAUDE.md load; user/local permission allow-lists must not
-    // pre-approve commands before Relay's own approval rules see them.
-    return { ...base, permissionMode: 'acceptEdits', settingSources: ['project'] };
+    // Every settings source loads, like the terminal: CLAUDE.md, skills, commands, plugins, hooks.
+    // Their allow-lists must not pre-approve what Relay's rules hold back, so a PreToolUse
+    // hook turns those calls into an ask, which reaches canUseTool.
+    const needsApproval = opts.needsApproval;
+    return {
+      ...base,
+      permissionMode: 'acceptEdits',
+      settingSources: ['user', 'project', 'local'],
+      ...(needsApproval
+        ? {
+            hooks: {
+              PreToolUse: [
+                {
+                  hooks: [
+                    async (input) => {
+                      const call = input as { tool_name: string; tool_input: unknown };
+                      const toolInput = (call.tool_input ?? {}) as Record<string, unknown>;
+                      return needsApproval(call.tool_name, toolInput)
+                        ? {
+                            hookSpecificOutput: {
+                              hookEventName: 'PreToolUse' as const,
+                              permissionDecision: 'ask' as const,
+                              permissionDecisionReason: 'Relay approval',
+                            },
+                          }
+                        : {};
+                    },
+                  ],
+                },
+              ],
+            },
+          }
+        : {}),
+    };
   }
   const server = createSdkMcpServer({
     name: 'relay',

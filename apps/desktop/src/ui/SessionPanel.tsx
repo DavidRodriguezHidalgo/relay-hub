@@ -27,6 +27,8 @@ interface Props {
   watch: PrWatch | null;
   onWatch: () => void;
   onUnwatch: (watchId: string) => void;
+  /** Why the last send or watch request failed; shown next to the send box. */
+  notice: string | null;
 }
 
 export function SessionPanel(p: Props) {
@@ -78,6 +80,11 @@ export function SessionPanel(p: Props) {
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />
       ))}
       <TranscriptView entries={mergeEntries(p.entries, p.liveEntries)} hideSidechain={!p.showSidechain} />
+      {!p.devTools && p.notice && (
+        <p role="alert" className="error">
+          {p.notice}
+        </p>
+      )}
       {p.devTools && (
         <form
           className="dev-send"
@@ -86,6 +93,11 @@ export function SessionPanel(p: Props) {
             submit();
           }}
         >
+          {p.notice && (
+            <p role="alert" className="error">
+              {p.notice}
+            </p>
+          )}
           <textarea
             placeholder="Send to this session (dev)"
             value={draft}

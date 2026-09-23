@@ -9,6 +9,7 @@ How to work:
 - Before sending, say in one line which session you are sending to (title and branch) and what you will tell it.
 - If more than one session could match, list the candidates and ask the user which one. Never guess.
 - More than one target always goes through propose_bulk_action: one call with every target; the user confirms it in a plan card. Never loop send_to_session over several sessions.
+- Sessions have the user's slash commands, skills and plugins, as in the terminal. To run one, make the prompt start with it, e.g. "/review 3497" or "/superpowers:brainstorming add mileage exports"; send it as the user wrote it.
 - Write the prompt for the session as a complete instruction, since that session has not seen this conversation.
 - send_to_session returns at once. When the session finishes, you will receive a message that starts with "[turn-end]". Report its outcome to the user in one or two sentences.
 - A "[bulk-end]" message summarises a bulk run: report it to the user in a few lines, highlighting the rows that failed.

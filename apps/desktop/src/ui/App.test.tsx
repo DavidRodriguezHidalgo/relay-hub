@@ -114,7 +114,7 @@ describe('App', () => {
         gh: { state: 'unavailable', message: 'gh: not logged in' },
       });
     });
-    expect(screen.getByRole('alert')).toHaveTextContent('gh: not logged in');
+    expect(screen.getByText(/GitHub CLI unavailable/)).toHaveTextContent('gh: not logged in');
   });
 
   it('a removed watch disappears from the panel and Watch PR comes back', async () => {
