@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -63,5 +63,45 @@ describe('worktrees', () => {
     const dir = await createWorktree(clone, 'feat/remote');
     expect((await git(dir, 'rev-parse', 'HEAD')).stdout.trim()).toBe(pushed);
     expect((await git(dir, 'rev-parse', '--abbrev-ref', '@{upstream}')).stdout.trim()).toBe('origin/feat/remote');
+  });
+
+  it("a checkout that fails half-way leaves no branch or worktree behind, so a retry can work", async () => {
+    const hook = join(clone, ".git", "hooks", "post-checkout");
+    await writeFile(hook, "#!/bin/sh\nexit 1\n");
+    await chmod(hook, 0o755);
+    await expect(createWorktree(clone, "feat/hooked")).rejects.toThrow();
+    await rm(hook);
+    expect((await git(clone, "branch", "--list", "feat/hooked")).stdout.trim()).toBe("");
+    expect((await git(clone, "worktree", "list")).stdout).not.toContain("feat-hooked");
+    expect(await createWorktree(clone, "feat/hooked")).toBe(join(root, "code", "myrepo-worktrees", "feat-hooked"));
+  });
+
+  it("a repo without origin branches off its own current branch", async () => {
+    const local = join(root, "code", "localonly");
+    await run("git", ["init", "-q", "-b", "master", local]);
+    await git(local, "commit", "-q", "--allow-empty", "-m", "init");
+    const dir = await createWorktree(local, "feat/l");
+    expect((await git(dir, "rev-parse", "HEAD")).stdout.trim()).toBe((await git(local, "rev-parse", "master")).stdout.trim());
+  });
+
+  it("an origin whose default is master, without a recorded origin/HEAD, still works", async () => {
+    const originM = join(root, "originm.git");
+    await run("git", ["init", "-q", "--bare", "-b", "master", originM]);
+    const repo = join(root, "code", "masterrepo");
+    await run("git", ["init", "-q", "-b", "master", repo]);
+    await git(repo, "commit", "-q", "--allow-empty", "-m", "init");
+    await git(repo, "remote", "add", "origin", originM);
+    await git(repo, "push", "-q", "origin", "master");
+    const dir = await createWorktree(repo, "feat/m");
+    expect((await git(dir, "rev-parse", "--abbrev-ref", "HEAD")).stdout.trim()).toBe("feat/m");
+  });
+
+  it("a submodule's root is its own working tree, and a bare repo has none", async () => {
+    const sup = join(root, "code", "super");
+    await run("git", ["init", "-q", "-b", "main", sup]);
+    await git(sup, "commit", "-q", "--allow-empty", "-m", "init");
+    await run("git", ["-C", sup, "-c", "protocol.file.allow=always", "submodule", "add", "-q", join(root, "origin.git"), "mod"], { env });
+    expect(await repoRoot(join(sup, "mod"))).toBe(join(sup, "mod"));
+    expect(await repoRoot(join(root, "origin.git"))).toBeNull();
   });
 });
