@@ -1,7 +1,10 @@
-import type { TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import type { LiveEntry, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+
+/** A file entry, or a live one that also knows who caused it. */
+export type ViewEntry = TranscriptEntry & { origin?: LiveEntry['origin'] };
 
 interface Props {
-  entries: TranscriptEntry[];
+  entries: ViewEntry[];
   hideSidechain: boolean;
 }
 
@@ -43,6 +46,7 @@ export function TranscriptView({ entries, hideSidechain }: Props) {
         <li key={e.uuid} className={`entry entry--${e.role}${e.isSidechain ? ' entry--sidechain' : ''}`}>
           <header>
             <span>{e.role}</span>
+            {e.origin && <span className="origin">{e.origin}</span>}
             <time dateTime={e.timestamp}>{new Date(e.timestamp).toLocaleTimeString()}</time>
           </header>
           {e.blocks.map((b, i) => (

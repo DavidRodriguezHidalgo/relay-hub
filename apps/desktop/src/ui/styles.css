@@ -26,3 +26,17 @@ body { margin: 0; }
 .block-result pre { font-size: 12px; max-height: 240px; overflow: auto; }
 .block-result--error summary { color: #c0392b; }
 .session-panel__header h1 { font-size: 15px; margin: 0 0 4px; }
+.state { font-size: 11px; border-radius: 10px; padding: 1px 8px; border: 1px solid currentColor; }
+.state--running { color: #2d7ff9; } .state--waiting-approval { color: #d98a00; } .state--error { color: #c0392b; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: currentColor; opacity: .25; }
+.dot--running { background: #2d7ff9; opacity: 1; } .dot--waiting-approval { background: #d98a00; opacity: 1; } .dot--error { background: #c0392b; opacity: 1; }
+.approval { border: 1px solid #d98a00; border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; }
+.approval__reason { font-weight: 600; margin-bottom: 4px; }
+.approval__summary { display: block; white-space: pre-wrap; margin: 4px 0; }
+.approval__meta { font-size: 11px; opacity: .6; }
+.approval__actions { display: flex; gap: 6px; margin-top: 6px; }
+.origin { font-style: italic; }
+.error { color: #c0392b; }
+.dev-send { position: sticky; bottom: 0; background: Canvas; padding-top: 8px; }
+.dev-send textarea { width: 100%; box-sizing: border-box; }
+.dev-send__row { display: flex; gap: 6px; margin-top: 4px; }

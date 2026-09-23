@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { RelayApi, SessionSummary } from '@relay/shared';
+import type { RelayApi, RunnerEvent, SessionSummary } from '@relay/shared';
 import { App } from './App';
 
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
@@ -52,6 +52,28 @@ describe('App', () => {
       for (const l of listeners) l([s({ id: 'a', title: 'Alpha', messageCount: 2, lastActivity: '2026-09-21T00:00:00.000Z' }), s({ id: 'b', title: 'Beta' })]);
     });
     expect(relay.getTranscript).toHaveBeenCalledTimes(2);
+  });
+
+  it('appends runner entries for the selected session live', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    const liveEntry = (uuid: string, text: string) => ({
+      uuid, role: 'assistant' as const, timestamp: '2026-09-23T00:00:00.000Z', isSidechain: false, isMeta: false,
+      blocks: [{ kind: 'text' as const, text }], origin: 'user' as const,
+    });
+    await act(async () => {
+      emit!({ type: 'entry', sessionId: 'a', entry: liveEntry('live1', 'streamed now') });
+      emit!({ type: 'entry', sessionId: 'b', entry: liveEntry('live2', 'other session') });
+      emit!({ type: 'state', sessionId: 'a', state: 'running', error: null });
+    });
+    expect(screen.getByText('streamed now')).toBeInTheDocument();
+    expect(screen.queryByText('other session')).not.toBeInTheDocument();
+    expect(screen.getAllByText('running').length).toBeGreaterThan(0);
   });
 
   it('opens a transcript scrolled to the bottom and follows updates unless the user scrolled up', async () => {

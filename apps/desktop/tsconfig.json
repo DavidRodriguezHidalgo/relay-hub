@@ -2,8 +2,20 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": ["DOM", "DOM.Iterable", "ES2023"],
-    "types": ["node"]
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2023"
+    ],
+    "types": [
+      "node",
+      "vite/client"
+    ]
   },
-  "include": ["src", "*.config.ts", "forge.config.ts", "forge.env.d.ts"]
+  "include": [
+    "src",
+    "*.config.ts",
+    "forge.config.ts",
+    "forge.env.d.ts"
+  ]
 }

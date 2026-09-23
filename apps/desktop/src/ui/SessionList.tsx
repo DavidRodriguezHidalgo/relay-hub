@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import type { SessionSummary } from '@relay/shared';
+import type { RunState, SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
 
 interface Props {
   sessions: SessionSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  states?: RunState['states'];
 }
 
-export function SessionList({ sessions, selectedId, onSelect }: Props) {
+export function SessionList({ sessions, selectedId, onSelect, states }: Props) {
   const [query, setQuery] = useState('');
   const [showStale, setShowStale] = useState(false);
   const groups = groupSessions(sessions, { query, showStale });
@@ -42,7 +43,10 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
                   className={s.id === selectedId ? 'session-row session-row--selected' : 'session-row'}
                   onClick={() => onSelect(s.id)}
                 >
-                  <span className="session-row__title">{s.title}</span>
+                  <span className="session-row__title">
+                    <span className={`dot dot--${states?.[s.id]?.state ?? 'idle'}`} />
+                    {s.title}
+                  </span>
                   <span className="session-row__meta">
                     {s.branch && <code>{s.branch}</code>}
                     {s.prNumber !== null && <span className="badge">#{s.prNumber}</span>}
