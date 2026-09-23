@@ -1,0 +1,12 @@
+{
+  "name": "relay-hub",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev": "pnpm --filter @relay/desktop start"
+  },
+  "devDependencies": { "typescript": "^5.9.0" }
+}
