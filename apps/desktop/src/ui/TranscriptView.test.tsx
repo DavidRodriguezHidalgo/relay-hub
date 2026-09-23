@@ -41,4 +41,17 @@ describe('TranscriptView', () => {
     const { container } = render(<TranscriptView entries={[thinkingOnly, entries[0]!]} hideSidechain />);
     expect(container.querySelectorAll("li.entry")).toHaveLength(1);
   });
+
+  it("keeps a long single-line tool result to a short summary and puts the full text in the body", () => {
+    const long = JSON.stringify({ session: { id: "x".repeat(300) } });
+    const result: TranscriptEntry = {
+      uuid: "r1", role: "user", timestamp: "2026-09-20T10:00:09.000Z", isSidechain: false, isMeta: false,
+      blocks: [{ kind: "tool_result", toolUseId: "t", text: long, isError: false }],
+    };
+    const { container } = render(<TranscriptView entries={[result]} hideSidechain />);
+    const summary = container.querySelector("summary")!;
+    expect(summary.textContent!.length).toBeLessThanOrEqual(121);
+    expect(summary.textContent!.endsWith("…")).toBe(true);
+    expect(container.querySelector("pre")!.textContent).toBe(long);
+  });
 });

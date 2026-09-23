@@ -24,10 +24,13 @@ function Block({ block }: { block: TranscriptBlock }) {
     }
     case 'tool_result': {
       const [first = '', ...rest] = block.text.split('\n');
+      // a one-line result (e.g. a JSON payload) is summarised short and shown whole when opened
+      const clipped = first.length > INPUT_MAX;
+      const body = clipped ? block.text : rest.join('\n');
       return (
         <details className={block.isError ? 'block-result block-result--error' : 'block-result'}>
-          <summary>{first}</summary>
-          {rest.length > 0 && <pre>{rest.join('\n')}</pre>}
+          <summary>{clipped ? `${first.slice(0, INPUT_MAX)}…` : first}</summary>
+          {body.length > 0 && <pre>{body}</pre>}
         </details>
       );
     }

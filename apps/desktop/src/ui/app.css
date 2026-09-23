@@ -49,7 +49,7 @@
       disabled:border-line disabled:bg-surface-2 disabled:text-muted disabled:opacity-100 disabled:hover:brightness-100;
   }
 
-  .app { @apply grid h-screen grid-cols-[300px_1fr_440px] bg-bg; }
+  .app { @apply grid h-screen grid-cols-[300px_minmax(0,1fr)_440px] overflow-hidden bg-bg; }
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-10 pb-2; }
   .session-list__controls { @apply mb-2 flex items-center gap-2 text-[12px] text-muted; }
   .session-list__controls input[type='search'] { @apply flex-1; }
@@ -71,14 +71,14 @@
   .session-row__meta { @apply mt-0.5 flex gap-1.5 text-[11px] text-muted; }
   .badge { @apply rounded border border-line px-1 text-[11px] text-fg; }
 
-  .orchestrator { @apply flex min-h-0 flex-col overflow-hidden px-5 pt-10; }
+  .orchestrator { @apply flex min-h-0 min-w-0 flex-col overflow-hidden px-5 pt-10; }
   /* a column, so the dev box sits at the bottom even when the transcript is short */
-  .session-panel { @apply flex flex-col overflow-auto border-l border-line bg-surface pl-6 pr-4 pt-10; }
+  .session-panel { @apply flex min-w-0 flex-col overflow-x-hidden overflow-y-auto border-l border-line bg-surface pl-6 pr-4 pt-10; }
   .session-panel > * { @apply shrink-0; }
   .placeholder { @apply text-muted; }
 
   .transcript { @apply m-0 list-none p-0; }
-  .entry { @apply mb-3 rounded-lg px-3 py-2 text-[15px] leading-[1.55]; }
+  .entry { @apply mb-3 min-w-0 rounded-lg px-3 py-2 text-[15px] leading-[1.55] [overflow-wrap:anywhere]; }
   .entry--user { @apply border border-line bg-surface-2; }
   /* marked by position and a dashed rule, not by fading: faded text would fail the contrast rules */
   .entry--sidechain { @apply ml-3 border-l-2 border-dashed border-line; }
@@ -86,7 +86,7 @@
   .block-text { @apply m-0 mb-1.5 whitespace-pre-wrap; }
   .block-tool { @apply font-mono text-[12px] text-muted; }
   .block-result summary { @apply cursor-pointer font-mono text-[12px] text-muted; }
-  .block-result pre { @apply max-h-60 overflow-auto rounded bg-bg p-2 font-mono text-[12px] text-fg; }
+  .block-result pre { @apply max-h-60 overflow-y-auto rounded bg-bg p-2 font-mono text-[12px] whitespace-pre-wrap text-fg; }
   .block-result--error summary { @apply text-danger; }
   .origin { @apply text-accent-fg italic; }
 
@@ -123,7 +123,7 @@
   .approvals-drawer h2 { @apply m-0 mb-2 text-[12px] font-semibold text-waiting; }
   .link { @apply mb-1 border-0 bg-transparent p-0 text-accent-fg underline; }
 
-  .chat { @apply min-h-0 flex-1 overflow-auto pr-1; }
+  .chat { @apply min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1; }
   .chat__header { @apply mb-3 flex items-center gap-2 text-[15px]; }
   .chat__header strong { @apply text-accent-fg; }
   .relay-update { @apply my-1 mb-3 border-l-2 border-accent pl-2 text-[12px] text-muted; }
