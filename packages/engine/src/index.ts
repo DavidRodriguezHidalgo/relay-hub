@@ -18,3 +18,5 @@ export type {
   AgentStartOptions,
   CanUseToolFn,
 } from './runner/agent-client';
+export { SessionRunner } from './runner/session-runner';
+export type { SessionRunnerOptions } from './runner/session-runner';
