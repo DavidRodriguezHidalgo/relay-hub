@@ -49,7 +49,8 @@ describe('RelayEngine', () => {
     now = () => new Date('2026-09-23T00:00:00.000Z'),
     extra: {
       idleTimeoutMs?: number;
-      registry?: { foreignHolders(id: string): Promise<number[]> };
+      registry?: { foreignHolders(id: string): Promise<number[]>; openSessions?(): Promise<Record<string, 'busy' | 'idle'>> };
+      externalPollMs?: number;
       more?: boolean;
       noPr?: boolean;
       bulkConcurrency?: number;
@@ -90,6 +91,8 @@ describe('RelayEngine', () => {
       agent: client,
       now,
       orchestratorDir: join(root, 'orch'),
+      // never the real ~/.claude/sessions: tests must not see what else runs on this machine
+      registry: { foreignHolders: async () => [] },
       ...engineExtra,
     });
     return { cwd, file };
@@ -771,5 +774,19 @@ describe('RelayEngine', () => {
     // both fixture sessions record branch feat/a; the git fake reports repo "r" for both, so the repo narrows nothing
     // and the first-by-activity rule is not used: ambiguous means no session
     expect((await listPrs())[0]!.sessionId).toBeNull();
+  });
+
+  it("publishes which sessions are open in other Claude processes, and only when that changes", async () => {
+    let open: Record<string, "busy" | "idle"> = {};
+    await startWithBasic(new FakeAgentClient(), undefined, {
+      registry: { foreignHolders: async () => [], openSessions: async () => open },
+      externalPollMs: 20,
+    });
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    open = { "s-basic": "busy" };
+    await new Promise((r) => setTimeout(r, 80));
+    expect(engine!.runState().external).toEqual({ "s-basic": "busy" });
+    expect(events.filter((e) => e.type === "external")).toEqual([{ type: "external", external: { "s-basic": "busy" } }]);
   });
 });

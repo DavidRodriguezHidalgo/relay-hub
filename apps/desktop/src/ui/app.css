@@ -49,7 +49,17 @@
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-10 pb-2; }
   .session-list__controls { @apply mb-2 flex items-center gap-2 text-[12px] text-muted; }
   .session-list__controls input[type='search'] { @apply flex-1; }
-  .session-list h2 { @apply mx-2 mt-4 mb-1 text-[11px] font-semibold tracking-wider text-muted uppercase; }
+  .session-list h2 { @apply mx-0 mt-4 mb-1; }
+  .session-list__group {
+    @apply flex w-full items-center gap-1.5 border-0 bg-transparent px-2 py-0.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase hover:text-fg;
+  }
+  .session-list__count { @apply ml-auto rounded-full bg-surface-2 px-1.5 text-[10px] text-fg; }
+  .session-list__new { @apply mb-3 w-full; }
+  .new-session { @apply mb-3 flex flex-col gap-2 rounded-lg border border-line bg-surface-2 p-3 text-[12px]; }
+  .new-session label { @apply flex flex-col gap-1 text-muted; }
+  .new-session input, .new-session select, .new-session textarea { @apply w-full text-[13px]; }
+  .new-session__where { @apply m-0 font-mono text-[11px] break-all text-muted; }
+  .new-session__actions { @apply flex gap-1.5; }
   .session-list ul { @apply m-0 list-none p-0; }
   .session-row { @apply block w-full rounded-md border-0 border-l-2 border-transparent bg-transparent px-2 py-1.5 text-left hover:bg-surface-2; }
   .session-row--selected { @apply border-accent bg-surface-2; }
@@ -86,7 +96,10 @@
   .state--error { @apply border-danger text-danger; }
   .state--done, .state--finished { @apply border-success text-success; }
   .dot { @apply mr-1.5 inline-block size-2 rounded-full bg-line align-middle; }
-  .dot--running { @apply bg-running; }
+  .dot--running { @apply animate-pulse bg-running; }
+  /* busy in another Claude process (a terminal, the desktop app): a pulsing ring */
+  .dot--elsewhere { @apply animate-pulse bg-transparent ring-2 ring-running ring-inset; }
+  .dot--open { @apply bg-transparent ring-1 ring-muted ring-inset; }
   /* shapes as well as colours: waiting is a ring, error a square */
   .dot--waiting-approval { @apply bg-transparent ring-2 ring-waiting ring-inset; }
   .dot--error { @apply rounded-[1px] bg-danger; }

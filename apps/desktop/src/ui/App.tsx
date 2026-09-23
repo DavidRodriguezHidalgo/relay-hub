@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ORCHESTRATOR_KEY, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
+import { NewSessionForm } from './NewSessionForm';
 import { OrchestratorChat } from './OrchestratorChat';
 import { SessionList } from './SessionList';
 import { SessionPanel } from './SessionPanel';
@@ -13,6 +14,7 @@ export function App() {
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [showSidechain, setShowSidechain] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const panelRef = useRef<HTMLElement>(null);
   const run = useRunState();
@@ -53,7 +55,27 @@ export function App() {
           GitHub CLI unavailable — PR watches paused: {run.gh.message}
         </div>
       )}
-      <SessionList sessions={sessions} selectedId={selectedId} onSelect={setSelectedId} states={run.states} />
+      <SessionList
+        sessions={sessions}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        states={run.states}
+        external={run.external}
+        onNewSession={() => setCreating(true)}
+        panel={
+          creating && (
+            <NewSessionForm
+              listProjects={window.relay.listProjects}
+              onCreate={(req) => window.relay.createSession(req)}
+              onCreated={(id) => {
+                setCreating(false);
+                setSelectedId(id);
+              }}
+              onCancel={() => setCreating(false)}
+            />
+          )
+        }
+      />
       <main className="orchestrator" aria-label="Orchestrator">
         <OrchestratorChat
           history={orchHistory}

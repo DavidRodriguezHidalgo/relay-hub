@@ -18,6 +18,8 @@ export const IPC = {
   bulkCancel: 'relay:bulkCancel',
   watchCreate: 'relay:watchCreate',
   watchDelete: 'relay:watchDelete',
+  listProjects: 'relay:listProjects',
+  createSession: 'relay:createSession',
 } as const;
 
 export interface SendRequest {
@@ -44,4 +46,6 @@ export interface RelayApi {
   bulkCancel(runId: string): Promise<void>;
   watchCreate(sessionId: string): Promise<PrWatch>;
   watchDelete(watchId: string): Promise<void>;
+  listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
+  createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
 }

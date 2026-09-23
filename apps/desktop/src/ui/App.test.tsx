@@ -26,7 +26,7 @@ describe('App', () => {
       send: vi.fn().mockResolvedValue('msg-1'),
       interrupt: vi.fn().mockResolvedValue(undefined),
       decide: vi.fn().mockResolvedValue(undefined),
-      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } }),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} }),
       onRunnerEvent: vi.fn(() => () => undefined),
       orchestratorSend: vi.fn().mockResolvedValue('o-1'),
       orchestratorInterrupt: vi.fn().mockResolvedValue(undefined),
@@ -35,6 +35,8 @@ describe('App', () => {
       bulkCancel: vi.fn().mockResolvedValue(undefined),
       watchCreate: vi.fn(),
       watchDelete: vi.fn().mockResolvedValue(undefined),
+      listProjects: vi.fn().mockResolvedValue([{ name: 'factorial', root: '/code/factorial', sessions: 2 }]),
+      createSession: vi.fn().mockResolvedValue({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' }),
     };
     Object.assign(window, { relay });
   });
@@ -152,7 +154,7 @@ describe('App', () => {
       emit!({ type: 'state', sessionId: 'a', state: 'running', error: null });
     });
     await act(async () => {
-      resolveSnapshot({ states: { a: { state: 'idle', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } });
+      resolveSnapshot({ states: { a: { state: 'idle', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} });
     });
     expect(screen.getByLabelText('Session panel')).toHaveTextContent('running');
   });
@@ -172,6 +174,18 @@ describe('App', () => {
     });
     expect(screen.queryByText('line 0')).not.toBeInTheDocument();
     expect(screen.getByText('line 519')).toBeInTheDocument();
+  });
+
+  it('New session opens the form and creates through the engine', async () => {
+    render(<App />);
+    await screen.findByText('Alpha');
+    await userEvent.click(screen.getByRole('button', { name: 'New session' }));
+    await userEvent.selectOptions(await screen.findByLabelText('Project'), '/code/factorial');
+    await userEvent.type(screen.getByLabelText('Branch'), 'feat/x');
+    await userEvent.type(screen.getByLabelText('First instruction'), 'Add a CSV export');
+    await userEvent.click(screen.getByRole('button', { name: 'Create session' }));
+    expect(relay.createSession).toHaveBeenCalledWith({ project: '/code/factorial', branch: 'feat/x', prompt: 'Add a CSV export' });
+    expect(screen.queryByLabelText('Branch')).not.toBeInTheDocument();
   });
 
   it('re-fetches the transcript only when the selected session itself changed', async () => {

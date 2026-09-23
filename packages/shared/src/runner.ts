@@ -82,6 +82,9 @@ export interface PrWatch {
   wakeError?: string | null;
 }
 
+/** Sessions open in another Claude process (a terminal, the desktop app), by id: busy or idle. */
+export type ExternalSessions = Record<string, 'busy' | 'idle'>;
+
 export type GhStatus = { state: 'ok' } | { state: 'unavailable'; message: string };
 
 export type RunnerEvent =
@@ -92,6 +95,7 @@ export type RunnerEvent =
   | { type: 'bulk'; run: BulkRun }
   | { type: 'watch'; watch: PrWatch; gh: GhStatus }
   | { type: 'watch-removed'; watchId: string; gh: GhStatus }
+  | { type: 'external'; external: ExternalSessions }
   | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
 
 export interface RunState {
@@ -100,4 +104,5 @@ export interface RunState {
   bulkRuns: BulkRun[];
   watches: PrWatch[];
   gh: GhStatus;
+  external: ExternalSessions;
 }

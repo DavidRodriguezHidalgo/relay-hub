@@ -63,6 +63,8 @@ export interface RelayEngineOptions {
   gh?: GhClient;
   prPollIntervalMs?: number;
   worktrees?: Worktrees;
+  /** How often to look for sessions open in other Claude processes. */
+  externalPollMs?: number;
   /** How long createSession waits for a new session to report its id. */
   createTimeoutMs?: number;
 }
@@ -102,6 +104,8 @@ export class RelayEngine {
   /** The orchestrator dir as given and with symlinks resolved (transcripts record the real path). */
   private readonly orchestratorCwds: Set<string>;
   private closing = false;
+  private external: Record<string, 'busy' | 'idle'> = {};
+  private externalTimer: NodeJS.Timeout | null = null;
 
   private constructor(
     private readonly store: SessionStore,
@@ -218,6 +222,7 @@ export class RelayEngine {
     );
     engine.pruneWatches();
     engine.watcher.start();
+    engine.watchExternal(opts.externalPollMs ?? 3_000);
     return engine;
   }
 
@@ -419,6 +424,7 @@ export class RelayEngine {
     return { states, approvals: this.approvals.pending(), bulkRuns: this.bulk.recent(RECENT_BULK_RUNS),
       watches: this.watcher.list(),
       gh: this.watcher.ghStatus,
+      external: this.external,
     };
   }
 
@@ -427,6 +433,7 @@ export class RelayEngine {
     this.idleTimers.clear();
     // Sessions first, with the relay off: their interrupted turns must not wake the orchestrator.
     this.closing = true;
+    if (this.externalTimer) clearInterval(this.externalTimer);
     this.watcher.stop();
     this.bulk.stop();
     await Promise.all([...this.runners.values()].map((r) => r.close()));
@@ -519,6 +526,21 @@ export class RelayEngine {
       () => this.watcher.clearWakeError(watch.id),
       (err: unknown) => this.watcher.noteWakeError(watch.id, err instanceof Error ? err.message : String(err)),
     );
+  }
+
+  /** Polls Claude Code's process registry so sessions busy in a terminal show as running too. */
+  private watchExternal(intervalMs: number): void {
+    const read = this.registry.openSessions?.bind(this.registry);
+    if (!read) return;
+    const tick = async () => {
+      const next = await read().catch(() => this.external);
+      if (JSON.stringify(next) === JSON.stringify(this.external)) return;
+      this.external = next;
+      this.publish({ type: 'external', external: next });
+    };
+    void tick();
+    this.externalTimer = setInterval(() => void tick(), intervalMs);
+    this.externalTimer.unref?.();
   }
 
   private pruneWatches(): void {

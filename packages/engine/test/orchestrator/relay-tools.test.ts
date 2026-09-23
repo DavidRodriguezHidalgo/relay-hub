@@ -15,7 +15,7 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
       s({ id: 'b', title: 'OCR ideas', lastActivity: '2026-09-21T00:00:00.000Z' }),
       s({ id: 'c', title: 'Old', isStale: true }),
     ],
-    runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' } }),
+    runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} }),
     getTranscript: async () => [],
     send: vi.fn(async () => 'm-1'),
     interrupt: vi.fn(async () => true),
@@ -175,7 +175,7 @@ describe('relay tools', () => {
     const d = deps({
       getTranscript: async () => entries,
       runState: () => ({
-        states: {}, bulkRuns: [], watches: [], gh: { state: "ok" as const },
+        states: {}, bulkRuns: [], watches: [], gh: { state: "ok" as const }, external: {},
         approvals: [{ id: "p", sessionId: "a", toolName: "Bash", input: {}, summary: "y".repeat(2000), reason: "destructive-git" as const, cwd: "/c", createdAt: "t" }],
       }),
     });

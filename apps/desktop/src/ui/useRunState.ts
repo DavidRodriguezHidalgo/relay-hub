@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BulkRun, GhStatus, LiveEntry, PendingApproval, PrWatch, RunState, RunnerEvent } from '@relay/shared';
+import type { BulkRun, ExternalSessions, GhStatus, LiveEntry, PendingApproval, PrWatch, RunState, RunnerEvent } from '@relay/shared';
 
 export interface RunView {
   states: RunState['states'];
@@ -8,11 +8,12 @@ export interface RunView {
   bulkRuns: BulkRun[];
   watches: PrWatch[];
   gh: GhStatus;
+  external: ExternalSessions;
 }
 
 /** Mirrors the engine's run state in the renderer: initial snapshot, then events. */
 export function useRunState(): RunView {
-  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' } });
+  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} });
   useEffect(() => {
     // events that arrive before the snapshot are replayed on top of it, so the snapshot never undoes them
     let early: RunnerEvent[] | null = [];
@@ -20,7 +21,7 @@ export function useRunState(): RunView {
       const replay = early ?? [];
       early = null;
       setView((v) =>
-        replay.reduce(apply, { ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns, watches: s.watches, gh: s.gh }),
+        replay.reduce(apply, { ...v, states: s.states, approvals: s.approvals, bulkRuns: s.bulkRuns, watches: s.watches, gh: s.gh, external: s.external ?? {} }),
       );
     });
     return window.relay.onRunnerEvent((event: RunnerEvent) => {
@@ -57,6 +58,8 @@ function apply(v: RunView, event: RunnerEvent): RunView {
           }
           case 'watch-removed':
             return { ...v, watches: v.watches.filter((w) => w.id !== event.watchId), gh: event.gh };
+          case 'external':
+            return { ...v, external: event.external };
           case 'pr-event':
             return v;
           case 'bulk': {

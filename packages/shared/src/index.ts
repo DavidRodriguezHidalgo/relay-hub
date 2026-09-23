@@ -9,6 +9,7 @@ export type {
   BulkRowStatus,
   BulkRun,
   BulkRunStatus,
+  ExternalSessions,
   GhStatus,
   PrEvent,
   PrEventKind,

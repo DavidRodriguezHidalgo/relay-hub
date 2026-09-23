@@ -31,6 +31,10 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.bulkCancel, (runId: string) => engine.bulkCancel(runId));
   handle(IPC.watchCreate, (sessionId: string) => engine.watchCreate(sessionId));
   handle(IPC.watchDelete, (watchId: string) => engine.watchDelete(watchId));
+  handle(IPC.listProjects, () => engine.listProjects());
+  handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
+    engine.createSession({ ...req, origin: 'user' }),
+  );
 
   const broadcast = (channel: string, payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload);
@@ -53,6 +57,8 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.bulkCancel,
     IPC.watchCreate,
     IPC.watchDelete,
+    IPC.listProjects,
+    IPC.createSession,
   ];
   return () => {
     for (const u of unsubs) u();

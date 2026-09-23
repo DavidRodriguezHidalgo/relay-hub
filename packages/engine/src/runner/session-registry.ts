@@ -10,6 +10,8 @@ const run = promisify(execFile);
 export interface SessionRegistry {
   /** Pids of live Claude Code processes holding the session that Relay did not start. */
   foreignHolders(sessionId: string): Promise<number[]>;
+  /** Every session held by a live Claude process Relay did not start, with that process's status. */
+  openSessions?(): Promise<Record<string, 'busy' | 'idle'>>;
 }
 
 export interface ClaudeSessionRegistryOptions {
@@ -60,25 +62,39 @@ export class ClaudeSessionRegistry implements SessionRegistry {
     this.isOwnDescendant = opts.isOwnDescendant ?? descendsFromSelf;
   }
 
+  async openSessions(): Promise<Record<string, 'busy' | 'idle'>> {
+    const open: Record<string, 'busy' | 'idle'> = {};
+    for (const e of await this.foreignEntries()) {
+      if (typeof e.sessionId !== 'string') continue;
+      open[e.sessionId] = e.status === 'busy' || open[e.sessionId] === 'busy' ? 'busy' : 'idle';
+    }
+    return open;
+  }
+
   async foreignHolders(sessionId: string): Promise<number[]> {
+    return (await this.foreignEntries()).filter((e) => e.sessionId === sessionId).map((e) => e.pid);
+  }
+
+  /** Registry entries of live processes that are not Relay's own. */
+  private async foreignEntries(): Promise<{ pid: number; sessionId?: unknown; status?: unknown }[]> {
     let names: string[];
     try {
       names = await readdir(this.dir);
     } catch {
       return [];
     }
-    const holders: number[] = [];
+    const found: { pid: number; sessionId?: unknown; status?: unknown }[] = [];
     for (const name of names.filter((n) => /^\d+\.json$/.test(n)).sort()) {
-      let entry: { pid?: unknown; sessionId?: unknown };
+      let entry: { pid?: unknown; sessionId?: unknown; status?: unknown };
       try {
         entry = JSON.parse(await readFile(join(this.dir, name), 'utf8')) as typeof entry;
       } catch {
         continue;
       }
-      if (entry.sessionId !== sessionId || typeof entry.pid !== 'number') continue;
+      if (typeof entry.pid !== 'number') continue;
       if (!this.isAlive(entry.pid) || (await this.isOwnDescendant(entry.pid))) continue;
-      holders.push(entry.pid);
+      found.push({ ...entry, pid: entry.pid });
     }
-    return holders;
+    return found;
   }
 }
