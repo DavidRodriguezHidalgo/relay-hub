@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SessionSummary, TranscriptEntry } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
+import { OrchestratorChat } from './OrchestratorChat';
 import { SessionList } from './SessionList';
 import { SessionPanel } from './SessionPanel';
+import { useFollowBottom } from './useFollowBottom';
 import { useRunState } from './useRunState';
-
-/** How close to the bottom (px) still counts as "following" the transcript. */
-const FOLLOW_THRESHOLD = 40;
 
 export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -14,14 +13,15 @@ export function App() {
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [showSidechain, setShowSidechain] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const panelRef = useRef<HTMLElement>(null);
-  const followRef = useRef(true);
   const run = useRunState();
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const liveEntries = selected ? (run.liveEntries[selected.id] ?? []) : [];
 
   useEffect(() => {
     void window.relay.listSessions().then(setSessions);
+    void window.relay.orchestratorHistory().then(setOrchHistory);
     return window.relay.onSessionsChanged(setSessions);
   }, []);
 
@@ -39,28 +39,24 @@ export function App() {
     };
   }, [selectedId, selectedVersion]);
 
-  // A newly opened session starts at its latest turn; updates keep following it unless the user scrolled up.
   useEffect(() => {
-    followRef.current = true;
     setSendError(null);
   }, [selectedId]);
 
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (panel && followRef.current) panel.scrollTop = panel.scrollHeight;
-  }, [entries, liveEntries, showSidechain]);
-
-  const onPanelScroll = () => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    followRef.current = panel.scrollHeight - panel.scrollTop - panel.clientHeight <= FOLLOW_THRESHOLD;
-  };
+  // A newly opened session starts at its latest turn; updates keep following it unless the user scrolled up.
+  const onPanelScroll = useFollowBottom(panelRef, [entries, liveEntries, showSidechain], selectedId);
 
   return (
     <div className="app">
       <SessionList sessions={sessions} selectedId={selectedId} onSelect={setSelectedId} states={run.states} />
       <main className="orchestrator" aria-label="Orchestrator">
-        <p className="placeholder">Orchestrator chat arrives in milestone 3.</p>
+        <OrchestratorChat
+          history={orchHistory}
+          liveEntries={run.liveEntries[ORCHESTRATOR_KEY] ?? []}
+          state={run.states[ORCHESTRATOR_KEY]}
+          onSend={(p) => void window.relay.orchestratorSend(p)}
+          onInterrupt={() => void window.relay.orchestratorInterrupt()}
+        />
         <ApprovalsDrawer
           approvals={run.approvals}
           sessions={sessions}

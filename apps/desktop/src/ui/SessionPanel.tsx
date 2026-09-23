@@ -8,7 +8,8 @@ import type {
   TranscriptEntry,
 } from '@relay/shared';
 import { ApprovalCard } from './ApprovalCard';
-import { TranscriptView, type ViewEntry } from './TranscriptView';
+import { mergeEntries } from './mergeEntries';
+import { TranscriptView } from './TranscriptView';
 
 interface Props {
   session: SessionSummary;
@@ -22,12 +23,6 @@ interface Props {
   onSend: (prompt: string, mode: DeliveryMode) => void;
   onInterrupt: () => void;
   devTools: boolean;
-}
-
-/** File entries first, then live ones the file has not caught up with yet. */
-function merge(entries: TranscriptEntry[], live: LiveEntry[]): ViewEntry[] {
-  const seen = new Set(entries.map((e) => e.uuid));
-  return [...entries, ...live.filter((e) => !seen.has(e.uuid))];
 }
 
 export function SessionPanel(p: Props) {
@@ -61,7 +56,7 @@ export function SessionPanel(p: Props) {
       {p.approvals.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />
       ))}
-      <TranscriptView entries={merge(p.entries, p.liveEntries)} hideSidechain={!p.showSidechain} />
+      <TranscriptView entries={mergeEntries(p.entries, p.liveEntries)} hideSidechain={!p.showSidechain} />
       {p.devTools && (
         <form
           className="dev-send"

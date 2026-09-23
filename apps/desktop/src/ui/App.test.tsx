@@ -39,6 +39,31 @@ describe('App', () => {
     Reflect.deleteProperty(window, 'relay');
   });
 
+  it('loads the orchestrator history, sends from the chat, and shows orchestrator entries only in the chat', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => {
+      emit = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    expect(relay.orchestratorHistory).toHaveBeenCalledTimes(1);
+    await userEvent.type(screen.getByPlaceholderText('Ask Relay…'), 'hello{Enter}');
+    expect(relay.orchestratorSend).toHaveBeenCalledWith('hello');
+    await act(async () => {
+      emit!({
+        type: 'entry',
+        sessionId: 'orchestrator',
+        entry: {
+          uuid: 'o1', role: 'assistant', timestamp: '2026-09-23T00:00:00.000Z', isSidechain: false, isMeta: false,
+          blocks: [{ kind: 'text', text: 'Two sessions are running.' }], origin: 'user',
+        },
+      });
+    });
+    expect(screen.getByLabelText('Orchestrator')).toHaveTextContent('Two sessions are running.');
+    expect(screen.getByLabelText('Session panel')).not.toHaveTextContent('Two sessions are running.');
+  });
+
   it('re-fetches the transcript only when the selected session itself changed', async () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));
