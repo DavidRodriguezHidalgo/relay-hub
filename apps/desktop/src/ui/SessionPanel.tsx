@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type {
   ApprovalDecision,
   DeliveryMode,
@@ -93,6 +93,7 @@ export function SessionPanel(p: Props) {
       setDismissed(true);
     }
   };
+  const merged = useMemo(() => mergeEntries(p.entries, p.liveEntries), [p.entries, p.liveEntries]);
   const state = p.state?.state ?? 'idle';
   const dot = p.dot ?? dotState(p.session.id, p.state ? { [p.session.id]: p.state } : undefined);
   const submit = () => {
@@ -140,7 +141,7 @@ export function SessionPanel(p: Props) {
       {p.approvals.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />
       ))}
-      <TranscriptView entries={mergeEntries(p.entries, p.liveEntries)} hideSidechain={!p.showSidechain} />
+      <TranscriptView entries={merged} hideSidechain={!p.showSidechain} />
       {!p.devTools && p.notice && (
         <p role="alert" className="error">
           {p.notice}

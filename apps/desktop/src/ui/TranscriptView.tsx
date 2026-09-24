@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import type { LiveEntry, TranscriptBlock, TranscriptEntry } from '@relay/shared';
 import { Markdown } from './Markdown';
 
@@ -45,24 +46,39 @@ function Block({ block, sessions, onOpenSession }: { block: TranscriptBlock } & 
   }
 }
 
+/** One card. Memoised so that typing elsewhere does not re-render every entry on screen. */
+const EntryRow = memo(function EntryRow({
+  entry,
+  sessions,
+  onOpenSession,
+}: { entry: ViewEntry } & Pick<Props, 'sessions' | 'onOpenSession'>) {
+  return (
+    <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}`}>
+      <header>
+        <span>{entry.role}</span>
+        {entry.origin && <span className="origin">{entry.origin}</span>}
+        <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+      </header>
+      {entry.blocks.map((b, i) => (
+        <Block key={i} block={b} sessions={sessions} onOpenSession={onOpenSession} />
+      ))}
+    </li>
+  );
+});
+
 export function TranscriptView({ entries, hideSidechain, sessions, onOpenSession }: Props) {
   // thinking is never shown, so a frame holding only thinking would be an empty card
-  const visible = entries.filter(
-    (e) => !e.isMeta && (!hideSidechain || !e.isSidechain) && e.blocks.some((b) => b.kind !== 'thinking'),
+  const visible = useMemo(
+    () =>
+      entries.filter(
+        (e) => !e.isMeta && (!hideSidechain || !e.isSidechain) && e.blocks.some((b) => b.kind !== 'thinking'),
+      ),
+    [entries, hideSidechain],
   );
   return (
     <ol className="transcript">
       {visible.map((e) => (
-        <li key={e.uuid} className={`entry entry--${e.role}${e.isSidechain ? ' entry--sidechain' : ''}`}>
-          <header>
-            <span>{e.role}</span>
-            {e.origin && <span className="origin">{e.origin}</span>}
-            <time dateTime={e.timestamp}>{new Date(e.timestamp).toLocaleTimeString()}</time>
-          </header>
-          {e.blocks.map((b, i) => (
-            <Block key={i} block={b} sessions={sessions} onOpenSession={onOpenSession} />
-          ))}
-        </li>
+        <EntryRow key={e.uuid} entry={e} sessions={sessions} onOpenSession={onOpenSession} />
       ))}
     </ol>
   );

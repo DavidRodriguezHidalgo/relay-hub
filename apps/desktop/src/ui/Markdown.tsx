@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkSessionLinks, SESSION_HREF } from './sessionLinks';
@@ -15,7 +16,12 @@ interface Props {
   onOpenSession?: (id: string) => void;
 }
 
-export function Markdown({ text, sessions, onOpenSession }: Props) {
+/**
+ * Parsing costs real time, and a transcript holds hundreds of these, so an unchanged
+ * reply is never parsed again — without this, every keystroke in a message box pays for
+ * re-rendering the whole transcript.
+ */
+export const Markdown = memo(function Markdown({ text, sessions, onOpenSession }: Props) {
   const plugins = sessions && sessions.length > 0 ? [remarkGfm, remarkSessionLinks(sessions)] : [remarkGfm];
   return (
     <div className="md">
@@ -42,4 +48,4 @@ export function Markdown({ text, sessions, onOpenSession }: Props) {
       </ReactMarkdown>
     </div>
   );
-}
+});
