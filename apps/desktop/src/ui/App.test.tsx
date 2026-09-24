@@ -375,8 +375,9 @@ describe('App collisions', () => {
   beforeEach(() => {
     relay = {
       listSessions: vi.fn().mockResolvedValue([
-        s({ id: 'a', title: 'Alpha', cwd: '/code/app' }),
-        s({ id: 'b', title: 'Beta', cwd: '/code/app' }),
+        // both worked here moments ago: this is the clash that loses edits
+        s({ id: 'a', title: 'Alpha', cwd: '/code/app', lastActivity: new Date().toISOString() }),
+        s({ id: 'b', title: 'Beta', cwd: '/code/app', lastActivity: new Date().toISOString() }),
       ]),
       getTranscript: vi.fn().mockResolvedValue([]),
       onSessionsChanged: vi.fn(() => () => undefined),

@@ -23,7 +23,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
 };
 
 const commands = [
@@ -445,7 +445,7 @@ describe('SessionPanel collisions', () => {
   const other = { ...session, id: 'b', title: 'Beta' };
 
   it('warns when another session is working in the same directory, and names it', () => {
-    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other] } });
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other], key: 'k' } });
     const warning = screen.getByRole('alert');
     expect(warning).toHaveTextContent(/same directory/i);
     expect(warning).toHaveTextContent('Beta');
@@ -454,18 +454,36 @@ describe('SessionPanel collisions', () => {
 
   it('offers a worktree as the way out', async () => {
     const onNewWorktree = vi.fn();
-    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other] }, onNewWorktree });
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other], key: 'k' }, onNewWorktree });
     await userEvent.click(screen.getByRole('button', { name: /worktree/i }));
     expect(onNewWorktree).toHaveBeenCalled();
   });
 
   it('warns more mildly about sharing a branch from another directory', () => {
-    renderPanel({ collision: { kind: 'branch', cwd: '/repo', branch: 'feat/a', others: [other] } });
+    renderPanel({ collision: { kind: 'branch', cwd: '/repo', branch: 'feat/a', others: [other], key: 'k' } });
     expect(screen.getByRole('alert')).toHaveTextContent(/same branch/i);
   });
 
   it('says nothing when the session has the place to itself', () => {
     renderPanel({ collision: null });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('SessionPanel collision list', () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({ ...session, id: `s${i}`, title: `Session ${i}` }));
+
+  it('names a few and counts the rest, rather than listing everything', () => {
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: null, others: many, key: 'k' } });
+    const warning = screen.getByRole('alert');
+    expect(warning).toHaveTextContent('Session 0, Session 1, Session 2 and 27 more');
+    expect(warning).not.toHaveTextContent('Session 9');
+  });
+
+  it('can be dismissed', async () => {
+    const onDismissCollision = vi.fn();
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: null, others: many, key: 'k' }, onDismissCollision });
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(onDismissCollision).toHaveBeenCalled();
   });
 });

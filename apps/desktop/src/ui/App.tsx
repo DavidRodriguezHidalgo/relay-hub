@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { collisionFor } from './collisions';
+import { dismissedCollisions, dismissCollision } from './dismissed';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
 import { applyTheme, loadTheme, saveTheme, systemTheme, type Theme } from './theme';
@@ -34,6 +35,7 @@ export function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   /** Set when the process behind this window does not answer everything the window will ask. */
   const [staleMain, setStaleMain] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string[]>(dismissedCollisions);
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const checkForUpdate = async () => {
@@ -269,8 +271,15 @@ export function App() {
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
             heldElsewhere={run.external[selected.id] ?? null}
-            collision={collisionFor(sessions, selected.id)}
+            collision={(() => {
+              const hit = collisionFor(sessions, selected.id, { states: run.states, external: run.external, now: Date.now() });
+              return hit && dismissed.includes(hit.key) ? null : hit;
+            })()}
             onNewWorktree={() => setCreating(true)}
+            onDismissCollision={() => {
+              const hit = collisionFor(sessions, selected.id, { states: run.states, external: run.external, now: Date.now() });
+              if (hit) setDismissed(dismissCollision(hit.key));
+            }}
             models={models}
             onSetModel={(id) =>
               void window.relay

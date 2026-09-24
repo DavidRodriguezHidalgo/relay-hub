@@ -47,12 +47,20 @@ interface Props {
   /** Another live session working in the same place, when there is one. */
   collision: Collision | null;
   onNewWorktree: () => void;
+  onDismissCollision: () => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
   /** Commands, skills and plugins this session can be asked to run. */
   commands: Invocable[];
   /** The sidebar's indicator for this session; defaults to whatever its own state says. */
   dot?: string;
+}
+
+/** The first few names, then a count: a directory can hold more sessions than anyone reads. */
+function namesOf(others: { title: string }[]): string {
+  const shown = others.slice(0, 3).map((o) => o.title);
+  const rest = others.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} and ${rest} more` : shown.join(', ');
 }
 
 export function SessionPanel(p: Props) {
@@ -226,10 +234,15 @@ export function SessionPanel(p: Props) {
               </>
             )}
           </p>
-          <p className="collision__who">{p.collision.others.map((o) => o.title).join(', ')}</p>
-          <button type="button" onClick={p.onNewWorktree}>
-            Start one in its own worktree
-          </button>
+          <p className="collision__who">{namesOf(p.collision.others)}</p>
+          <div className="collision__actions">
+            <button type="button" onClick={p.onNewWorktree}>
+              Start one in its own worktree
+            </button>
+            <button type="button" onClick={p.onDismissCollision}>
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
       {state === 'running' && <WorkingLine />}
