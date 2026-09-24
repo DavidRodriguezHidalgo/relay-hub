@@ -194,6 +194,7 @@
   .bulk-card__actions { @apply mt-2 flex gap-1.5; }
   .bulk-card__approvals { @apply ml-2 text-[11px] font-semibold text-waiting; }
 
+  .stale-banner { @apply shrink-0 bg-danger px-3 py-1 text-center text-[12px] font-semibold text-bg; }
   .allow-all-banner { @apply flex shrink-0 items-center justify-center gap-3 bg-waiting px-3 py-1 text-[12px] font-semibold text-bg; }
   .titlebar__settings { @apply absolute top-1.5 right-3 text-[12px]; }
   .settings-backdrop { @apply fixed inset-0 z-20 flex items-center justify-center bg-bg/80 p-6; }

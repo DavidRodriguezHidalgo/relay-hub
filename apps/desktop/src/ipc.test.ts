@@ -1,0 +1,46 @@
+// @vitest-environment node
+import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { IPC } from '@relay/shared';
+import type { RelayEngine } from '@relay/engine';
+
+const handled: string[] = [];
+const removed: string[] = [];
+vi.mock('electron', () => ({
+  ipcMain: {
+    handle: (channel: string) => handled.push(channel),
+    removeHandler: (channel: string) => removed.push(channel),
+  },
+  BrowserWindow: { fromWebContents: () => null, getAllWindows: () => [] },
+}));
+
+const { registerEngineIpc } = await import('./ipc');
+
+/** Channels the preload actually invokes, read from its source so this cannot drift. */
+const preload = readFileSync(fileURLToPath(new URL('./preload.ts', import.meta.url)), 'utf8');
+const invoked = [...preload.matchAll(/ipcRenderer\.invoke\(IPC\.(\w+)/g)].map((m) => IPC[m[1] as keyof typeof IPC]);
+
+/** Broadcast from main to the window; nobody invokes these. */
+const BROADCAST = new Set<string>([IPC.sessionsChanged, IPC.runnerEvent]);
+
+describe('engine IPC', () => {
+  const engine = { onSessionsChanged: () => () => undefined, onEvent: () => () => undefined } as unknown as RelayEngine;
+  const dispose = registerEngineIpc(engine);
+
+  it('registers a handler for every channel the preload invokes', () => {
+    expect(invoked.length).toBeGreaterThan(10);
+    for (const channel of invoked) expect(handled, `no handler for ${channel}`).toContain(channel);
+  });
+
+  it('registers a handler for every invokable channel that exists at all', () => {
+    for (const channel of Object.values(IPC)) {
+      if (!BROADCAST.has(channel)) expect(handled, `no handler for ${channel}`).toContain(channel);
+    }
+  });
+
+  it('removes exactly what it registered', () => {
+    dispose();
+    expect([...removed].sort()).toEqual([...handled].sort());
+  });
+});

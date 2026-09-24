@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { RelayApi, RunnerEvent, SessionSummary } from '@relay/shared';
+import { IPC, type RelayApi, type RunnerEvent, type SessionSummary } from '@relay/shared';
 import { App } from './App';
 
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
@@ -42,6 +42,7 @@ describe('App', () => {
       pathForFile: vi.fn(() => '/shots/a.png'),
       settings: vi.fn().mockResolvedValue({ allowAllActions: false }),
       setAllowAllActions: vi.fn().mockResolvedValue(undefined),
+      channels: vi.fn().mockResolvedValue(Object.values(IPC)),
     };
     Object.assign(window, { relay });
   });
@@ -341,5 +342,16 @@ describe('App', () => {
     expect(relay.setAllowAllActions).toHaveBeenLastCalledWith(false);
     localStorage.clear();
     delete document.documentElement.dataset.theme;
+  });
+  it('says plainly when the process behind the window is older than the window', async () => {
+    relay.channels.mockResolvedValue(Object.values(IPC).filter((c) => c !== IPC.setAllowAllActions));
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/newer than the app process.*Restart/);
+  });
+
+  it('treats a process that cannot even list its channels as older too', async () => {
+    relay.channels.mockRejectedValue(new Error("No handler registered for 'relay:channels'"));
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Restart the app/);
   });
 });

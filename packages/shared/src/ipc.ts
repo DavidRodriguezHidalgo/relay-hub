@@ -25,6 +25,7 @@ export const IPC = {
   takeOver: 'relay:takeOver',
   settings: 'relay:settings',
   setAllowAllActions: 'relay:setAllowAllActions',
+  channels: 'relay:channels',
 } as const;
 
 export interface SendRequest {
@@ -57,6 +58,8 @@ export interface RelayApi {
   takeOver(sessionId: string): Promise<number[]>;
   settings(): Promise<{ allowAllActions: boolean }>;
   setAllowAllActions(on: boolean): Promise<void>;
+  /** The channels the running main process answers; a window compares it with what it expects. */
+  channels(): Promise<string[]>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

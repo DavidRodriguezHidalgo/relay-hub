@@ -12,6 +12,29 @@ function assertTrusted(event: IpcMainInvokeEvent): void {
 
 /** Wires one engine to IPC; returns a disposer. */
 export function registerEngineIpc(engine: RelayEngine): () => void {
+  /** Everything a window may invoke. A dev window hot-reloads; the process behind it does not. */
+  const channels = [
+    IPC.listSessions,
+    IPC.getTranscript,
+    IPC.send,
+    IPC.interrupt,
+    IPC.decide,
+    IPC.runState,
+    IPC.orchestratorSend,
+    IPC.orchestratorInterrupt,
+    IPC.orchestratorHistory,
+    IPC.bulkConfirm,
+    IPC.bulkCancel,
+    IPC.watchCreate,
+    IPC.watchDelete,
+    IPC.listProjects,
+    IPC.createSession,
+    IPC.listCommands,
+    IPC.takeOver,
+    IPC.settings,
+    IPC.setAllowAllActions,
+    IPC.channels,
+  ];
   const handle = (channel: string, fn: (...args: never[]) => unknown) => {
     ipcMain.handle(channel, (event, ...args) => {
       assertTrusted(event);
@@ -36,6 +59,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.takeOver, (sessionId: string) => engine.takeOver(sessionId));
   handle(IPC.settings, () => engine.settings());
   handle(IPC.setAllowAllActions, (on: boolean) => engine.setAllowAllActions(on));
+  handle(IPC.channels, () => channels);
   handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );
@@ -47,27 +71,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     engine.onSessionsChanged((sessions) => broadcast(IPC.sessionsChanged, sessions)),
     engine.onEvent((event) => broadcast(IPC.runnerEvent, event)),
   ];
-  const channels = [
-    IPC.listSessions,
-    IPC.getTranscript,
-    IPC.send,
-    IPC.interrupt,
-    IPC.decide,
-    IPC.runState,
-    IPC.orchestratorSend,
-    IPC.orchestratorInterrupt,
-    IPC.orchestratorHistory,
-    IPC.bulkConfirm,
-    IPC.bulkCancel,
-    IPC.watchCreate,
-    IPC.watchDelete,
-    IPC.listProjects,
-    IPC.createSession,
-    IPC.listCommands,
-    IPC.takeOver,
-    IPC.settings,
-    IPC.setAllowAllActions,
-  ];
+
   return () => {
     for (const u of unsubs) u();
     for (const c of channels) ipcMain.removeHandler(c);

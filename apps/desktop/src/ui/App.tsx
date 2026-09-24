@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
+import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
@@ -30,6 +30,21 @@ export function App() {
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  /** Set when the process behind this window does not answer everything the window will ask. */
+  const [staleMain, setStaleMain] = useState<string | null>(null);
+
+  useEffect(() => {
+    const wanted = Object.values(IPC).filter((c) => c !== IPC.sessionsChanged && c !== IPC.runnerEvent);
+    window.relay.channels().then(
+      (have) => {
+        const missing = wanted.filter((c) => !have.includes(c));
+        if (missing.length > 0) {
+          setStaleMain(`This window is newer than the app process behind it (${missing.length} missing). Restart the app.`);
+        }
+      },
+      () => setStaleMain('This window is newer than the app process behind it. Restart the app.'),
+    );
+  }, []);
   /** Null until the user picks one, so the app keeps following the system before then. */
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
@@ -112,6 +127,11 @@ export function App() {
           Settings
         </button>
       </div>
+      {staleMain && (
+        <div role="alert" className="stale-banner">
+          {staleMain}
+        </div>
+      )}
       {allowAllActions && (
         <div role="status" className="allow-all-banner">
           Relay is allowing every action without asking.
