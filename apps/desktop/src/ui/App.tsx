@@ -64,7 +64,10 @@ export function App() {
   const onPanelScroll = useFollowBottom(panelRef, [entries, liveEntries, showSidechain], selectedId);
 
   return (
-    <div className="app">
+    <div className="shell">
+      {/* the window has no frame of its own, so this strip is what you drag it by */}
+      <div className="titlebar" aria-hidden="true" />
+      <div className="app">
       {run.gh.state === 'unavailable' && (
         <div role="alert" className="gh-banner">
           GitHub CLI unavailable — PR watches paused: {run.gh.message}
@@ -152,6 +155,7 @@ export function App() {
           <p className="placeholder">Select a session.</p>
         )}
       </section>
+      </div>
     </div>
   );
 }

@@ -65,3 +65,19 @@ test('renders readably in dark and light', async () => {
   }
   await app.close();
 });
+
+test('the window can be dragged by its top strip, and controls still take clicks', async () => {
+  const app = await launchWithFixtures(['basic.jsonl']);
+  const page = await app.firstWindow();
+  const regions = await page.evaluate(() => {
+    const at = (sel: string) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el).getPropertyValue('-webkit-app-region') : null;
+    };
+    return { strip: at('.titlebar'), button: at('button'), box: at('textarea') };
+  });
+  expect(regions.strip).toBe('drag');
+  expect(regions.button).toBe('no-drag');
+  expect(regions.box).toBe('no-drag');
+  await app.close();
+});

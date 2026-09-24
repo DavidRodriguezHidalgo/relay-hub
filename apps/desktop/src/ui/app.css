@@ -23,6 +23,10 @@
 @layer base {
   html, body, #root { @apply h-full; }
   body { @apply m-0 bg-bg text-fg font-sans text-[14px] leading-[1.45] antialiased; }
+  /* anything you act on must be outside the drag region, or the window eats its clicks */
+  button, a, input, select, textarea, summary, label, [role='option'], [role='listbox'], [role='button'] {
+    -webkit-app-region: no-drag;
+  }
   /* thin, quiet scrollbars that only show a thumb; the gutter is reserved so content never jumps */
   * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
   *:hover { scrollbar-color: var(--scrollbar-hover) transparent; }
@@ -49,8 +53,11 @@
       disabled:border-line disabled:bg-surface-2 disabled:text-muted disabled:opacity-100 disabled:hover:brightness-100;
   }
 
-  .app { @apply grid h-screen grid-cols-[300px_minmax(0,1fr)_440px] overflow-hidden bg-bg; }
-  .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-10 pb-2; }
+  .shell { @apply flex h-screen flex-col bg-bg; }
+  /* macOS puts the traffic lights over this strip, so it stays tall enough to clear them */
+  .titlebar { @apply h-10 shrink-0 bg-bg; -webkit-app-region: drag; }
+  .app { @apply grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)_440px] overflow-hidden bg-bg; }
+  .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-2 pb-2; }
   .session-list__controls { @apply mb-2 flex items-center gap-2 text-[12px] text-muted; }
   .session-list__controls input[type='search'] { @apply flex-1; }
   .session-list h2 { @apply mx-0 mt-4 mb-1; }
@@ -72,9 +79,9 @@
   .session-row__meta { @apply mt-0.5 flex gap-1.5 text-[11px] text-muted; }
   .badge { @apply rounded border border-line px-1 text-[11px] text-fg; }
 
-  .orchestrator { @apply flex min-h-0 min-w-0 flex-col overflow-hidden px-5 pt-10; }
+  .orchestrator { @apply flex min-h-0 min-w-0 flex-col overflow-hidden px-5 pt-3; }
   /* a column, so the dev box sits at the bottom even when the transcript is short */
-  .session-panel { @apply flex min-w-0 flex-col overflow-x-hidden overflow-y-auto border-l border-line bg-surface pl-6 pr-4 pt-10; }
+  .session-panel { @apply flex min-w-0 flex-col overflow-x-hidden overflow-y-auto border-l border-line bg-surface pl-6 pr-4 pt-3; }
   .session-panel > * { @apply shrink-0; }
   .placeholder { @apply text-muted; }
 

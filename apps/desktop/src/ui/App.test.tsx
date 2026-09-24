@@ -279,4 +279,9 @@ describe('App', () => {
     await screen.findByText('e3');
     expect(panel.scrollTop).toBe(1000);
   });
+  it('gives the window a strip to drag it by', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('Alpha');
+    expect(container.querySelector('.titlebar')).toBeInTheDocument();
+  });
 });
