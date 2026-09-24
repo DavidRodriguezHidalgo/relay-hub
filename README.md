@@ -96,4 +96,4 @@ built app you drive sessions through the Relay chat instead. Everything else wor
 
 ## Licence
 
-Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
+[MIT](LICENSE). Use it, change it, ship it; keep the copyright notice.

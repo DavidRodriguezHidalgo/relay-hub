@@ -17,7 +17,7 @@
   "author": {
     "name": "David Rodriguez"
   },
-  "license": "MIT OR Apache-2.0",
+  "license": "MIT",
   "dependencies": {
     "@relay/engine": "workspace:*",
     "@relay/shared": "workspace:*",
