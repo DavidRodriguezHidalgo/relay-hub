@@ -164,6 +164,9 @@
   .working__mark { @apply inline-block animate-pulse; }
   .working__meta { @apply text-muted; }
   .working__tip { @apply m-0 pl-4 text-[12px] text-muted; }
+  .collision { @apply mb-2 rounded-lg border border-waiting bg-surface-2 px-3 py-2; }
+  .collision__what { @apply m-0 text-waiting; }
+  .collision__who { @apply mt-1 mb-2 text-[12px] text-muted; }
   .working { @apply px-1 pb-2; }
   .working__line { @apply m-0 text-accent-fg; }
   .working__mark { @apply inline-block animate-pulse; }

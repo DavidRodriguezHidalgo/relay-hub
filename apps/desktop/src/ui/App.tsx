@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
+import { collisionFor } from './collisions';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
 import { applyTheme, loadTheme, saveTheme, systemTheme, type Theme } from './theme';
@@ -268,6 +269,8 @@ export function App() {
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
             heldElsewhere={run.external[selected.id] ?? null}
+            collision={collisionFor(sessions, selected.id)}
+            onNewWorktree={() => setCreating(true)}
             models={models}
             onSetModel={(id) =>
               void window.relay

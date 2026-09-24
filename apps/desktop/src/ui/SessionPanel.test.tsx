@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ModelChoice } from '@relay/shared';
+import type { Collision } from './collisions';
 import type { Invocable, LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { SessionPanel } from './SessionPanel';
 
@@ -22,7 +23,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(),
 };
 
 const commands = [
@@ -437,5 +438,34 @@ describe('SessionPanel model picker', () => {
     await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
     await userEvent.keyboard('/review 3497{Enter}');
     expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
+  });
+});
+
+describe('SessionPanel collisions', () => {
+  const other = { ...session, id: 'b', title: 'Beta' };
+
+  it('warns when another session is working in the same directory, and names it', () => {
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other] } });
+    const warning = screen.getByRole('alert');
+    expect(warning).toHaveTextContent(/same directory/i);
+    expect(warning).toHaveTextContent('Beta');
+    expect(warning).toHaveTextContent('/repo');
+  });
+
+  it('offers a worktree as the way out', async () => {
+    const onNewWorktree = vi.fn();
+    renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: 'feat/a', others: [other] }, onNewWorktree });
+    await userEvent.click(screen.getByRole('button', { name: /worktree/i }));
+    expect(onNewWorktree).toHaveBeenCalled();
+  });
+
+  it('warns more mildly about sharing a branch from another directory', () => {
+    renderPanel({ collision: { kind: 'branch', cwd: '/repo', branch: 'feat/a', others: [other] } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/same branch/i);
+  });
+
+  it('says nothing when the session has the place to itself', () => {
+    renderPanel({ collision: null });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

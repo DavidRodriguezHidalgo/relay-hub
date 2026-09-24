@@ -17,7 +17,10 @@ describe('App', () => {
   beforeEach(() => {
     listeners = [];
     relay = {
-      listSessions: vi.fn().mockResolvedValue([s({ id: 'a', title: 'Alpha' }), s({ id: 'b', title: 'Beta' })]),
+      listSessions: vi.fn().mockResolvedValue([
+        s({ id: 'a', title: 'Alpha', cwd: '/c/alpha', branch: 'feat/a' }),
+        s({ id: 'b', title: 'Beta', cwd: '/c/beta', branch: 'feat/b' }),
+      ]),
       getTranscript: vi.fn().mockResolvedValue([]),
       onSessionsChanged: vi.fn((l: (sessions: SessionSummary[]) => void) => {
         listeners.push(l);
@@ -363,5 +366,42 @@ describe('App', () => {
     render(<App />);
     expect(await screen.findByText(/Relay Hub 0\.2\.0 is available/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('href', 'https://github.com/o/r/releases/tag/v0.2.0');
+  });
+});
+
+describe('App collisions', () => {
+  let relay: { [K in keyof RelayApi]: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    relay = {
+      listSessions: vi.fn().mockResolvedValue([
+        s({ id: 'a', title: 'Alpha', cwd: '/code/app' }),
+        s({ id: 'b', title: 'Beta', cwd: '/code/app' }),
+      ]),
+      getTranscript: vi.fn().mockResolvedValue([]),
+      onSessionsChanged: vi.fn(() => () => undefined),
+      send: vi.fn(), interrupt: vi.fn(), decide: vi.fn(),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} }),
+      onRunnerEvent: vi.fn(() => () => undefined),
+      orchestratorSend: vi.fn(), orchestratorInterrupt: vi.fn(), orchestratorHistory: vi.fn().mockResolvedValue([]),
+      bulkConfirm: vi.fn(), bulkCancel: vi.fn(), watchCreate: vi.fn(), watchDelete: vi.fn(),
+      listProjects: vi.fn().mockResolvedValue([]), createSession: vi.fn(),
+      listCommands: vi.fn().mockResolvedValue([]), takeOver: vi.fn(),
+      settings: vi.fn().mockResolvedValue({ allowAllActions: false }), setAllowAllActions: vi.fn(),
+      pathForFile: vi.fn(() => ''), channels: vi.fn().mockResolvedValue(Object.values(IPC)),
+      aside: vi.fn(), listModels: vi.fn().mockResolvedValue([]), setModel: vi.fn(),
+      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: null, newer: false, url: null, notes: null, publishedAt: null, error: null }),
+    };
+    Object.assign(window, { relay });
+  });
+
+  afterEach(() => Reflect.deleteProperty(window, 'relay'));
+
+  it('warns as soon as a session sharing its directory is opened', async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    const warning = await screen.findByRole('alert');
+    expect(warning).toHaveTextContent(/same directory/i);
+    expect(warning).toHaveTextContent('/code/app');
   });
 });

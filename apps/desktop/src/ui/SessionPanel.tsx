@@ -12,6 +12,7 @@ import type {
   TranscriptEntry,
 } from '@relay/shared';
 import { ApprovalCard } from './ApprovalCard';
+import type { Collision } from './collisions';
 import { matchModels } from './matchModels';
 import { DOT_LABEL, dotState } from './sessionDot';
 import { applyCommand, commandItem, matchCommands, modelItem, SlashMenu, slashQuery, type MenuItem } from './SlashMenu';
@@ -43,6 +44,9 @@ interface Props {
   /** Models this session can run on, with the one in use marked. */
   models: ModelChoice[];
   onSetModel: (id: string) => void;
+  /** Another live session working in the same place, when there is one. */
+  collision: Collision | null;
+  onNewWorktree: () => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
   /** Commands, skills and plugins this session can be asked to run. */
@@ -206,6 +210,27 @@ export function SessionPanel(p: Props) {
         <p role="alert" className="error">
           {p.notice}
         </p>
+      )}
+      {p.collision && (
+        <div role="alert" className="collision">
+          <p className="collision__what">
+            {p.collision.kind === 'directory' ? (
+              <>
+                Another session is working in the same directory, <code>{p.collision.cwd}</code>. Edits from both land
+                on top of each other.
+              </>
+            ) : (
+              <>
+                Another session is on the same branch, <code>{p.collision.branch}</code>, from a different directory.
+                Their work will meet at push time.
+              </>
+            )}
+          </p>
+          <p className="collision__who">{p.collision.others.map((o) => o.title).join(', ')}</p>
+          <button type="button" onClick={p.onNewWorktree}>
+            Start one in its own worktree
+          </button>
+        </div>
       )}
       {state === 'running' && <WorkingLine />}
       {p.heldElsewhere && (

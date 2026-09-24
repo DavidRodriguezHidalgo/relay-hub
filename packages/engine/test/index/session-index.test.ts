@@ -125,7 +125,9 @@ describe('SessionIndex', () => {
   });
 
   it('emits one changed event after a burst of writes', async () => {
-    const idx = make();
+    // a window wide enough that two writes milliseconds apart cannot fall either side of it,
+    // however loaded the machine is; the point is that a burst coalesces, not how fast it does
+    const idx = make(undefined, { debounceMs: 600, maxWaitMs: 10_000 });
     await idx.scan();
     const events: number[] = [];
     idx.on('changed', (s) => events.push(s.length));
@@ -134,11 +136,11 @@ describe('SessionIndex', () => {
     const file = join(projectsDir, 'proj-a', 's-basic.jsonl');
     await appendFile(file, '\n{"type":"mode","mode":"normal","sessionId":"s-basic"}');
     await appendFile(file, '\n{"type":"mode","mode":"normal","sessionId":"s-basic"}');
-    // poll for the first event (a loaded machine delays FSEvents), then give a second one time to show up
-    for (let waited = 0; events.length === 0 && waited < 5_000; waited += 50) {
+    // poll for the first event (a loaded machine delays FSEvents), then let a second one show up
+    for (let waited = 0; events.length === 0 && waited < 10_000; waited += 50) {
       await new Promise((r) => setTimeout(r, 50));
     }
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 900));
     expect(events).toEqual([2]);
   });
 
