@@ -284,4 +284,15 @@ describe('App', () => {
     await screen.findByText('Alpha');
     expect(container.querySelector('.titlebar')).toBeInTheDocument();
   });
+
+  it('widens the session list and keeps that width for next time', async () => {
+    render(<App />);
+    await screen.findByText('Alpha');
+    const divider = screen.getByRole('separator', { name: 'Resize list column' });
+    divider.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(document.querySelector('.app')).toHaveAttribute('style', expect.stringContaining('316px'));
+    expect(JSON.parse(localStorage.getItem('relay.columnWidths') ?? '{}').left).toBe(316);
+    localStorage.clear();
+  });
 });

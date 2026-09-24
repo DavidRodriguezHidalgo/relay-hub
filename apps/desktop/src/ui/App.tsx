@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
+import { ColumnResizer } from './ColumnResizer';
+import { clampWidth, loadWidths, saveWidths, type ColumnWidths } from './columnWidths';
 import { NewSessionForm } from './NewSessionForm';
 import { OrchestratorChat } from './OrchestratorChat';
 import { SessionList } from './SessionList';
@@ -19,6 +21,13 @@ export function App() {
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const [commands, setCommands] = useState<Invocable[]>([]);
   const panelRef = useRef<HTMLElement>(null);
+  const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
+  const resize = (side: keyof ColumnWidths, px: number) =>
+    setWidths((w) => {
+      const next = { ...w, [side]: clampWidth(side, px) };
+      saveWidths(next);
+      return next;
+    });
   const run = useRunState();
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const liveEntries = selected ? (run.liveEntries[selected.id] ?? []) : [];
@@ -67,7 +76,10 @@ export function App() {
     <div className="shell">
       {/* the window has no frame of its own, so this strip is what you drag it by */}
       <div className="titlebar" aria-hidden="true" />
-      <div className="app">
+      <div
+        className="app"
+        style={{ gridTemplateColumns: `${widths.left}px 6px minmax(0,1fr) 6px ${widths.right}px` }}
+      >
       {run.gh.state === 'unavailable' && (
         <div role="alert" className="gh-banner">
           GitHub CLI unavailable — PR watches paused: {run.gh.message}
@@ -94,6 +106,7 @@ export function App() {
           )
         }
       />
+      <ColumnResizer label="Resize list column" width={widths.left} side="left" onResize={(px) => resize('left', px)} />
       <main className="orchestrator" aria-label="Orchestrator">
         <OrchestratorChat
           history={orchHistory}
@@ -115,6 +128,7 @@ export function App() {
           onOpenSession={setSelectedId}
         />
       </main>
+      <ColumnResizer label="Resize detail column" width={widths.right} side="right" onResize={(px) => resize('right', px)} />
       <section className="session-panel" aria-label="Session panel" ref={panelRef} onScroll={onPanelScroll}>
         {selected ? (
           <SessionPanel

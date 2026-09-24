@@ -24,7 +24,7 @@
   html, body, #root { @apply h-full; }
   body { @apply m-0 bg-bg text-fg font-sans text-[14px] leading-[1.45] antialiased; }
   /* anything you act on must be outside the drag region, or the window eats its clicks */
-  button, a, input, select, textarea, summary, label, [role='option'], [role='listbox'], [role='button'] {
+  button, a, input, select, textarea, summary, label, [role='option'], [role='listbox'], [role='button'], [role='separator'] {
     -webkit-app-region: no-drag;
   }
   /* thin, quiet scrollbars that only show a thumb; the gutter is reserved so content never jumps */
@@ -56,7 +56,8 @@
   .shell { @apply flex h-screen flex-col bg-bg; }
   /* macOS puts the traffic lights over this strip, so it stays tall enough to clear them */
   .titlebar { @apply h-10 shrink-0 bg-bg; -webkit-app-region: drag; }
-  .app { @apply grid min-h-0 flex-1 grid-cols-[300px_minmax(0,1fr)_440px] overflow-hidden bg-bg; }
+  .app { @apply grid min-h-0 flex-1 overflow-hidden bg-bg; grid-template-columns: 300px 6px minmax(0, 1fr) 6px 440px; }
+  .resizer { @apply cursor-col-resize bg-line/40 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none; }
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-2 pb-2; }
   .session-list__controls { @apply mb-2 flex items-center gap-2 text-[12px] text-muted; }
   .session-list__controls input[type='search'] { @apply flex-1; }

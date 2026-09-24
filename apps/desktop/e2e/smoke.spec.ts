@@ -69,6 +69,7 @@ test('renders readably in dark and light', async () => {
 test('the window can be dragged by its top strip, and controls still take clicks', async () => {
   const app = await launchWithFixtures(['basic.jsonl']);
   const page = await app.firstWindow();
+  await page.locator('.titlebar').waitFor(); // the strip only exists once the renderer has mounted
   const regions = await page.evaluate(() => {
     const at = (sel: string) => {
       const el = document.querySelector(sel);
