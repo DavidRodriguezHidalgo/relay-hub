@@ -12,7 +12,14 @@ const REASONS: Record<PendingApproval['reason'], string> = {
   'blocked-path': 'Path blocked by Claude Code',
 };
 
+/** A command longer than this is folded away: the card has to stay readable next to the chat. */
+const SUMMARY_LINES = 6;
+
 export function ApprovalCard({ approval, onDecide }: Props) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = approval.summary.split('\n');
+  const folded = lines.length > SUMMARY_LINES;
+  const shown = folded && !expanded ? `${lines.slice(0, SUMMARY_LINES).join('\n')}\n…` : approval.summary;
   /** One decision per approval: a second click would be refused by the engine anyway. */
   const [decided, setDecided] = useState(false);
   const decide = (d: ApprovalDecision) => {
@@ -23,7 +30,12 @@ export function ApprovalCard({ approval, onDecide }: Props) {
   return (
     <div className="approval" role="group" aria-label="Approval">
       <div className="approval__reason">{REASONS[approval.reason]}</div>
-      <code className="approval__summary">{approval.summary}</code>
+      <code className="approval__summary">{shown}</code>
+      {folded && (
+        <button type="button" className="approval__more" onClick={() => setExpanded(!expanded)}>
+          {expanded ? 'Show less' : `Show all ${lines.length} lines`}
+        </button>
+      )}
       <div className="approval__meta">
         {approval.toolName} · {approval.cwd}
       </div>

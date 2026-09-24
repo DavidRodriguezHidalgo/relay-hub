@@ -111,7 +111,8 @@
 
   .approval { @apply mb-2.5 rounded-lg border border-waiting bg-surface-2 px-3 py-2; }
   .approval__reason { @apply mb-1 font-semibold text-waiting; }
-  .approval__summary { @apply my-1 block font-mono text-[12px] whitespace-pre-wrap text-fg; }
+  .approval__summary { @apply my-1 block max-h-64 overflow-auto font-mono text-[12px] whitespace-pre-wrap [overflow-wrap:anywhere] text-fg; }
+  .approval__more { @apply mb-1 text-[11px]; }
   .approval__meta { @apply text-[11px] text-muted; }
   .approval__actions { @apply mt-2 flex flex-wrap gap-1.5; }
 
@@ -141,7 +142,7 @@
   .dev-send textarea { @apply w-full; }
   .dev-send__row { @apply mt-1 flex gap-1.5; }
 
-  .approvals-drawer { @apply sticky bottom-0 mt-auto border-t border-waiting bg-bg pt-2 pb-2; }
+  .approvals-drawer { @apply sticky bottom-0 mt-auto max-h-[45vh] overflow-auto border-t border-waiting bg-bg pt-2 pb-2; }
   .approvals-drawer h2 { @apply m-0 mb-2 text-[12px] font-semibold text-waiting; }
   .link { @apply mb-1 border-0 bg-transparent p-0 text-accent-fg underline; }
 

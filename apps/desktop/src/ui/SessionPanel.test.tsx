@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Invocable, LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { SessionPanel } from './SessionPanel';
@@ -334,5 +334,16 @@ describe('SessionPanel', () => {
     expect(screen.getByRole('status')).toHaveTextContent('still thinking');
     rerender(<SessionPanel {...base} entries={[]} liveEntries={[]} approvals={[]} state={{ state: 'idle', error: null }} />);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('puts the path of a dropped image into the box, so the session can read it', () => {
+    Object.assign(window, { relay: { pathForFile: (f: File) => `/shots/${f.name}` } });
+    try {
+      renderPanel();
+      const box = screen.getByPlaceholderText('Send to this session (dev)');
+      fireEvent.drop(box, { dataTransfer: { files: [new File(['x'], 'shot.png', { type: 'image/png' })], types: ['Files'] } });
+      expect(box).toHaveValue('/shots/shot.png\n');
+    } finally {
+      Reflect.deleteProperty(window, 'relay');
+    }
   });
 });

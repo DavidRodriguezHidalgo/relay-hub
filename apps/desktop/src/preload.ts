@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC, type RelayApi, type RunnerEvent, type SessionSummary } from '@relay/shared';
 
 function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
@@ -27,6 +27,8 @@ const api: RelayApi = {
   createSession: (req) => ipcRenderer.invoke(IPC.createSession, req),
   listCommands: (sessionId) => ipcRenderer.invoke(IPC.listCommands, sessionId),
   takeOver: (sessionId) => ipcRenderer.invoke(IPC.takeOver, sessionId),
+  // File.path is gone in current Electron; only the preload world can still resolve one
+  pathForFile: (file) => webUtils.getPathForFile(file),
 };
 
 contextBridge.exposeInMainWorld('relay', api);

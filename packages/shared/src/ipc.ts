@@ -53,4 +53,6 @@ export interface RelayApi {
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
   takeOver(sessionId: string): Promise<number[]>;
+  /** The absolute path of a dropped file, which the renderer cannot read for itself. */
+  pathForFile(file: File): string;
 }

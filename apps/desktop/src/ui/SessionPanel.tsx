@@ -13,6 +13,7 @@ import type {
 import { ApprovalCard } from './ApprovalCard';
 import { DOT_LABEL, dotState } from './sessionDot';
 import { applyCommand, matchCommands, SlashMenu, slashQuery } from './SlashMenu';
+import { imagePathsFrom, withPaths } from './fileDrop';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
 import { WorkingLine } from './WorkingLine';
@@ -196,6 +197,15 @@ export function SessionPanel(p: Props) {
             }}
             onKeyDown={onKeyDown}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const paths = imagePathsFrom(e.dataTransfer);
+            if (paths.length === 0) return;
+            e.preventDefault();
+            setDraft((d) => withPaths(d, paths));
+          }}
             rows={2}
           />
           <div className="dev-send__row">

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { imagePathsFrom, withPaths } from './fileDrop';
 import type { BulkRun, LiveEntry, PendingApproval, TranscriptEntry } from '@relay/shared';
 import { BulkRunCard } from './BulkRunCard';
 import { mergeEntries } from './mergeEntries';
@@ -110,6 +111,15 @@ export function OrchestratorChat({
               e.preventDefault();
               submit();
             }
+          }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const paths = imagePathsFrom(e.dataTransfer);
+            if (paths.length === 0) return;
+            e.preventDefault();
+            setDraft((d) => withPaths(d, paths));
           }}
         />
       </div>
