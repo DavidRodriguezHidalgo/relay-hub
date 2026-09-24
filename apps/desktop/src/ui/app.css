@@ -61,6 +61,9 @@
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-2 pb-2; }
   .session-list__controls { @apply mb-2 flex items-center gap-2 text-[12px] text-muted; }
   .session-list__controls input[type='search'] { @apply flex-1; }
+  /* the checkbox rides the text baseline otherwise, which leaves it a couple of pixels high */
+  .session-list__controls label { @apply flex shrink-0 items-center gap-1.5; }
+  .session-list__controls input[type='checkbox'] { @apply m-0; }
   .session-list h2 { @apply mx-0 mt-4 mb-1; }
   .session-list__group {
     @apply flex w-full items-center gap-1.5 border-0 bg-transparent px-2 py-0.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase hover:text-fg;

@@ -82,3 +82,18 @@ test('the window can be dragged by its top strip, and controls still take clicks
   expect(regions.box).toBe('no-drag');
   await app.close();
 });
+
+test("the search row and its stale toggle sit on one line", async () => {
+  const app = await launchWithFixtures(["basic.jsonl"]);
+  const page = await app.firstWindow();
+  await page.locator(".titlebar").waitFor();
+  const middles = await page.evaluate(() => {
+    const middle = (sel: string) => {
+      const box = document.querySelector(sel)!.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    return { search: middle('input[type="search"]'), stale: middle('input[type="checkbox"]') };
+  });
+  expect(Math.abs(middles.search - middles.stale)).toBeLessThan(2);
+  await app.close();
+});
