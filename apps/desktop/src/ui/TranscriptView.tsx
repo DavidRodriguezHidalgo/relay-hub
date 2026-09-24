@@ -7,14 +7,17 @@ export type ViewEntry = TranscriptEntry & { origin?: LiveEntry['origin'] };
 interface Props {
   entries: ViewEntry[];
   hideSidechain: boolean;
+  /** Passed on so a session named in a reply can be opened from it. */
+  sessions?: { id: string }[];
+  onOpenSession?: (id: string) => void;
 }
 
 const INPUT_MAX = 120;
 
-function Block({ block }: { block: TranscriptBlock }) {
+function Block({ block, sessions, onOpenSession }: { block: TranscriptBlock } & Pick<Props, 'sessions' | 'onOpenSession'>) {
   switch (block.kind) {
     case 'text':
-      return <Markdown text={block.text} />;
+      return <Markdown text={block.text} sessions={sessions} onOpenSession={onOpenSession} />;
     case 'tool_use': {
       const input = JSON.stringify(block.input) ?? '';
       return (
@@ -42,7 +45,7 @@ function Block({ block }: { block: TranscriptBlock }) {
   }
 }
 
-export function TranscriptView({ entries, hideSidechain }: Props) {
+export function TranscriptView({ entries, hideSidechain, sessions, onOpenSession }: Props) {
   // thinking is never shown, so a frame holding only thinking would be an empty card
   const visible = entries.filter(
     (e) => !e.isMeta && (!hideSidechain || !e.isSidechain) && e.blocks.some((b) => b.kind !== 'thinking'),
@@ -57,7 +60,7 @@ export function TranscriptView({ entries, hideSidechain }: Props) {
             <time dateTime={e.timestamp}>{new Date(e.timestamp).toLocaleTimeString()}</time>
           </header>
           {e.blocks.map((b, i) => (
-            <Block key={i} block={b} />
+            <Block key={i} block={b} sessions={sessions} onOpenSession={onOpenSession} />
           ))}
         </li>
       ))}

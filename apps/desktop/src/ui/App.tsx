@@ -105,6 +105,8 @@ export function App() {
           onBulkConfirm={(id, ids) => void window.relay.bulkConfirm(id, ids).catch(() => undefined)}
           onBulkCancel={(id) => void window.relay.bulkCancel(id).catch(() => undefined)}
           approvals={run.approvals}
+          sessions={sessions}
+          onOpenSession={setSelectedId}
         />
         <ApprovalsDrawer
           approvals={run.approvals}

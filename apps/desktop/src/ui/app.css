@@ -105,6 +105,7 @@
   .md li { @apply my-0.5; }
   .md strong { @apply font-semibold text-fg; }
   .md a { @apply text-accent-fg underline; }
+  .session-link { @apply inline border-0 bg-transparent p-0 font-mono text-[12.5px] text-accent-fg underline; }
   .md code { @apply rounded bg-bg px-1 py-0.5 font-mono text-[12.5px]; }
   .md pre { @apply my-2 max-h-96 overflow-auto rounded bg-bg p-2; }
   .md pre code { @apply bg-transparent p-0 text-[12px]; }

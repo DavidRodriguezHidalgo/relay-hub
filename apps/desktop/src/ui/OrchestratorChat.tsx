@@ -16,6 +16,9 @@ interface Props {
   onBulkConfirm: (runId: string, sessionIds: string[]) => void;
   onBulkCancel: (runId: string) => void;
   approvals: PendingApproval[];
+  /** So a session Relay names in the chat can be opened from it. */
+  sessions: { id: string }[];
+  onOpenSession: (id: string) => void;
 }
 
 type Item = { kind: 'entry'; at: string; entry: ViewEntry } | { kind: 'bulk'; at: string; run: BulkRun };
@@ -42,6 +45,8 @@ export function OrchestratorChat({
   onSend,
   onInterrupt,
   bulkRuns,
+  sessions,
+  onOpenSession,
   onBulkConfirm,
   onBulkCancel,
   approvals,
@@ -96,7 +101,13 @@ export function OrchestratorChat({
               {update}
             </div>
           ) : (
-            <TranscriptView key={e.uuid} entries={[e]} hideSidechain />
+            <TranscriptView
+              key={e.uuid}
+              entries={[e]}
+              hideSidechain
+              sessions={sessions}
+              onOpenSession={onOpenSession}
+            />
           );
         })}
       </div>
