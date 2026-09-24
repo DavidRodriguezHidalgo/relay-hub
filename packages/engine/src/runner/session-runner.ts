@@ -15,6 +15,8 @@ export interface SessionRunnerOptions {
   profile?: AgentProfile;
   /** How long `close()` waits for the run to wind down after interrupting it. */
   closeTimeoutMs?: number;
+  /** Model every run of this session starts on; a switch replaces it. */
+  model?: string;
 }
 
 /** A finished turn: who caused it, its last reply, and the error if it failed. */
@@ -42,6 +44,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   private readonly closeTimeoutMs: number;
   private readonly profile: AgentProfile | undefined;
   private resumeId: string | null;
+  private model: string | undefined;
+  private running: string | null = null;
   private readonly originsById = new Map<string, MessageOrigin>();
   /** Origins settled since the last turn-end. */
   private settledOrigins: MessageOrigin[] = [];
@@ -82,6 +86,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.closeTimeoutMs = opts.closeTimeoutMs ?? 5_000;
     this.profile = opts.profile;
     this.resumeId = opts.resume === undefined ? opts.sessionId : opts.resume;
+    this.model = opts.model;
     this.approvals.on('pending', this.onPending);
     this.approvals.on('resolved', this.onResolved);
   }
@@ -105,6 +110,18 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
 
   get idleSince(): number {
     return this._idleSince;
+  }
+
+  /** The model this session is running on, once a run has said so. */
+  get currentModel(): string | null {
+    return this.running;
+  }
+
+  /** Switches the model now if a run is live, and for every run after this one. */
+  async setModel(model: string): Promise<void> {
+    this.model = model;
+    this.running = model;
+    await this.run?.setModel?.(model);
   }
 
   /** The agent session this runner resumes, once known. */
@@ -174,6 +191,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.input = new AsyncQueue<AgentInput>();
     this.run = this.client.start({
       sessionId: this.resumeId,
+      model: this.model,
       cwd: this.cwd,
       input: this.input,
       profile: this.profile,
@@ -219,6 +237,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
         case 'init':
           // emitted on every init: it also proves a resumed id is alive
           this.resumeId = m.sessionId;
+          this.running = m.model ?? this.running;
           this.emit('session-id', m.sessionId);
           break;
       }

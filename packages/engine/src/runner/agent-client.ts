@@ -1,4 +1,4 @@
-import type { Invocable, MessageOrigin, TranscriptBlock } from '@relay/shared';
+import type { Invocable, MessageOrigin, ModelChoice, TranscriptBlock } from '@relay/shared';
 import type { z, ZodRawShape } from 'zod';
 import type { PermissionOutcome } from '../approvals/approval-queue';
 
@@ -27,7 +27,7 @@ export interface AgentInput {
 }
 
 export type AgentMessage =
-  | { type: 'init'; sessionId: string }
+  | { type: 'init'; sessionId: string; model?: string }
   | {
       type: 'assistant' | 'tool-results';
       uuid: string;
@@ -54,6 +54,14 @@ export type AgentMessage =
 export interface AgentRun {
   messages: AsyncIterable<AgentMessage>;
   interrupt(): Promise<void>;
+  /** Switches the model mid-run, where the runtime allows it. */
+  setModel?(model: string): Promise<void>;
+}
+
+/** What a directory offers: both come from one lookup, since asking costs a process. */
+export interface AgentCapabilities {
+  commands: Invocable[];
+  models: ModelChoice[];
 }
 
 export type CanUseToolFn = (
@@ -75,12 +83,14 @@ export interface AgentStartOptions {
   fork?: boolean;
   /** Keep the run off disk; false for something that must leave no session behind. */
   persist?: boolean;
+  /** Model to run on; omitted leaves the session's own choice alone. */
+  model?: string;
   profile?: AgentProfile;
 }
 
 /** The only seam between Relay and the agent runtime; tests script it, production uses the SDK. */
 export interface AgentClient {
   start(opts: AgentStartOptions): AgentRun;
-  /** Commands, skills and plugins a directory offers; absent when the runtime cannot say. */
-  describe?(cwd: string): Promise<Invocable[]>;
+  /** Commands and models a directory offers; absent when the runtime cannot say. */
+  describe?(cwd: string): Promise<AgentCapabilities>;
 }

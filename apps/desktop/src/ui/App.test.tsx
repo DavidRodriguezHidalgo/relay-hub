@@ -44,6 +44,8 @@ describe('App', () => {
       setAllowAllActions: vi.fn().mockResolvedValue(undefined),
       channels: vi.fn().mockResolvedValue(Object.values(IPC)),
       aside: vi.fn().mockResolvedValue('an answer'),
+      listModels: vi.fn().mockResolvedValue([]),
+      setModel: vi.fn().mockResolvedValue(undefined),
       checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: '0.1.0', newer: false, url: null, notes: null, publishedAt: null, error: null }),
     };
     Object.assign(window, { relay });

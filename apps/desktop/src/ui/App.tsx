@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck } from '@relay/shared';
+import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
@@ -26,6 +26,7 @@ export function App() {
   const [creating, setCreating] = useState(false);
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const [commands, setCommands] = useState<Invocable[]>([]);
+  const [models, setModels] = useState<ModelChoice[]>([]);
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -118,12 +119,19 @@ export function App() {
   useEffect(() => {
     setSendError(null);
     setCommands([]);
+    setModels([]);
     if (!selectedId) return;
     let cancelled = false;
     // what this session can run depends on its directory, so it is asked per session
     void window.relay.listCommands(selectedId).then(
       (list) => {
         if (!cancelled) setCommands(list);
+      },
+      () => undefined,
+    );
+    void window.relay.listModels(selectedId).then(
+      (list) => {
+        if (!cancelled) setModels(list);
       },
       () => undefined,
     );
@@ -260,6 +268,16 @@ export function App() {
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
             heldElsewhere={run.external[selected.id] ?? null}
+            models={models}
+            onSetModel={(id) =>
+              void window.relay
+                .setModel(selected.id, id)
+                .then(() => {
+                  setSendError(null);
+                  return window.relay.listModels(selected.id).then(setModels);
+                })
+                .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
+            }
             onAside={(question) =>
               void window.relay
                 .aside(selected.id, question)

@@ -1,6 +1,6 @@
-import type { Invocable } from '@relay/shared';
+import type { Invocable, ModelChoice } from '@relay/shared';
 import { AsyncQueue } from '../../src/runner/async-queue';
-import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from '../../src/runner/agent-client';
+import type { AgentCapabilities, AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from '../../src/runner/agent-client';
 
 /**
  * A hand-driven agent that behaves like the SDK where it matters for state:
@@ -20,11 +20,13 @@ export class FakeAgentClient implements AgentClient {
   private unsettled: string[] = [];
   /** What describe() reports, and the directories it was asked about. */
   invocables: Invocable[] = [];
+  models: ModelChoice[] = [];
+  modelChanges: string[] = [];
   described: string[] = [];
 
-  async describe(cwd: string): Promise<Invocable[]> {
+  async describe(cwd: string): Promise<AgentCapabilities> {
     this.described.push(cwd);
-    return this.invocables;
+    return { commands: this.invocables, models: this.models };
   }
 
   start(opts: AgentStartOptions): AgentRun {
@@ -49,6 +51,9 @@ export class FakeAgentClient implements AgentClient {
     }
     return {
       messages: messages(),
+      setModel: async (model: string) => {
+        self.modelChanges.push(model);
+      },
       interrupt: async () => {
         self.interrupts += 1;
         if (self.hangInterrupt) return new Promise<void>(() => undefined);
@@ -71,8 +76,8 @@ export class FakeAgentClient implements AgentClient {
     return t.handler(args as never);
   }
 
-  init(sessionId: string) {
-    this.out.push({ type: 'init', sessionId });
+  init(sessionId: string, model?: string) {
+    this.out.push({ type: 'init', sessionId, model });
   }
 
   assistant(uuid: string, text: string) {

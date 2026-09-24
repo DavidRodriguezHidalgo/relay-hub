@@ -1,4 +1,4 @@
-import type { Invocable } from '@relay/shared';
+import type { Invocable, ModelChoice } from '@relay/shared';
 
 /**
  * What the user is typing as a command name, or null when they are not naming one.
@@ -41,10 +41,34 @@ export function applyCommand(value: string, caret: number, name: string): { valu
   return { value: head + value.slice(caret), caret: head.length };
 }
 
+/** Anything the menu can offer: a command to complete, or a model to switch to. */
+export interface MenuItem {
+  key: string;
+  label: string;
+  description: string;
+  hint?: string;
+  /** Marked as the one in use, for a list of things you choose between. */
+  current?: boolean;
+}
+
+export const commandItem = (c: Invocable): MenuItem => ({
+  key: c.name,
+  label: `/${c.name}`,
+  description: c.description,
+  hint: c.argumentHint,
+});
+
+export const modelItem = (m: ModelChoice): MenuItem => ({
+  key: m.id,
+  label: m.name,
+  description: m.description,
+  current: m.current,
+});
+
 interface Props {
-  items: Invocable[];
+  items: MenuItem[];
   activeIndex: number;
-  onPick: (command: Invocable) => void;
+  onPick: (item: MenuItem) => void;
   onHover: (index: number) => void;
 }
 
@@ -54,10 +78,11 @@ export function SlashMenu({ items, activeIndex, onPick, onHover }: Props) {
     <ul className="slash-menu" role="listbox" aria-label="Commands">
       {items.map((c, i) => (
         <li
-          key={c.name}
+          key={c.key}
           id={`slash-option-${i}`}
           role="option"
           aria-selected={i === activeIndex}
+          aria-current={c.current ? 'true' : undefined}
           className={i === activeIndex ? 'slash-menu__item slash-menu__item--active' : 'slash-menu__item'}
           onMouseEnter={() => onHover(i)}
           // mousedown, not click: the textarea must not lose focus before the pick lands
@@ -67,8 +92,9 @@ export function SlashMenu({ items, activeIndex, onPick, onHover }: Props) {
           }}
         >
           <span className="slash-menu__name">
-            /{c.name}
-            {c.argumentHint && <span className="slash-menu__hint"> {c.argumentHint}</span>}
+            {c.label}
+            {c.hint && <span className="slash-menu__hint"> {c.hint}</span>}
+            {c.current && <span className="slash-menu__hint"> · in use</span>}
           </span>
           <span className="slash-menu__desc">{c.description}</span>
         </li>

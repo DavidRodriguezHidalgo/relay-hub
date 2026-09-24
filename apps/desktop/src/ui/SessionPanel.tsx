@@ -4,6 +4,7 @@ import type {
   DeliveryMode,
   Invocable,
   LiveEntry,
+  ModelChoice,
   PendingApproval,
   PrWatch,
   SessionState,
@@ -11,8 +12,9 @@ import type {
   TranscriptEntry,
 } from '@relay/shared';
 import { ApprovalCard } from './ApprovalCard';
+import { matchModels } from './matchModels';
 import { DOT_LABEL, dotState } from './sessionDot';
-import { applyCommand, matchCommands, SlashMenu, slashQuery } from './SlashMenu';
+import { applyCommand, commandItem, matchCommands, modelItem, SlashMenu, slashQuery, type MenuItem } from './SlashMenu';
 import { imagePathsFrom, withPaths } from './fileDrop';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
@@ -38,6 +40,9 @@ interface Props {
   onTakeOver: () => void;
   /** A /btw question: answered beside the work, never sent into it. */
   onAside: (question: string) => void;
+  /** Models this session can run on, with the one in use marked. */
+  models: ModelChoice[];
+  onSetModel: (id: string) => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
   /** Commands, skills and plugins this session can be asked to run. */
@@ -69,10 +74,26 @@ export function SessionPanel(p: Props) {
     box.setSelectionRange(caretAfterPick, caretAfterPick);
     setCaretAfterPick(null);
   }, [caretAfterPick, draft]);
+  /** `/model` and what has been typed after it, which the app answers itself. */
+  const modelQuery = draft.match(/^\/model(?:\s+([\s\S]*))?$/);
   const query = slashQuery(draft, caret);
-  const matches = query === null || dismissed ? [] : matchCommands(p.commands, query);
-  const pick = (command: Invocable) => {
-    const next = applyCommand(draft, caret, command.name);
+  const matchingModels = modelQuery ? matchModels(p.models, (modelQuery[1] ?? '').trim()) : [];
+  const matches: MenuItem[] = dismissed
+    ? []
+    : modelQuery
+      ? matchingModels.map(modelItem)
+      : query === null
+        ? []
+        : matchCommands(p.commands, query).map(commandItem);
+  const pick = (item: MenuItem) => {
+    if (modelQuery) {
+      p.onSetModel(item.key);
+      setDraft('');
+      setHint(null);
+      setActive(0);
+      return;
+    }
+    const next = applyCommand(draft, caret, item.key);
     setDraft(next.value);
     setCaret(next.caret);
     setActive(0);
@@ -109,6 +130,23 @@ export function SessionPanel(p: Props) {
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
+    const model = text.match(/^\/model(?:\s+([\s\S]*))?$/);
+    if (model) {
+      const wanted = (model[1] ?? '').trim();
+      const found = wanted ? matchModels(p.models, wanted)[0] : undefined;
+      if (!wanted) {
+        setHint('Pick a model from the list, or name one after /model.');
+        return;
+      }
+      if (!found) {
+        setHint(`There is no model matching "${wanted}".`);
+        return;
+      }
+      p.onSetModel(found.id);
+      setHint(null);
+      setDraft('');
+      return;
+    }
     const aside = text.match(/^\/btw(?:\s+([\s\S]*))?$/);
     if (aside) {
       const question = (aside[1] ?? '').trim();

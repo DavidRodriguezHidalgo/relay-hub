@@ -32,6 +32,8 @@ const api: RelayApi = {
   channels: () => ipcRenderer.invoke(IPC.channels),
   aside: (sessionId, question) => ipcRenderer.invoke(IPC.aside, sessionId, question),
   checkForUpdate: () => ipcRenderer.invoke(IPC.checkForUpdate),
+  listModels: (sessionId) => ipcRenderer.invoke(IPC.listModels, sessionId),
+  setModel: (sessionId, model) => ipcRenderer.invoke(IPC.setModel, sessionId, model),
   // File.path is gone in current Electron; only the preload world can still resolve one
   pathForFile: (file) => webUtils.getPathForFile(file),
 };

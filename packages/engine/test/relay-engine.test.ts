@@ -916,4 +916,47 @@ describe('RelayEngine', () => {
     await startWithBasic(new FakeAgentClient());
     expect(await engine!.checkForUpdate()).toMatchObject({ newer: false, error: expect.stringContaining('releases') });
   });
+  it('lists the models a session can run on, marking the one it is on', async () => {
+    const client = new FakeAgentClient();
+    client.models = [
+      { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', current: false },
+      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', current: false },
+    ];
+    await startWithBasic(client);
+    // nothing has run yet: the session's own default is in force, so nothing is marked
+    expect((await engine!.listModels('s-basic')).map((m) => [m.id, m.current])).toEqual([['opus[1m]', false], ['sonnet', false]]);
+
+    await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
+    await tick();
+    client.init('s-basic', 'sonnet');
+    await tick();
+    expect((await engine!.listModels('s-basic')).find((m) => m.current)?.id).toBe('sonnet');
+    await expect(engine!.listModels('nope')).rejects.toThrow('Unknown session nope');
+  });
+
+  it('switches a running session to another model, and starts the next run on it', async () => {
+    const client = new FakeAgentClient();
+    client.models = [{ id: 'opus[1m]', name: 'Opus', description: '', current: false }];
+    await startWithBasic(client);
+    await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
+    await tick();
+
+    await engine!.setModel('s-basic', 'opus[1m]');
+    expect(client.modelChanges).toEqual(['opus[1m]']);
+
+    // the choice outlives the app: a later run starts on it without being told again
+    await engine!.close();
+    engine = await RelayEngine.start({
+      projectsDir: join(root, 'projects'),
+      dbPath: join(root, 'relay.db'),
+      git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
+      agent: client,
+      orchestratorDir: join(root, 'orch'),
+      registry: { foreignHolders: async () => [] },
+    });
+    await engine!.send({ sessionId: 's-basic', prompt: 'again', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts.at(-1)?.model).toBe('opus[1m]');
+    await expect(engine!.setModel('nope', 'x')).rejects.toThrow('Unknown session nope');
+  });
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -30,6 +30,9 @@ const OWN_WRITE_GRACE_MS = 1_000;
 /** An idle runner (and its `claude` process) is closed after this long without a send. */
 /** Meta key for the one setting the engine owns. */
 const ALLOW_ALL_KEY = 'settings.allowAllActions';
+
+/** Meta key holding the model a session was switched to. */
+const modelKey = (sessionId: string) => `model.${sessionId}`;
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -338,6 +341,23 @@ export class RelayEngine {
     return answer;
   }
 
+  /** The models this session can run on, with the one it is on marked. */
+  async listModels(sessionId: string): Promise<ModelChoice[]> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const { models } = await this.commands.list(session.cwd);
+    const current = this.runners.get(sessionId)?.currentModel ?? this.store.getMeta(modelKey(sessionId));
+    return models.map((m) => ({ ...m, current: current !== null && (m.id === current || m.name === current) }));
+  }
+
+  /** Switches a session to another model, now and for its later runs. */
+  async setModel(sessionId: string, model: string): Promise<void> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    this.store.setMeta(modelKey(sessionId), model);
+    await this.runners.get(sessionId)?.setModel(model);
+  }
+
   /** Whether a newer release exists than the one running. Never throws; failures come back in `error`. */
   checkForUpdate(): Promise<UpdateCheck> {
     if (!this.updates) {
@@ -410,7 +430,7 @@ export class RelayEngine {
   async listCommands(sessionId: string): Promise<Invocable[]> {
     const session = this.listSessions().find((x) => x.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
-    return [...RELAY_COMMANDS, ...(await this.commands.list(session.cwd))];
+    return [...RELAY_COMMANDS, ...(await this.commands.list(session.cwd)).commands];
   }
 
   watchDelete(watchId: string): void {
@@ -559,7 +579,13 @@ export class RelayEngine {
     const session = this.listSessions().find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
     await this.assertNotBusy(sessionId, 0);
-    const runner = new SessionRunner({ sessionId, cwd: session.cwd, client: this.agent, approvals: this.approvals });
+    const runner = new SessionRunner({
+      sessionId,
+      cwd: session.cwd,
+      client: this.agent,
+      approvals: this.approvals,
+      model: this.store.getMeta(modelKey(sessionId)) ?? undefined,
+    });
     this.wire(runner, session);
     return runner;
   }

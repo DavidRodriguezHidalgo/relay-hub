@@ -7,8 +7,8 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { blocksFromContent } from '../transcript/parse-transcript';
-import type { Invocable } from '@relay/shared';
-import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
+import type { Invocable, ModelChoice } from '@relay/shared';
+import type { AgentCapabilities, AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
 
 /** Tools on Relay's in-process MCP server; the orchestrator may use nothing else. */
 const RELAY_TOOL_PREFIX = 'mcp__relay__';
@@ -21,6 +21,8 @@ export type SdkQueryFn = (params: {
   interrupt(): Promise<unknown>;
   close?(): void;
   supportedCommands?(): Promise<Invocable[]>;
+  supportedModels?(): Promise<{ value: string; displayName?: string; description?: string }[]>;
+  setModel?(model?: string): Promise<void>;
 };
 
 async function* toSdkInput(input: AsyncIterable<AgentInput>): AsyncIterable<SDKUserMessage> {
@@ -72,7 +74,7 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
   const now = new Date().toISOString();
   switch (m.type) {
     case 'system':
-      return m.subtype === 'init' ? { type: 'init', sessionId: m.session_id } : null;
+      return m.subtype === 'init' ? { type: 'init', sessionId: m.session_id, model: (m as { model?: string }).model } : null;
     case 'assistant':
       return {
         type: 'assistant',
@@ -108,6 +110,7 @@ function profileOptions(opts: AgentStartOptions): Options {
     ...(opts.sessionId ? { resume: opts.sessionId } : {}),
     ...(opts.fork ? { forkSession: true } : {}),
     ...(opts.persist === false ? { persistSession: false } : {}),
+    ...(opts.model ? { model: opts.model } : {}),
   };
   const profile = opts.profile ?? { kind: 'session' };
   if (profile.kind === 'session') {
@@ -177,7 +180,7 @@ export class SdkAgentClient implements AgentClient {
    * Reads the command list without running a turn: the input stream never yields, so the
    * session connects, answers, and is shut down again without spending tokens.
    */
-  async describe(cwd: string): Promise<Invocable[]> {
+  async describe(cwd: string): Promise<AgentCapabilities> {
     async function* never(): AsyncIterable<SDKUserMessage> {
       await new Promise<never>(() => undefined);
     }
@@ -186,8 +189,13 @@ export class SdkAgentClient implements AgentClient {
       options: { cwd, settingSources: ['user', 'project', 'local'] },
     });
     try {
-      const commands = (await q.supportedCommands?.()) ?? [];
-      return commands.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint ?? '' }));
+      const [commands, models] = await Promise.all([q.supportedCommands?.() ?? [], q.supportedModels?.() ?? []]);
+      return {
+        commands: commands.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint ?? '' })),
+        models: models.map(
+          (m): ModelChoice => ({ id: m.value, name: m.displayName ?? m.value, description: m.description ?? '', current: false }),
+        ),
+      };
     } finally {
       q.close?.();
     }
@@ -214,6 +222,10 @@ export class SdkAgentClient implements AgentClient {
         if (mapped) yield mapped;
       }
     }
-    return { messages: messages(), interrupt: () => q.interrupt().then(() => undefined) };
+    return {
+      messages: messages(),
+      interrupt: () => q.interrupt().then(() => undefined),
+      setModel: q.setModel ? (model: string) => q.setModel!(model) : undefined,
+    };
   }
 }

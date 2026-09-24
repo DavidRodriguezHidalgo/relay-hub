@@ -26,3 +26,4 @@ export type {
 export type { SendRequest } from './ipc';
 export { ORCHESTRATOR_KEY } from './runner';
 export type { UpdateCheck } from './updates';
+export type { ModelChoice } from './models';

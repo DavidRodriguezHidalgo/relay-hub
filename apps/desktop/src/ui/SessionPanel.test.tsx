@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ModelChoice } from '@relay/shared';
 import type { Invocable, LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { SessionPanel } from './SessionPanel';
 
@@ -21,7 +22,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(),
 };
 
 const commands = [
@@ -377,5 +378,64 @@ describe('SessionPanel side questions', () => {
     );
     expect(screen.getByText('side thread')).toBeInTheDocument();
     expect(document.querySelector('li.entry--aside')).not.toBeNull();
+  });
+});
+
+describe('SessionPanel model picker', () => {
+  const models: ModelChoice[] = [
+    { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', current: true },
+    { id: 'sonnet', name: 'Sonnet', description: 'Efficient for routine tasks', current: false },
+  ];
+
+  it('offers the models when /model is typed, marking the one in use', async () => {
+    renderPanel({ models });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/model ');
+    const menu = await screen.findByRole('listbox');
+    expect(menu).toHaveTextContent('Opus');
+    expect(menu).toHaveTextContent('Sonnet');
+    expect(menu.querySelector('[aria-current="true"]')?.textContent).toContain('Opus');
+  });
+
+  it('switches to the model picked, and never sends /model to the session', async () => {
+    const onSetModel = vi.fn();
+    const onSend = vi.fn();
+    renderPanel({ models, onSetModel, onSend });
+    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    await userEvent.click(box);
+    await userEvent.keyboard('/model son');
+    await userEvent.keyboard('{Enter}');
+    expect(onSetModel).toHaveBeenCalledWith('sonnet');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue('');
+  });
+
+  it('takes /model with a name directly, without going near the session', async () => {
+    const onSetModel = vi.fn();
+    const onSend = vi.fn();
+    renderPanel({ models, onSetModel, onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/model sonnet{Enter}');
+    expect(onSetModel).toHaveBeenCalledWith('sonnet');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('says so when /model names a model that does not exist, rather than sending it on', async () => {
+    const onSetModel = vi.fn();
+    const onSend = vi.fn();
+    renderPanel({ models, onSetModel, onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/model gpt{Enter}');
+    expect(onSetModel).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/no model/i);
+  });
+
+  it('still passes a command the session owns straight through', async () => {
+    const onSend = vi.fn();
+    renderPanel({ models, onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/review 3497{Enter}');
+    expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
   });
 });

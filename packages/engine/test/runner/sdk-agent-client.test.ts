@@ -89,7 +89,7 @@ describe('SdkAgentClient', () => {
     expect(seen!.options).toMatchObject({ resume: 'abc', cwd: '/r', permissionMode: 'acceptEdits', settingSources: ['user', 'project', 'local'] });
     expect(typeof seen!.options!.canUseTool).toBe('function');
     expect(msgs).toEqual([
-      { type: 'init', sessionId: 'abc' },
+      { type: 'init', sessionId: 'abc', model: 'm' },
       {
         type: 'assistant', uuid: 'a1', timestamp: expect.any(String),
         blocks: [{ kind: 'text', text: 'hi' }, { kind: 'tool_use', id: 't', name: 'Bash', input: { command: 'ls' } }],
@@ -206,7 +206,7 @@ describe('SdkAgentClient', () => {
       g.supportedCommands = async () => [{ name: 'review', description: 'Review', argumentHint: '[pr]' }];
       return g;
     }) as unknown as SdkQueryFn;
-    const commands = await new SdkAgentClient(fakeQuery).describe('/repo');
+    const { commands } = await new SdkAgentClient(fakeQuery).describe('/repo');
     expect(commands).toEqual([{ name: 'review', description: 'Review', argumentHint: '[pr]' }]);
     expect(seen!.options).toMatchObject({ cwd: '/repo', settingSources: ['user', 'project', 'local'] });
     expect(closed).toBe(1);
@@ -269,5 +269,46 @@ describe('SdkAgentClient', () => {
       sessionId: 'abc', cwd: '/r', input: new AsyncQueue(), canUseTool: async () => ({ behavior: 'allow' }), fork: true, persist: false,
     });
     expect(seen!.options).toMatchObject({ resume: 'abc', forkSession: true, persistSession: false });
+  });
+  it('asks one throwaway run for both the commands and the models a directory offers', async () => {
+    let closed = false;
+    const fakeQuery = (() => {
+      async function* gen() {}
+      const g = gen() as FakeGen & { supportedCommands: () => Promise<unknown>; supportedModels: () => Promise<unknown>; close: () => void };
+      g.interrupt = async () => undefined;
+      g.supportedCommands = async () => [{ name: 'review', description: 'Review', argumentHint: '[pr]' }];
+      g.supportedModels = async () => [
+        { value: 'default', resolvedModel: 'claude-opus-5', displayName: 'Default (recommended)', description: 'Opus 5' },
+        { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet', description: 'Efficient' },
+      ];
+      g.close = () => { closed = true; };
+      return g;
+    }) as unknown as SdkQueryFn;
+    const described = await new SdkAgentClient(fakeQuery).describe('/r');
+    expect(described.commands).toEqual([{ name: 'review', description: 'Review', argumentHint: '[pr]' }]);
+    expect(described.models).toEqual([
+      { id: 'default', name: 'Default (recommended)', description: 'Opus 5', current: false },
+      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', current: false },
+    ]);
+    expect(closed).toBe(true);
+  });
+
+  it('starts a run on a chosen model and can switch a live one', async () => {
+    let seen: Parameters<SdkQueryFn>[0] | null = null;
+    const switched: (string | undefined)[] = [];
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      seen = params;
+      async function* gen() {}
+      const g = gen() as FakeGen & { setModel: (m?: string) => Promise<void> };
+      g.interrupt = async () => undefined;
+      g.setModel = async (m) => { switched.push(m); };
+      return g;
+    }) as unknown as SdkQueryFn;
+    const run = new SdkAgentClient(fakeQuery).start({
+      sessionId: 'abc', cwd: '/r', input: new AsyncQueue(), canUseTool: async () => ({ behavior: 'allow' }), model: 'sonnet',
+    });
+    expect(seen!.options).toMatchObject({ model: 'sonnet' });
+    await run.setModel?.('opus[1m]');
+    expect(switched).toEqual(['opus[1m]']);
   });
 });
