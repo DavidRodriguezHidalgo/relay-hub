@@ -840,4 +840,23 @@ describe('RelayEngine', () => {
     await engine!.takeOver('s-basic');
     await expect(send()).resolves.toBeTruthy();
   });
+  it('remembers that everything was allowed, and stops asking about it', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    expect(engine!.settings()).toEqual({ allowAllActions: false });
+    engine!.setAllowAllActions(true);
+    expect(engine!.settings()).toEqual({ allowAllActions: true });
+    await engine!.close();
+
+    // a later run of the app, reading the same stored state
+    engine = await RelayEngine.start({
+      projectsDir: join(root, 'projects'),
+      dbPath: join(root, 'relay.db'),
+      git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
+      agent: client,
+      orchestratorDir: join(root, 'orch'),
+      registry: { foreignHolders: async () => [] },
+    });
+    expect(engine!.settings()).toEqual({ allowAllActions: true });
+  });
 });

@@ -27,6 +27,8 @@ const api: RelayApi = {
   createSession: (req) => ipcRenderer.invoke(IPC.createSession, req),
   listCommands: (sessionId) => ipcRenderer.invoke(IPC.listCommands, sessionId),
   takeOver: (sessionId) => ipcRenderer.invoke(IPC.takeOver, sessionId),
+  settings: () => ipcRenderer.invoke(IPC.settings),
+  setAllowAllActions: (on) => ipcRenderer.invoke(IPC.setAllowAllActions, on),
   // File.path is gone in current Electron; only the preload world can still resolve one
   pathForFile: (file) => webUtils.getPathForFile(file),
 };

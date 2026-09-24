@@ -55,7 +55,7 @@
 
   .shell { @apply flex h-screen flex-col bg-bg; }
   /* macOS puts the traffic lights over this strip, so it stays tall enough to clear them */
-  .titlebar { @apply h-10 shrink-0 bg-bg; -webkit-app-region: drag; }
+  .titlebar { @apply relative h-10 shrink-0 bg-bg; -webkit-app-region: drag; }
   .app { @apply grid min-h-0 flex-1 overflow-hidden bg-bg; grid-template-columns: 300px 6px minmax(0, 1fr) 6px 440px; }
   .resizer { @apply cursor-col-resize bg-line/40 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none; }
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-2 pb-2; }
@@ -180,7 +180,8 @@
 
   .chat { @apply min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-1; }
   .chat__header { @apply mb-3 flex items-center gap-2 text-[15px]; }
-  .chat__header strong { @apply text-accent-fg; }
+  .chat__header strong { @apply text-[22px] font-semibold tracking-tight text-accent-fg; }
+  .chat__hint { @apply mt-2 text-muted; }
   .relay-update { @apply my-1 mb-3 border-l-2 border-accent pl-2 text-[12px] text-muted; }
   .chat-input { @apply bg-bg py-3; }
   .chat-input textarea { @apply w-full text-[15px]; }
@@ -193,6 +194,16 @@
   .bulk-card__actions { @apply mt-2 flex gap-1.5; }
   .bulk-card__approvals { @apply ml-2 text-[11px] font-semibold text-waiting; }
 
+  .allow-all-banner { @apply fixed inset-x-0 top-0 z-10 flex items-center justify-center gap-3 bg-waiting px-3 py-1 text-[12px] font-semibold text-bg; }
+  .titlebar__settings { @apply absolute top-1.5 right-3 text-[12px]; }
+  .settings-backdrop { @apply fixed inset-0 z-20 flex items-center justify-center bg-bg/80 p-6; }
+  .settings { @apply w-[440px] max-w-full rounded-xl border border-line bg-surface p-4 text-fg; }
+  .settings__header { @apply mb-3 flex items-center justify-between; }
+  .settings__header h2 { @apply m-0 text-[17px]; }
+  .settings__section { @apply mb-4; }
+  .settings__section h3 { @apply mt-0 mb-1.5 text-[13px] font-semibold text-muted uppercase; }
+  .settings__row { @apply flex items-center gap-2 py-0.5; }
+  .settings__note { @apply mt-1.5 mb-0 text-[12px] leading-[1.5] text-muted; }
   .gh-banner { @apply fixed inset-x-0 top-0 z-10 bg-accent px-3 py-1 text-center text-[12px] font-semibold text-on-accent; }
   .watch { @apply text-[11px] text-muted; }
 }

@@ -10,7 +10,8 @@ async function launchWithFixtures(names: string[]) {
   await mkdir(join(root, 'projects', 'p'), { recursive: true });
   for (const name of names) await copyFile(join(fixtures, name), join(root, 'projects', 'p', name));
   return electron.launch({
-    args: [resolve(__dirname, '../.vite/build/main.js')],
+    // its own data directory: a test must not read or write the real app's settings
+    args: [resolve(__dirname, '../.vite/build/main.js'), `--user-data-dir=${join(root, 'userData')}`],
     env: { ...process.env, RELAY_PROJECTS_DIR: join(root, 'projects') },
   });
 }
@@ -95,5 +96,16 @@ test("the search row and its stale toggle sit on one line", async () => {
     return { search: middle('input[type="search"]'), stale: middle('input[type="checkbox"]') };
   });
   expect(Math.abs(middles.search - middles.stale)).toBeLessThan(2);
+  await app.close();
+});
+
+test("the Relay name is the focal point of the chat", async () => {
+  const app = await launchWithFixtures(["basic.jsonl"]);
+  const page = await app.firstWindow();
+  await page.locator(".chat__header strong").waitFor();
+  const size = await page.evaluate(() =>
+    parseFloat(getComputedStyle(document.querySelector(".chat__header strong")!).fontSize),
+  );
+  expect(size).toBeGreaterThanOrEqual(20);
   await app.close();
 });

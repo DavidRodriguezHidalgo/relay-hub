@@ -74,3 +74,9 @@ describe('app.css', () => {
     expect(app).not.toMatch(/focus[^;]*\b(outline|border)-accent(?![-\w])/);
   });
 });
+
+describe('a chosen theme', () => {
+  it('uses the same colours the system preference would', () => {
+    expect(tokens(":root[data-theme='light']")).toEqual(tokens('@media (prefers-color-scheme: light)'));
+  });
+});

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { ColumnResizer } from './ColumnResizer';
+import { Settings } from './Settings';
+import { applyTheme, loadTheme, saveTheme, systemTheme, type Theme } from './theme';
 import { clampWidth, loadWidths, saveWidths, type ColumnWidths } from './columnWidths';
 import { NewSessionForm } from './NewSessionForm';
 import { OrchestratorChat } from './OrchestratorChat';
@@ -26,6 +28,19 @@ export function App() {
   const [commands, setCommands] = useState<Invocable[]>([]);
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Null until the user picks one, so the app keeps following the system before then. */
+  const [theme, setTheme] = useState<Theme | null>(loadTheme);
+  const [allowAllActions, setAllowAllActions] = useState(false);
+
+  useEffect(() => {
+    applyTheme(theme);
+    if (theme) saveTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
+    void window.relay.settings().then((s) => setAllowAllActions(s.allowAllActions));
+  }, []);
   const resize = (side: keyof ColumnWidths, px: number) =>
     setWidths((w) => {
       const next = { ...w, [side]: clampWidth(side, px) };
@@ -33,6 +48,11 @@ export function App() {
       return next;
     });
   const run = useRunState();
+  /** The engine owns this one, so it is set there first and only then shown as on. */
+  const changeAllowAll = async (on: boolean) => {
+    await window.relay.setAllowAllActions(on);
+    setAllowAllActions(on);
+  };
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const entries = loaded.id === selectedId ? loaded.entries : NO_ENTRIES;
   const liveEntries = selected ? (run.liveEntries[selected.id] ?? []) : [];
@@ -80,7 +100,28 @@ export function App() {
   return (
     <div className="shell">
       {/* the window has no frame of its own, so this strip is what you drag it by */}
-      <div className="titlebar" aria-hidden="true" />
+      <div className="titlebar">
+        <button type="button" className="titlebar__settings" onClick={() => setSettingsOpen(true)}>
+          Settings
+        </button>
+      </div>
+      {allowAllActions && (
+        <div role="status" className="allow-all-banner">
+          Relay is allowing every action without asking.
+          <button type="button" onClick={() => void changeAllowAll(false)}>
+            Turn off
+          </button>
+        </div>
+      )}
+      {settingsOpen && (
+        <Settings
+          theme={theme ?? systemTheme()}
+          onTheme={setTheme}
+          allowAllActions={allowAllActions}
+          onAllowAllActions={(on) => void changeAllowAll(on)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       <div
         className="app"
         style={{ gridTemplateColumns: `${widths.left}px 6px minmax(0,1fr) 6px ${widths.right}px` }}

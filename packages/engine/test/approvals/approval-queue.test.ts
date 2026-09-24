@@ -151,3 +151,22 @@ describe('ApprovalQueue and kinds that are too broad to honour', () => {
     ).toBe(false);
   });
 });
+
+describe('ApprovalQueue when the user has allowed everything', () => {
+  it('stops asking, and releases whatever was already waiting', async () => {
+    const q = new ApprovalQueue();
+    const waiting = req(q, 'git push --force');
+    expect(q.pending()).toHaveLength(1);
+
+    q.setAllowAll(true);
+    expect(await waiting).toEqual({ behavior: 'allow' });
+    expect(q.pending()).toEqual([]);
+    expect(await req(q, 'git reset --hard')).toEqual({ behavior: 'allow' });
+    expect(q.needsApproval({ sessionId: 's1', toolName: 'Bash', input: { command: 'rm -rf /work' }, cwd })).toBe(false);
+
+    // turning it off puts the guard back
+    q.setAllowAll(false);
+    void req(q, 'git reset --hard');
+    expect(q.pending()).toHaveLength(1);
+  });
+});

@@ -22,7 +22,8 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  /* the system's preference, unless the user asked for dark explicitly */
+  :root:not([data-theme='dark']) {
     --bg: #ffffff;
     --surface: #f6f6f6;
     --surface-2: #ececec;
@@ -42,3 +43,24 @@
     color-scheme: light;
   }
 }
+
+/* Chosen in Settings. The values must match the block above; a test checks that they do. */
+:root[data-theme='light'] {
+    --bg: #ffffff;
+    --surface: #f6f6f6;
+    --surface-2: #ececec;
+    --border: #d6d6d6;
+    --text: #111111;
+    --muted: #555555;
+    --accent: #ffa500;
+    --accent-text: #8a5200;
+    --on-accent: #000000;
+    --focus: #8a5200;
+    --running: #8a5200;
+    --waiting: #b0266b;
+    --danger: #c62828;
+    --success: #186b3b;
+    --scrollbar: #c8c8c8;
+    --scrollbar-hover: #a0a0a0;
+    color-scheme: light;
+  }

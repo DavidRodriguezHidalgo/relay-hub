@@ -35,6 +35,8 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
   private readonly waiting = new Map<string, Waiting>();
   /** Per session: kinds of call the user allowed, kept for good rather than for one run. */
   private readonly allowed = new Map<string, Set<string>>();
+  /** When on, nothing is held back and nothing is asked; the user turns this on deliberately. */
+  private allowAll = false;
 
   constructor(private readonly store?: AllowedPatternStore) {
     super();
@@ -50,13 +52,22 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
     this.allowed.set(sessionId, set);
   }
 
+  /** Lets every call through, and releases anything already waiting; off again restores the rules. */
+  setAllowAll(on: boolean): void {
+    this.allowAll = on;
+    if (!on) return;
+    for (const id of [...this.waiting.keys()]) this.settle(id, { behavior: 'allow' }, 'allow-once');
+  }
+
   /** True when the call must wait for the user, whatever the session's own settings allow. */
   needsApproval(req: Omit<ApprovalRequest, 'signal'>): boolean {
+    if (this.allowAll) return false;
     const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
     return verdict.outcome === 'ask' && !this.allowed.get(req.sessionId)?.has(verdict.patternKey);
   }
 
   request(req: ApprovalRequest): Promise<PermissionOutcome> {
+    if (this.allowAll) return Promise.resolve({ behavior: 'allow' });
     const verdict = classifyToolUse(req.toolName, req.input, req.cwd, req.blockedPath);
     if (verdict.outcome === 'allow') return Promise.resolve({ behavior: 'allow' });
     if (this.allowed.get(req.sessionId)?.has(verdict.patternKey)) return Promise.resolve({ behavior: 'allow' });

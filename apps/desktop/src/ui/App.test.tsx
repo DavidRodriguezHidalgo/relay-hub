@@ -40,6 +40,8 @@ describe('App', () => {
       listCommands: vi.fn().mockResolvedValue([{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }]),
       takeOver: vi.fn().mockResolvedValue([4242]),
       pathForFile: vi.fn(() => '/shots/a.png'),
+      settings: vi.fn().mockResolvedValue({ allowAllActions: false }),
+      setAllowAllActions: vi.fn().mockResolvedValue(undefined),
     };
     Object.assign(window, { relay });
   });
@@ -318,5 +320,26 @@ describe('App', () => {
 
     await act(async () => arriveBeta?.([entry('b1', 'belongs to Beta')]));
     expect(await screen.findByText('belongs to Beta')).toBeInTheDocument();
+  });
+
+  it('opens settings, switches the theme, and shows when everything is allowed', async () => {
+    render(<App />);
+    await screen.findByText('Alpha');
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(dialog).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Light' }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('relay.theme')).toBe('light');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Allow all actions/ }));
+    expect(relay.setAllowAllActions).toHaveBeenCalledWith(true);
+    expect(await screen.findByRole('status')).toHaveTextContent(/allowing every action/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    expect(relay.setAllowAllActions).toHaveBeenLastCalledWith(false);
+    localStorage.clear();
+    delete document.documentElement.dataset.theme;
   });
 });

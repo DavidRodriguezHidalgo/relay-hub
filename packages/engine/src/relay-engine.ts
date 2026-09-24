@@ -39,6 +39,9 @@ const BUSY_WINDOW_MS = 15_000;
 /** Writes this soon after Relay's own run went idle are Relay's, not a terminal's. */
 const OWN_WRITE_GRACE_MS = 1_000;
 /** An idle runner (and its `claude` process) is closed after this long without a send. */
+/** Meta key for the one setting the engine owns. */
+const ALLOW_ALL_KEY = 'settings.allowAllActions';
+
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
 const RELAY_TEXT_MAX = 600;
@@ -95,6 +98,11 @@ export interface SendOptions {
 }
 
 /** The single entry point the desktop app (and later a daemon) talks to. */
+/** Settings the user controls, kept by Relay rather than by any one session. */
+export interface RelaySettings {
+  allowAllActions: boolean;
+}
+
 export class RelayEngine {
   private readonly runners = new Map<string, SessionRunner>();
   private readonly creating = new Map<string, Promise<SessionRunner>>();
@@ -128,6 +136,7 @@ export class RelayEngine {
     private readonly createTimeoutMs: number,
   ) {
     this.commands = new CommandCatalog(agent.describe?.bind(agent));
+    this.approvals.setAllowAll(store.getMeta(ALLOW_ALL_KEY) === 'true');
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
     this.watcher.on('event', (watch, event) => this.onPrEvent(watch, event));
@@ -282,6 +291,20 @@ export class RelayEngine {
     this.takenOverAt.set(sessionId, this.now().getTime());
     await this.refreshExternal();
     return pids;
+  }
+
+  /** What the user has turned on for themselves; kept across restarts. */
+  settings(): RelaySettings {
+    return { allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true' };
+  }
+
+  /**
+   * Lets sessions Relay drives act without asking. It covers Relay's own approvals only:
+   * a session's own settings still apply, and take-over and bulk runs are still confirmed.
+   */
+  setAllowAllActions(on: boolean): void {
+    this.store.setMeta(ALLOW_ALL_KEY, on ? 'true' : null);
+    this.approvals.setAllowAll(on);
   }
 
   orchestratorSend(prompt: string): Promise<string> {

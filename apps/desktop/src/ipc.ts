@@ -34,6 +34,8 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.listProjects, () => engine.listProjects());
   handle(IPC.listCommands, (sessionId: string) => engine.listCommands(sessionId));
   handle(IPC.takeOver, (sessionId: string) => engine.takeOver(sessionId));
+  handle(IPC.settings, () => engine.settings());
+  handle(IPC.setAllowAllActions, (on: boolean) => engine.setAllowAllActions(on));
   handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );
@@ -63,6 +65,8 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.createSession,
     IPC.listCommands,
     IPC.takeOver,
+    IPC.settings,
+    IPC.setAllowAllActions,
   ];
   return () => {
     for (const u of unsubs) u();

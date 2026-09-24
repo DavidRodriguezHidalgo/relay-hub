@@ -23,6 +23,8 @@ export const IPC = {
   createSession: 'relay:createSession',
   listCommands: 'relay:listCommands',
   takeOver: 'relay:takeOver',
+  settings: 'relay:settings',
+  setAllowAllActions: 'relay:setAllowAllActions',
 } as const;
 
 export interface SendRequest {
@@ -53,6 +55,8 @@ export interface RelayApi {
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
   takeOver(sessionId: string): Promise<number[]>;
+  settings(): Promise<{ allowAllActions: boolean }>;
+  setAllowAllActions(on: boolean): Promise<void>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }
