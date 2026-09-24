@@ -109,3 +109,30 @@ test("the Relay name is the focal point of the chat", async () => {
   expect(size).toBeGreaterThanOrEqual(20);
   await app.close();
 });
+
+test('the allow-all toggle ticks, sticks, and survives a restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'relay-e2e-'));
+  await mkdir(join(root, 'projects', 'p'), { recursive: true });
+  await copyFile(join(fixtures, 'basic.jsonl'), join(root, 'projects', 'p', 'basic.jsonl'));
+  const launch = () =>
+    electron.launch({
+      args: [resolve(__dirname, '../.vite/build/main.js'), `--user-data-dir=${join(root, 'userData')}`],
+      env: { ...process.env, RELAY_PROJECTS_DIR: join(root, 'projects') },
+    });
+
+  const app = await launch();
+  const page = await app.firstWindow();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const toggle = page.getByRole('checkbox', { name: /Allow all actions/ });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await app.close();
+
+  // the choice belongs to the engine, so a new run of the app must still have it on
+  const again = await launch();
+  const page2 = await again.firstWindow();
+  await page2.getByRole('button', { name: 'Settings' }).click();
+  await expect(page2.getByRole('checkbox', { name: /Allow all actions/ })).toBeChecked();
+  await again.close();
+});

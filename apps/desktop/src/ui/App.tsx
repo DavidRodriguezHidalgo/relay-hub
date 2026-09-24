@@ -29,6 +29,7 @@ export function App() {
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   /** Null until the user picks one, so the app keeps following the system before then. */
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
@@ -50,8 +51,14 @@ export function App() {
   const run = useRunState();
   /** The engine owns this one, so it is set there first and only then shown as on. */
   const changeAllowAll = async (on: boolean) => {
-    await window.relay.setAllowAllActions(on);
-    setAllowAllActions(on);
+    try {
+      await window.relay.setAllowAllActions(on);
+      setAllowAllActions(on);
+      setSettingsError(null);
+    } catch (e: unknown) {
+      // e.g. an app whose main process is older than this window: the control must not just sit there
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    }
   };
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const entries = loaded.id === selectedId ? loaded.entries : NO_ENTRIES;
@@ -113,12 +120,18 @@ export function App() {
           </button>
         </div>
       )}
+      {run.gh.state === 'unavailable' && (
+        <div role="alert" className="gh-banner">
+          GitHub CLI unavailable — PR watches paused: {run.gh.message}
+        </div>
+      )}
       {settingsOpen && (
         <Settings
           theme={theme ?? systemTheme()}
           onTheme={setTheme}
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
+          error={settingsError}
           onClose={() => setSettingsOpen(false)}
         />
       )}
@@ -126,11 +139,6 @@ export function App() {
         className="app"
         style={{ gridTemplateColumns: `${widths.left}px 6px minmax(0,1fr) 6px ${widths.right}px` }}
       >
-      {run.gh.state === 'unavailable' && (
-        <div role="alert" className="gh-banner">
-          GitHub CLI unavailable — PR watches paused: {run.gh.message}
-        </div>
-      )}
       <SessionList
         sessions={sessions}
         selectedId={selectedId}

@@ -5,6 +5,8 @@ interface Props {
   onTheme: (theme: Theme) => void;
   allowAllActions: boolean;
   onAllowAllActions: (on: boolean) => void;
+  /** Why the last change did not take, when it did not. */
+  error: string | null;
   onClose: () => void;
 }
 
@@ -18,6 +20,12 @@ export function Settings(p: Props) {
             Close
           </button>
         </header>
+
+        {p.error && (
+          <p role="alert" className="error">
+            {p.error}
+          </p>
+        )}
 
         <section className="settings__section">
           <h3>Appearance</h3>

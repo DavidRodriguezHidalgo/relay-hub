@@ -9,6 +9,7 @@ const base = {
   allowAllActions: false,
   onAllowAllActions: vi.fn(),
   onClose: vi.fn(),
+  error: null,
 };
 
 describe('Settings', () => {
@@ -39,5 +40,10 @@ describe('Settings', () => {
     render(<Settings {...base} onClose={onClose} />);
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('says why a change did not take, instead of leaving a dead control', () => {
+    render(<Settings {...base} error="No handler registered for 'relay:setAllowAllActions'" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('relay:setAllowAllActions');
   });
 });
