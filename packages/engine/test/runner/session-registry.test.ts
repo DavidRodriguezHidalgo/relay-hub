@@ -45,7 +45,7 @@ describe('ClaudeSessionRegistry', () => {
   it("reports which sessions are open elsewhere and whether they are busy", async () => {
     await writeFile(join(dir, "100.json"), JSON.stringify({ pid: 100, sessionId: "s1", status: "busy" }));
     await writeFile(join(dir, "200.json"), JSON.stringify({ pid: 200, sessionId: "s2", status: "idle" }));
-    await writeFile(join(dir, "300.json"), JSON.stringify({ pid: 300, sessionId: "s3", status: "busy" })); // Relay's own
+    await writeFile(join(dir, "300.json"), JSON.stringify({ pid: 300, sessionId: "s3", status: "busy", entrypoint: "sdk-cli" })); // Relay's own agent
     await writeFile(join(dir, "400.json"), JSON.stringify({ pid: 400, sessionId: "s4", status: "busy" })); // dead
     const registry = new ClaudeSessionRegistry({ dir, isAlive: (pid) => pid !== 400, isOwnDescendant: async (pid) => pid === 300 });
     expect(await registry.openSessions()).toEqual({ s1: "busy", s2: "idle" });
