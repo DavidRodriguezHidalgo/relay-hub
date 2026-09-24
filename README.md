@@ -93,3 +93,7 @@ unidentified developer. Right-click the app and choose Open to get past it.
 One thing is missing from the built app today: the box for typing directly to a single session,
 and its `/` menu of your commands and skills, only appear when you run with `pnpm dev`. In the
 built app you drive sessions through the Relay chat instead. Everything else works in both.
+
+## Licence
+
+Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
