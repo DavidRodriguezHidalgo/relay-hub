@@ -295,4 +295,28 @@ describe('App', () => {
     expect(JSON.parse(localStorage.getItem('relay.columnWidths') ?? '{}').left).toBe(316);
     localStorage.clear();
   });
+
+  it('never shows one session’s transcript under another while the new one loads', async () => {
+    const entry = (uuid: string, text: string) => ({
+      uuid, role: 'assistant' as const, timestamp: '2026-09-24T10:00:00.000Z',
+      isSidechain: false, isMeta: false, blocks: [{ kind: 'text' as const, text }],
+    });
+    let arriveBeta: ((v: unknown) => void) | null = null;
+    relay.getTranscript.mockImplementation((id: string) =>
+      id === 'a'
+        ? Promise.resolve([entry('a1', 'belongs to Alpha')])
+        : new Promise((resolve) => {
+            arriveBeta = resolve;
+          }),
+    );
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    expect(await screen.findByText('belongs to Alpha')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Beta'));
+    expect(screen.queryByText('belongs to Alpha')).not.toBeInTheDocument();
+
+    await act(async () => arriveBeta?.([entry('b1', 'belongs to Beta')]));
+    expect(await screen.findByText('belongs to Beta')).toBeInTheDocument();
+  });
 });

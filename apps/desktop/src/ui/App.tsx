@@ -11,10 +11,14 @@ import { dotState } from './sessionDot';
 import { useFollowBottom } from './useFollowBottom';
 import { useRunState } from './useRunState';
 
+/** Stable empty list: a new array each render would defeat the transcript's memoisation. */
+const NO_ENTRIES: TranscriptEntry[] = [];
+
 export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [entries, setEntries] = useState<TranscriptEntry[]>([]);
+  /** Transcript plus the session it belongs to, so one session's history can never show under another. */
+  const [loaded, setLoaded] = useState<{ id: string | null; entries: TranscriptEntry[] }>({ id: null, entries: [] });
   const [showSidechain, setShowSidechain] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -30,6 +34,7 @@ export function App() {
     });
   const run = useRunState();
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
+  const entries = loaded.id === selectedId ? loaded.entries : NO_ENTRIES;
   const liveEntries = selected ? (run.liveEntries[selected.id] ?? []) : [];
 
   useEffect(() => {
@@ -45,7 +50,7 @@ export function App() {
     if (!selectedId) return;
     let cancelled = false;
     void window.relay.getTranscript(selectedId).then((t) => {
-      if (!cancelled) setEntries(t);
+      if (!cancelled) setLoaded({ id: selectedId, entries: t });
     });
     return () => {
       cancelled = true;
