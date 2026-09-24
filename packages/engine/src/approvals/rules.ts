@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import type { ApprovalReason } from '@relay/shared';
@@ -216,16 +217,49 @@ function isUnder(path: string, root: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
+/**
+ * Characters that fill awk, sed and grep programs but almost never a path someone types.
+ *
+ * `awk '/^type Foo /{f=1}'` is one token beginning with a slash, and reading it as a path meant
+ * a prompt for every distinct program, each under a key of its own, so allowing never helped.
+ */
+const PROGRAM_LIKE = /[{}()^|\\]/;
+
 /** Resolves a token that looks like a path to an absolute one, or null when it is not a path. */
-function pathOf(token: string, cwd: string): string | null {
+function pathOf(token: string, cwd: string, exists: (p: string) => boolean = existsSync): string | null {
   let t = token;
   const eq = t.indexOf('=');
   if (t.startsWith('-') && eq !== -1) t = t.slice(eq + 1);
   if (t === '~' || t.startsWith('~/')) t = homedir() + t.slice(1);
   if (t.startsWith('$HOME')) t = homedir() + t.slice(5);
+  // a real file wins over the shape of the text: a path may legitimately contain brackets
+  if (PROGRAM_LIKE.test(t) && !exists(t)) return null;
   if (isAbsolute(t)) return t;
   if (t.split('/').includes('..')) return resolve(cwd, t);
   return null;
+}
+
+/**
+ * The directory one approval should cover: the repository a path sits in, else its own folder.
+ *
+ * The whole disk and the whole home directory are never offered, since one click would then
+ * allow everything; those fall back to the single path that was asked about.
+ */
+function pathPatternKey(p: string, repoRoot: (path: string) => string | null): string {
+  const root = repoRoot(p);
+  if (root && !isTooBroad(root)) return root;
+  const dir = dirname(p);
+  return isTooBroad(dir) ? p : dir;
+}
+
+function isTooBroad(dir: string): boolean {
+  return dir === '/' || dir === homedir();
+}
+
+/** True for an allowed kind that would let anything through; such a kind is never honoured. */
+export function tooBroadPattern(patternKey: string): boolean {
+  const at = patternKey.lastIndexOf(' ');
+  return isTooBroad(at === -1 ? patternKey : patternKey.slice(at + 1));
 }
 
 function outsideCwd(path: string, cwd: string): boolean {
@@ -255,7 +289,7 @@ export function classifyToolUse(
       for (const token of tokens) {
         const p = pathOf(token, cwd);
         if (p && outsideCwd(p, cwd)) {
-          return { outcome: 'ask', reason: 'outside-cwd', summary: command, patternKey: `Bash path ${repoRoot(p) ?? dirname(p)}` };
+          return { outcome: 'ask', reason: 'outside-cwd', summary: command, patternKey: `Bash path ${pathPatternKey(p, repoRoot)}` };
         }
       }
     }
@@ -268,7 +302,7 @@ export function classifyToolUse(
       if (typeof raw !== 'string') continue;
       const p = resolve(cwd, raw);
       if (outsideCwd(p, cwd)) {
-        return { outcome: 'ask', reason: 'outside-cwd', summary: raw, patternKey: `${toolName} ${repoRoot(p) ?? dirname(p)}` };
+        return { outcome: 'ask', reason: 'outside-cwd', summary: raw, patternKey: `${toolName} ${pathPatternKey(p, repoRoot)}` };
       }
     }
   }

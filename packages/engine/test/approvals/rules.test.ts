@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { classifyToolUse } from '../../src/approvals/rules';
+import { homedir } from 'node:os';
+import { classifyToolUse, tooBroadPattern } from '../../src/approvals/rules';
 
 const cwd = '/Users/me/code/repo';
 const bash = (command: string) => classifyToolUse('Bash', { command }, cwd);
@@ -146,5 +147,38 @@ describe('classifyToolUse pattern keys', () => {
     expect(classifyToolUse('Bash', { command: 'cat /etc/hosts/x/y' }, '/work/other', undefined, () => null)).toMatchObject({
       patternKey: 'Bash path /etc/hosts/x',
     });
+  });
+});
+
+describe('what counts as a path at all', () => {
+  const cwd = '/work/repo';
+  const verdict = (command: string) => classifyToolUse('Bash', { command }, cwd);
+
+  it('does not mistake an awk or sed program for a path outside the session', () => {
+    // these ask every time otherwise, and each one under a key of its own, so allowing never helps
+    expect(verdict(`awk '/^type Foo /{f=1} f{print} f&&/^}/{exit}' schema.graphql`)).toEqual({ outcome: 'allow' });
+    expect(verdict(`awk '/^<<<<<<< HEAD/,/^>>>>>>>/' file.txt`)).toEqual({ outcome: 'allow' });
+    expect(verdict(`sed -n '/calculate(/,/^}/p' src/x.ts`)).toEqual({ outcome: 'allow' });
+    expect(verdict(`grep -nE '^(type|interface) ' schema.graphql`)).toEqual({ outcome: 'allow' });
+  });
+
+  it('still stops a command that really does reach outside', () => {
+    expect(verdict('cat /work/other/secrets.txt')).toMatchObject({ outcome: 'ask', reason: 'outside-cwd' });
+  });
+
+  it('never offers the whole disk or the whole home directory as one allowable kind', () => {
+    const root = verdict('cat /rogue-file');
+    expect(root).toMatchObject({ outcome: 'ask', patternKey: 'Bash path /rogue-file' });
+    const home = classifyToolUse('Edit', { file_path: `${homedir()}/.zshrc` }, cwd);
+    expect(home).toMatchObject({ outcome: 'ask', patternKey: `Edit ${homedir()}/.zshrc` });
+  });
+});
+
+describe('tooBroadPattern', () => {
+  it('recognises a kind that would allow everything', () => {
+    expect(tooBroadPattern('Bash path /')).toBe(true);
+    expect(tooBroadPattern(`Edit ${homedir()}`)).toBe(true);
+    expect(tooBroadPattern('Bash path /work/repo')).toBe(false);
+    expect(tooBroadPattern('Bash git push')).toBe(false);
   });
 });

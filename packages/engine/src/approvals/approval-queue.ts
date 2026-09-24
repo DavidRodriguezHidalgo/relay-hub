@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { ApprovalDecision, PendingApproval } from '@relay/shared';
-import { classifyToolUse } from './rules';
+import { classifyToolUse, tooBroadPattern } from './rules';
 
 /** Where allowed kinds are kept, so a decision outlives the runner and the app. */
 export interface AllowedPatternStore {
@@ -39,7 +39,8 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
   constructor(private readonly store?: AllowedPatternStore) {
     super();
     for (const { sessionId, patternKey } of store?.allowedPatterns() ?? []) {
-      this.remember(sessionId, patternKey);
+      // one stored by an earlier version could cover the whole disk; it is not honoured again
+      if (!tooBroadPattern(patternKey)) this.remember(sessionId, patternKey);
     }
   }
 

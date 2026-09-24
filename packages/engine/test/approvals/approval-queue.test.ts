@@ -133,3 +133,21 @@ describe('ApprovalQueue', () => {
     expect(afterRestart.pending()).toEqual([]);
   });
 });
+
+describe('ApprovalQueue and kinds that are too broad to honour', () => {
+  it('ignores a stored kind that would allow everything', async () => {
+    const q = new ApprovalQueue({
+      allowedPatterns: () => [
+        { sessionId: 's1', patternKey: 'Bash path /' },
+        { sessionId: 's1', patternKey: 'Bash path /work/elsewhere' },
+      ],
+      allowPattern: () => undefined,
+    });
+    // the broad one is not honoured: this still has to be asked
+    expect(q.needsApproval({ sessionId: 's1', toolName: 'Bash', input: { command: 'cat /rogue-file' }, cwd })).toBe(true);
+    // the narrow one still is
+    expect(
+      q.needsApproval({ sessionId: 's1', toolName: 'Bash', input: { command: 'cat /work/elsewhere/x' }, cwd }),
+    ).toBe(false);
+  });
+});
