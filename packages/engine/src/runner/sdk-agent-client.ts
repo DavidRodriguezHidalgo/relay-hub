@@ -9,7 +9,6 @@ import {
 import { blocksFromContent } from '../transcript/parse-transcript';
 import type { Invocable } from '@relay/shared';
 import type { AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
-import { RELAY_DRIVER_ENV } from './session-registry';
 
 /** Tools on Relay's in-process MCP server; the orchestrator may use nothing else. */
 const RELAY_TOOL_PREFIX = 'mcp__relay__';
@@ -167,10 +166,7 @@ function profileOptions(opts: AgentStartOptions): Options {
 
 /** Drives one Claude Code session through the Agent SDK in streaming-input mode. */
 export class SdkAgentClient implements AgentClient {
-  constructor(private readonly queryFn: SdkQueryFn = sdkQuery as unknown as SdkQueryFn) {
-    // the agents we spawn inherit this, which is how a driver of ours is told from a terminal
-    process.env[RELAY_DRIVER_ENV] ??= '1';
-  }
+  constructor(private readonly queryFn: SdkQueryFn = sdkQuery as unknown as SdkQueryFn) {}
 
   /**
    * Reads the command list without running a turn: the input stream never yields, so the

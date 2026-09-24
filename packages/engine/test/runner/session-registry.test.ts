@@ -13,10 +13,12 @@ describe('ClaudeSessionRegistry', () => {
 
   const entry = (pid: number, sessionId: string) =>
     writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, kind: 'interactive', entrypoint: 'cli' }));
+  const sdkEntry = (pid: number, sessionId: string) =>
+    writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, kind: 'interactive', entrypoint: 'sdk-cli' }));
 
   it('reports live processes that hold the session and are not ours', async () => {
     await entry(100, 's1'); // a terminal, alive
-    await entry(200, 's1'); // Relay's own child, alive
+    await sdkEntry(200, 's1'); // Relay's own child, alive
     await entry(300, 's1'); // dead
     await entry(400, 's2'); // another session
     await writeFile(join(dir, '100.abc.key'), 'x');
@@ -50,43 +52,6 @@ describe('ClaudeSessionRegistry', () => {
   });
 });
 
-describe('ClaudeSessionRegistry and Relay’s own drivers', () => {
-  let dir: string;
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'relay-registry-own-'));
-  });
-  afterEach(() => rm(dir, { recursive: true, force: true }));
-
-  const write = (pid: number, sessionId: string) =>
-    writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, status: 'idle' }));
-
-  it('does not count a driver Relay started as a foreign holder, even one left by an earlier run', async () => {
-    await write(100, 's1'); // a terminal
-    await write(200, 's1'); // a driver this Relay started: reachable by ancestry
-    await write(300, 's1'); // a driver an EARLIER Relay left behind: only the env marker identifies it
-    const registry = new ClaudeSessionRegistry({
-      dir,
-      isAlive: () => true,
-      isOwnDescendant: async (pid) => pid === 200,
-      readEnv: async (pid) => (pid === 300 ? 'PATH=/usr/bin RELAY_HUB_DRIVER=1\n' : 'PATH=/usr/bin\n'),
-    });
-    expect(await registry.foreignHolders('s1')).toEqual([100]);
-    expect(await registry.openSessions()).toEqual({ s1: 'idle' });
-  });
-
-  it('treats a process whose environment cannot be read as somebody else’s', async () => {
-    await write(100, 's1');
-    const registry = new ClaudeSessionRegistry({
-      dir,
-      isAlive: () => true,
-      isOwnDescendant: async () => false,
-      readEnv: async () => {
-        throw new Error('not permitted');
-      },
-    });
-    expect(await registry.foreignHolders('s1')).toEqual([100]);
-  });
-});
 
 describe('ClaudeSessionRegistry.release', () => {
   let dir: string;
@@ -98,7 +63,7 @@ describe('ClaudeSessionRegistry.release', () => {
   const write = (pid: number, sessionId: string) =>
     writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, status: 'busy' }));
 
-  const base = { isOwnDescendant: async () => false, readEnv: async () => '', sleep: async () => undefined };
+  const base = { isOwnDescendant: async () => false, sleep: async () => undefined };
 
   it('stops every process holding the session and waits until they are gone', async () => {
     await write(100, 's1');
@@ -143,5 +108,61 @@ describe('ClaudeSessionRegistry.release', () => {
       releaseTimeoutMs: 400,
     });
     await expect(registry.release('s1')).rejects.toThrow(/did not exit/);
+  });
+});
+
+describe('ClaudeSessionRegistry and entries left by a dead process', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'relay-registry-stale-'));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  const WHEN = 'Tue Sep 23 17:11:02 2026';
+  const write = (pid: number, procStart?: string) =>
+    writeFile(join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId: 's1', status: 'busy', procStart }));
+  const base = { isOwnDescendant: async () => false, isAlive: () => true };
+
+  it('ignores an entry whose pid the system has since given to another process', async () => {
+    await write(100, WHEN);
+    const registry = new ClaudeSessionRegistry({ ...base, dir, readStart: async () => 'Wed Sep 24 09:00:00 2026' });
+    expect(await registry.foreignHolders('s1')).toEqual([]);
+    expect(await registry.openSessions()).toEqual({});
+  });
+
+  it('keeps an entry whose process is still the one that wrote it', async () => {
+    await write(100, WHEN);
+    const registry = new ClaudeSessionRegistry({ ...base, dir, readStart: async () => WHEN });
+    expect(await registry.foreignHolders('s1')).toEqual([100]);
+  });
+
+  it('keeps an entry with no recorded start, and one whose start cannot be read', async () => {
+    await write(100);
+    await write(200, WHEN);
+    const registry = new ClaudeSessionRegistry({
+      ...base,
+      dir,
+      readStart: async (pid) => {
+        if (pid === 200) throw new Error('no such process');
+        return 'unused';
+      },
+    });
+    expect(await registry.foreignHolders('s1')).toEqual([100, 200]);
+  });
+});
+
+describe('ClaudeSessionRegistry and a terminal started from inside Relay', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'relay-registry-terminal-'));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  it('still counts a terminal that Relay happens to be an ancestor of', async () => {
+    // a person opened Claude inside a session Relay drives: descended from Relay, yet really holding it
+    await writeFile(join(dir, '100.json'), JSON.stringify({ pid: 100, sessionId: 's1', entrypoint: 'cli' }));
+    await writeFile(join(dir, '200.json'), JSON.stringify({ pid: 200, sessionId: 's1', entrypoint: 'sdk-cli' }));
+    const registry = new ClaudeSessionRegistry({ dir, isAlive: () => true, isOwnDescendant: async () => true });
+    expect(await registry.foreignHolders('s1')).toEqual([100]);
   });
 });

@@ -16,27 +16,30 @@ export interface SessionRegistry {
   release?(sessionId: string): Promise<number[]>;
 }
 
-/**
- * Set in every process Relay starts a session from, and inherited by the agent it spawns.
- * A driver left behind by an earlier Relay is no longer reachable by parentage, so this is
- * what still identifies it as ours rather than as a terminal holding the session.
- */
-export const RELAY_DRIVER_ENV = 'RELAY_HUB_DRIVER';
-
 export interface ClaudeSessionRegistryOptions {
   /** Claude Code writes one `<pid>.json` per running process here. */
   dir?: string;
   isAlive?: (pid: number) => boolean;
   /** True for processes Relay spawned (its SDK children). */
   isOwnDescendant?: (pid: number) => Promise<boolean>;
-  /** A live process's environment; used to recognise drivers Relay started. */
-  readEnv?: (pid: number) => Promise<string>;
+  /** When a live process started, as `ps` prints it, to tell a recycled pid from a real holder. */
+  readStart?: (pid: number) => Promise<string>;
   /** True for a process Relay is running inside, which must never be stopped. */
   isOwnAncestor?: (pid: number) => Promise<boolean>;
   terminate?: (pid: number) => void;
   sleep?: (ms: number) => Promise<void>;
   /** How long a stopped process is given to exit. */
   releaseTimeoutMs?: number;
+}
+
+/**
+ * True for a session the Agent SDK drives, as opposed to one a person is typing in.
+ *
+ * Parentage alone is not enough: a terminal Claude started from inside a session Relay
+ * drives is also a descendant of Relay, and that one really is holding its session.
+ */
+function isAgent(entrypoint: unknown): boolean {
+  return typeof entrypoint === 'string' && entrypoint.startsWith('sdk');
 }
 
 function processAlive(pid: number): boolean {
@@ -76,9 +79,9 @@ async function ancestorOfSelf(pid: number): Promise<boolean> {
   return false;
 }
 
-async function environmentOf(pid: number): Promise<string> {
-  const { stdout } = await run('ps', ['-Eww', '-p', String(pid)]);
-  return stdout;
+async function startedAtOf(pid: number): Promise<string> {
+  const { stdout } = await run('ps', ['-o', 'lstart=', '-p', String(pid)]);
+  return stdout.trim();
 }
 
 /** Reads Claude Code's live-process registry (`~/.claude/sessions`). */
@@ -86,7 +89,7 @@ export class ClaudeSessionRegistry implements SessionRegistry {
   private readonly dir: string;
   private readonly isAlive: (pid: number) => boolean;
   private readonly isOwnDescendant: (pid: number) => Promise<boolean>;
-  private readonly readEnv: (pid: number) => Promise<string>;
+  private readonly readStart: (pid: number) => Promise<string>;
   private readonly isOwnAncestor: (pid: number) => Promise<boolean>;
   private readonly terminate: (pid: number) => void;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -96,7 +99,7 @@ export class ClaudeSessionRegistry implements SessionRegistry {
     this.dir = opts.dir ?? join(homedir(), '.claude', 'sessions');
     this.isAlive = opts.isAlive ?? processAlive;
     this.isOwnDescendant = opts.isOwnDescendant ?? descendsFromSelf;
-    this.readEnv = opts.readEnv ?? environmentOf;
+    this.readStart = opts.readStart ?? startedAtOf;
     this.isOwnAncestor = opts.isOwnAncestor ?? ancestorOfSelf;
     this.terminate = opts.terminate ?? ((pid) => process.kill(pid, 'SIGTERM'));
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -134,14 +137,17 @@ export class ClaudeSessionRegistry implements SessionRegistry {
     return pids;
   }
 
-  /** A process Relay started, now or in an earlier run; never a terminal the user is using. */
-  private async isRelayDriver(pid: number): Promise<boolean> {
-    try {
-      return (await this.readEnv(pid)).includes(`${RELAY_DRIVER_ENV}=`);
-    } catch {
-      // an environment we cannot read belongs to somebody else as far as we know
-      return false;
-    }
+  /**
+   * True when the pid is alive but is somebody else's process now.
+   *
+   * An entry outlives a process that was killed outright, and the system hands that number on
+   * in time. The entry records when its process started, so a start time that no longer matches
+   * means the entry is a leftover rather than a holder.
+   */
+  private async isStalePid(pid: number, procStart: unknown): Promise<boolean> {
+    if (typeof procStart !== 'string' || procStart.length === 0) return false;
+    const started = await this.readStart(pid).catch(() => '');
+    return started.length > 0 && started !== procStart;
   }
 
   async openSessions(): Promise<Record<string, 'busy' | 'idle'>> {
@@ -165,17 +171,18 @@ export class ClaudeSessionRegistry implements SessionRegistry {
     } catch {
       return [];
     }
-    const found: { pid: number; sessionId?: unknown; status?: unknown }[] = [];
+    const found: { pid: number; sessionId?: unknown; status?: unknown; procStart?: unknown; entrypoint?: unknown }[] = [];
     for (const name of names.filter((n) => /^\d+\.json$/.test(n)).sort()) {
-      let entry: { pid?: unknown; sessionId?: unknown; status?: unknown };
+      let entry: { pid?: unknown; sessionId?: unknown; status?: unknown; procStart?: unknown; entrypoint?: unknown };
       try {
         entry = JSON.parse(await readFile(join(this.dir, name), 'utf8')) as typeof entry;
       } catch {
         continue;
       }
       if (typeof entry.pid !== 'number') continue;
-      if (!this.isAlive(entry.pid) || (await this.isOwnDescendant(entry.pid))) continue;
-      if (await this.isRelayDriver(entry.pid)) continue;
+      if (!this.isAlive(entry.pid)) continue;
+      if (await this.isStalePid(entry.pid, entry.procStart)) continue;
+      if (isAgent(entry.entrypoint) && (await this.isOwnDescendant(entry.pid))) continue;
       found.push({ ...entry, pid: entry.pid });
     }
     return found;
