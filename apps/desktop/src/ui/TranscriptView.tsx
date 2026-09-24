@@ -1,4 +1,5 @@
 import type { LiveEntry, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import { Markdown } from './Markdown';
 
 /** A file entry, or a live one that also knows who caused it. */
 export type ViewEntry = TranscriptEntry & { origin?: LiveEntry['origin'] };
@@ -13,7 +14,7 @@ const INPUT_MAX = 120;
 function Block({ block }: { block: TranscriptBlock }) {
   switch (block.kind) {
     case 'text':
-      return <p className="block-text">{block.text}</p>;
+      return <Markdown text={block.text} />;
     case 'tool_use': {
       const input = JSON.stringify(block.input) ?? '';
       return (

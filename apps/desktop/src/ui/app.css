@@ -92,6 +92,26 @@
   .entry--sidechain { @apply ml-3 border-l-2 border-dashed border-line; }
   .entry header { @apply mb-1 flex justify-between gap-2 text-[11px] text-muted; }
   .block-text { @apply m-0 mb-1.5 whitespace-pre-wrap; }
+  .md { @apply text-[15px] leading-[1.55]; }
+  .md > :first-child { @apply mt-0; }
+  .md > :last-child { @apply mb-0; }
+  .md p { @apply my-1.5; }
+  .md h1, .md h2, .md h3, .md h4 { @apply mt-3 mb-1.5 font-semibold text-fg; }
+  .md h1 { @apply text-[17px]; }
+  .md h2 { @apply text-[16px]; }
+  .md h3, .md h4 { @apply text-[15px]; }
+  .md ul { @apply my-1.5 list-disc pl-5; }
+  .md ol { @apply my-1.5 list-decimal pl-5; }
+  .md li { @apply my-0.5; }
+  .md strong { @apply font-semibold text-fg; }
+  .md a { @apply text-accent-fg underline; }
+  .md code { @apply rounded bg-bg px-1 py-0.5 font-mono text-[12.5px]; }
+  .md pre { @apply my-2 max-h-96 overflow-auto rounded bg-bg p-2; }
+  .md pre code { @apply bg-transparent p-0 text-[12px]; }
+  .md blockquote { @apply my-2 border-l-2 border-line pl-3 text-muted; }
+  .md table { @apply my-2 border-collapse text-[13px]; }
+  .md th, .md td { @apply border border-line px-2 py-1 text-left align-top; }
+  .md hr { @apply my-3 border-line; }
   .block-tool { @apply font-mono text-[12px] text-muted; }
   .block-result summary { @apply cursor-pointer font-mono text-[12px] text-muted; }
   .block-result pre { @apply max-h-60 overflow-y-auto rounded bg-bg p-2 font-mono text-[12px] whitespace-pre-wrap text-fg; }
