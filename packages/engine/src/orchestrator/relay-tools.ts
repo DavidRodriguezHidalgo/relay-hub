@@ -2,11 +2,18 @@ import { z } from 'zod';
 import type { BulkRun, DeliveryMode, PrWatch, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
 import type { AgentTool, AgentToolResult } from '../runner/agent-client';
 
-const LIST_MAX = 50;
-const RECENT_MAX = 20;
-const TEXT_MAX = 400;
-const RESULT_MAX = 200;
-const BLOCKS_MAX = 12;
+/**
+ * How much a tool may return.
+ *
+ * Whatever a tool returns joins the orchestrator's conversation and is read again on every
+ * later turn, so a generous answer is paid for many times over. These are sized to answer the
+ * usual question in one call: too small and the model asks twice, which costs far more.
+ */
+const LIST_MAX = 20;
+const RECENT_MAX = 8;
+const TEXT_MAX = 240;
+const RESULT_MAX = 120;
+const BLOCKS_MAX = 6;
 const SUMMARY_MAX = 300;
 
 export interface RelayToolDeps {
@@ -92,9 +99,14 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
               (q === '' || [s.title, s.branch ?? '', s.repo].some((f) => f.toLowerCase().includes(q))),
           )
           .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
-          .slice(0, LIST_MAX)
           .map((s) => row(s, run));
-        return ok(rows);
+        const shown = rows.slice(0, LIST_MAX);
+        const more = rows.length - shown.length;
+        return ok({
+          sessions: shown,
+          more,
+          ...(more > 0 ? { hint: 'Narrow with query rather than asking for more.' } : {}),
+        });
       } catch (err) {
         return fail(err);
       }

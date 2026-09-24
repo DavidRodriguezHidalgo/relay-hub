@@ -36,7 +36,7 @@ const modelKey = (sessionId: string) => `model.${sessionId}`;
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
-const RELAY_TEXT_MAX = 600;
+const RELAY_TEXT_MAX = 300;
 /** Per-row detail in a bulk summary. */
 const BULK_DETAIL_MAX = 200;
 const RECENT_BULK_RUNS = 20;

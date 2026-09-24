@@ -52,15 +52,15 @@ describe('relay tools', () => {
   });
 
   it('list_sessions filters, hides stale, sorts newest first and includes run state', async () => {
-    const all = JSON.parse((await call(deps(), 'list_sessions', {})).text);
+    const all = JSON.parse((await call(deps(), 'list_sessions', {})).text).sessions;
     expect(all.map((r: { id: string }) => r.id)).toEqual(['a', 'b']);
     expect(all[0]).toEqual({
       id: 'a', repo: 'repo', branch: 'feat/mileage', title: 'Mileage claims', state: 'running',
       lastActivity: '2026-09-22T00:00:00.000Z', prNumber: 12, pendingApprovals: 0,
     });
-    const found = JSON.parse((await call(deps(), 'list_sessions', { query: 'MILEAGE' })).text);
+    const found = JSON.parse((await call(deps(), 'list_sessions', { query: 'MILEAGE' })).text).sessions;
     expect(found.map((r: { id: string }) => r.id)).toEqual(['a']);
-    const withStale = JSON.parse((await call(deps(), 'list_sessions', { includeStale: true })).text);
+    const withStale = JSON.parse((await call(deps(), 'list_sessions', { includeStale: true })).text).sessions;
     expect(withStale).toHaveLength(3);
   });
 
@@ -73,8 +73,8 @@ describe('relay tools', () => {
     }));
     const r = JSON.parse((await call(deps({ getTranscript: async () => entries }), 'get_session', { id: 'a' })).text);
     expect(r.session).toMatchObject({ id: 'a', title: 'Mileage claims', state: 'running' });
-    expect(r.recent).toHaveLength(20);
-    expect(r.recent[0].content[0]).toHaveLength(401); // 400 + ellipsis
+    expect(r.recent).toHaveLength(8);
+    expect(r.recent[0].content[0]).toHaveLength(241); // 240 + ellipsis
     expect(r.recent[0].content[1]).toEqual({ tool: 'Bash' });
   });
 
@@ -182,5 +182,36 @@ describe('relay tools', () => {
     const r = JSON.parse((await call(d, "get_session", { id: "a" })).text);
     expect(r.recent[0].content.length).toBeLessThanOrEqual(13); // 12 blocks + a "more" marker
     expect(r.approvals[0].summary.length).toBeLessThanOrEqual(301);
+  });
+});
+
+describe('relay tools and the orchestrator’s context', () => {
+  /** Every token a tool returns is re-read on every later turn, so the lists are kept short. */
+  const many = Array.from({ length: 40 }, (_, i) =>
+    s({ id: `s${i}`, title: `Session ${i}`, lastActivity: `2026-09-${String(10 + (i % 20)).padStart(2, '0')}T00:00:00.000Z` }),
+  );
+
+  it('returns a page of sessions and says how many more matched, rather than all of them', async () => {
+    const out = JSON.parse((await call(deps({ listSessions: () => many }), 'list_sessions', {})).text);
+    expect(out.sessions).toHaveLength(20);
+    expect(out.more).toBe(20);
+    expect(out.hint).toMatch(/query/i);
+  });
+
+  it('says nothing about more when everything matched', async () => {
+    const out = JSON.parse((await call(deps({ listSessions: () => many.slice(0, 5) }), 'list_sessions', {})).text);
+    expect(out.sessions).toHaveLength(5);
+    expect(out.more).toBe(0);
+    expect(out.hint).toBeUndefined();
+  });
+
+  it('keeps one session’s detail to the last few turns', async () => {
+    const entries: TranscriptEntry[] = Array.from({ length: 30 }, (_, i) => ({
+      uuid: `e${i}`, role: 'assistant', timestamp: '2026-09-22T00:00:00.000Z', isSidechain: false, isMeta: false,
+      blocks: [{ kind: 'text', text: `line ${i}` }],
+    }));
+    const out = JSON.parse((await call(deps({ getTranscript: async () => entries }), 'get_session', { id: 'a' })).text);
+    expect(out.recent).toHaveLength(8);
+    expect(out.recent.at(-1).content[0]).toContain('line 29');
   });
 });
