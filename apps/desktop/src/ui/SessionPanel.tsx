@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApprovalDecision,
   DeliveryMode,
@@ -54,6 +54,17 @@ export function SessionPanel(p: Props) {
   /** Escape shuts the menu for this command; it opens again only once a new one is started. */
   const [dismissed, setDismissed] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement>(null);
+  /** Where the caret must land once a picked command is on screen. */
+  const [caretAfterPick, setCaretAfterPick] = useState<number | null>(null);
+
+  // synchronously, before the user can type: a frame's delay lets keystrokes land at the old spot
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box || caretAfterPick === null) return;
+    box.focus();
+    box.setSelectionRange(caretAfterPick, caretAfterPick);
+    setCaretAfterPick(null);
+  }, [caretAfterPick, draft]);
   const query = slashQuery(draft, caret);
   const matches = query === null || dismissed ? [] : matchCommands(p.commands, query);
   const pick = (command: Invocable) => {
@@ -61,12 +72,7 @@ export function SessionPanel(p: Props) {
     setDraft(next.value);
     setCaret(next.caret);
     setActive(0);
-    const box = boxRef.current;
-    if (box) {
-      // the caret belongs after the command, not where React would leave it
-      requestAnimationFrame(() => box.setSelectionRange(next.caret, next.caret));
-      box.focus();
-    }
+    setCaretAfterPick(next.caret);
   };
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (matches.length === 0) {

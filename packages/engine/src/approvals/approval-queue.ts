@@ -3,6 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { ApprovalDecision, PendingApproval } from '@relay/shared';
 import { classifyToolUse } from './rules';
 
+/** Where allowed kinds are kept, so a decision outlives the runner and the app. */
+export interface AllowedPatternStore {
+  allowedPatterns(): { sessionId: string; patternKey: string }[];
+  allowPattern(sessionId: string, patternKey: string): void;
+}
+
 export type PermissionOutcome = { behavior: 'allow' } | { behavior: 'deny'; message: string };
 
 export interface ApprovalRequest {
@@ -27,8 +33,21 @@ type QueueEvents = { pending: [PendingApproval]; resolved: [string, ApprovalDeci
 /** Turns `canUseTool` callbacks into pending decisions; safe calls pass straight through. */
 export class ApprovalQueue extends EventEmitter<QueueEvents> {
   private readonly waiting = new Map<string, Waiting>();
-  /** Per session: pattern keys the user allowed for the life of its runner. */
+  /** Per session: kinds of call the user allowed, kept for good rather than for one run. */
   private readonly allowed = new Map<string, Set<string>>();
+
+  constructor(private readonly store?: AllowedPatternStore) {
+    super();
+    for (const { sessionId, patternKey } of store?.allowedPatterns() ?? []) {
+      this.remember(sessionId, patternKey);
+    }
+  }
+
+  private remember(sessionId: string, patternKey: string): void {
+    const set = this.allowed.get(sessionId) ?? new Set<string>();
+    set.add(patternKey);
+    this.allowed.set(sessionId, set);
+  }
 
   /** True when the call must wait for the user, whatever the session's own settings allow. */
   needsApproval(req: Omit<ApprovalRequest, 'signal'>): boolean {
@@ -67,9 +86,8 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
         this.settle(approvalId, { behavior: 'allow' }, 'allow-once');
         break;
       case 'allow-pattern': {
-        const set = this.allowed.get(w.approval.sessionId) ?? new Set<string>();
-        set.add(w.patternKey);
-        this.allowed.set(w.approval.sessionId, set);
+        this.remember(w.approval.sessionId, w.patternKey);
+        this.store?.allowPattern(w.approval.sessionId, w.patternKey);
         this.settle(approvalId, { behavior: 'allow' }, 'allow-pattern');
         break;
       }
@@ -90,10 +108,6 @@ export class ApprovalQueue extends EventEmitter<QueueEvents> {
     }
   }
 
-  /** Drops a session's allow-patterns; they live only as long as its runner. */
-  forgetSession(sessionId: string): void {
-    this.allowed.delete(sessionId);
-  }
 
   private settle(id: string, outcome: PermissionOutcome, kind: ApprovalDecision['kind']): void {
     const w = this.waiting.get(id);

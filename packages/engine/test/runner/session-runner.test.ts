@@ -186,7 +186,7 @@ describe('SessionRunner', () => {
     expect(approvals.pending()).toEqual([]);
   });
 
-  it('close interrupts the run, ends input, cancels approvals and forgets allow-patterns', async () => {
+  it('close interrupts the run and cancels approvals, but a kind already allowed stays allowed', async () => {
     const { client, approvals, runner } = setup();
     await runner.send('x', { mode: 'steer', origin: 'user' });
     await tick();
@@ -196,13 +196,14 @@ describe('SessionRunner', () => {
     await first;
     await runner.close();
     expect(client.interrupts).toBe(1);
-    // a fresh runner for the same session asks again
+    // the session is driven again later: what the user allowed is not asked a second time
     const again = new SessionRunner({ sessionId: 's1', cwd: '/repo', client, approvals });
     await again.send('y', { mode: 'steer', origin: 'user' });
     await tick();
-    void client.askTool('Bash', { command: 'git push -f' });
+    const second = client.askTool('Bash', { command: 'git push -f' });
     await tick();
-    expect(approvals.pending()).toHaveLength(1);
+    expect(approvals.pending()).toEqual([]);
+    expect(await second).toEqual({ behavior: 'allow' });
     await again.close();
   });
 

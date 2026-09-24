@@ -158,7 +158,6 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   /** Interrupts the run, ends its input and waits (bounded) for it to wind down. */
   async close(): Promise<void> {
     this.approvals.cancelSession(this.sessionId, 'session closed');
-    this.approvals.forgetSession(this.sessionId);
     this.approvals.off('pending', this.onPending);
     this.approvals.off('resolved', this.onResolved);
     const bounded = (p: Promise<unknown>) =>

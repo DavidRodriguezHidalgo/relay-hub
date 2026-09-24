@@ -28,6 +28,7 @@ export class SessionStore {
       create table if not exists meta (key text primary key, value text not null);
       create table if not exists bulk_runs (id text primary key, created_at text not null, run text not null);
       create table if not exists pr_watches (id text primary key, created_at text not null, watch text not null, snapshot text);
+      create table if not exists allowed_patterns (session_id text not null, pattern_key text not null, primary key (session_id, pattern_key));
     `);
   }
 
@@ -115,6 +116,21 @@ export class SessionStore {
 
   deleteWatch(id: string): void {
     this.db.prepare('delete from pr_watches where id = ?').run(id);
+  }
+
+  /** Kinds of call a session's owner has said may run without asking again. */
+  allowedPatterns(): { sessionId: string; patternKey: string }[] {
+    const rows = this.db.prepare('select session_id, pattern_key from allowed_patterns').all() as {
+      session_id: string;
+      pattern_key: string;
+    }[];
+    return rows.map((r) => ({ sessionId: r.session_id, patternKey: r.pattern_key }));
+  }
+
+  allowPattern(sessionId: string, patternKey: string): void {
+    this.db
+      .prepare('insert or ignore into allowed_patterns (session_id, pattern_key) values (?, ?)')
+      .run(sessionId, patternKey);
   }
 
   close(): void {

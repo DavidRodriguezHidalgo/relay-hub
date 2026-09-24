@@ -211,7 +211,7 @@ export class RelayEngine {
       store,
       index,
       opts.agent ?? new SdkAgentClient(),
-      new ApprovalQueue(),
+      new ApprovalQueue(store),
       opts.now ?? (() => new Date()),
       opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       opts.registry ?? new ClaudeSessionRegistry(),

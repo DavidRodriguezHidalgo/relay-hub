@@ -49,10 +49,6 @@ describe('ApprovalQueue', () => {
       sessionId: 's2', toolName: 'Bash', input: { command: 'git push -f' }, cwd, signal: new AbortController().signal,
     });
     expect(q.pending().map((p) => p.sessionId)).toEqual(['s2']);
-    // and after forgetSession, s1 asks again
-    q.forgetSession('s1');
-    void req(q, 'git push -f origin c');
-    expect(q.pending().map((p) => p.sessionId)).toEqual(['s2', 's1']);
   });
 
   it('allow-pattern covers the destructive step, not whatever the line started with', async () => {
@@ -117,5 +113,23 @@ describe('ApprovalQueue', () => {
 
   it('decide throws for an unknown id', () => {
     expect(() => new ApprovalQueue().decide('nope', { kind: 'allow-once' })).toThrow(/unknown approval/i);
+  });
+  it('keeps an allowed kind after the app restarts, so the same call is never asked twice', async () => {
+    const rows: { sessionId: string; patternKey: string }[] = [];
+    const store = {
+      allowedPatterns: () => rows,
+      allowPattern: (sessionId: string, patternKey: string) => {
+        rows.push({ sessionId, patternKey });
+      },
+    };
+    const q = new ApprovalQueue(store);
+    const first = req(q, 'git push --force');
+    q.decide(q.pending()[0]!.id, { kind: 'allow-pattern' });
+    expect(await first).toEqual({ behavior: 'allow' });
+    expect(rows).toEqual([{ sessionId: 's1', patternKey: 'Bash git push' }]);
+
+    const afterRestart = new ApprovalQueue(store);
+    expect(await req(afterRestart, 'git push --force origin b')).toEqual({ behavior: 'allow' });
+    expect(afterRestart.pending()).toEqual([]);
   });
 });

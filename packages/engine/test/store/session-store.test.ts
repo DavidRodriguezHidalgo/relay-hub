@@ -98,4 +98,15 @@ describe('SessionStore', () => {
     expect(runs).toHaveLength(50);
     expect(runs.at(-1)!.id).toBe("r5");
   });
+  it('remembers which kinds of call a session allows, without duplicating them', () => {
+    const store = new SessionStore(':memory:');
+    store.allowPattern('s1', 'Bash path /repo');
+    store.allowPattern('s1', 'Bash path /repo');
+    store.allowPattern('s2', 'Bash git push');
+    expect(store.allowedPatterns()).toEqual([
+      { sessionId: 's1', patternKey: 'Bash path /repo' },
+      { sessionId: 's2', patternKey: 'Bash git push' },
+    ]);
+    store.close();
+  });
 });

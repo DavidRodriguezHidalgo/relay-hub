@@ -47,7 +47,7 @@ export function ApprovalCard({ approval, onDecide }: Props) {
           Deny
         </button>
         <button type="button" disabled={decided} onClick={() => decide({ kind: 'allow-pattern' })}>
-          Allow this kind for this run
+          Always allow this kind
         </button>
       </div>
     </div>

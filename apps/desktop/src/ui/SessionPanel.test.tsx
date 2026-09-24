@@ -187,7 +187,7 @@ describe('SessionPanel', () => {
   it.each([
     ['Allow once', { kind: 'allow-once' }],
     ['Deny', { kind: 'deny' }],
-    ['Allow this kind for this run', { kind: 'allow-pattern' }],
+    ['Always allow this kind', { kind: 'allow-pattern' }],
   ])('a pending approval offers "%s"', async (label, decision) => {
     const onDecide = vi.fn();
     render(
