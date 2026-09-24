@@ -57,6 +57,7 @@ describe('RelayEngine', () => {
       gh?: GhClient;
       worktrees?: { repoRoot(cwd: string): Promise<string | null>; createWorktree(root: string, branch: string): Promise<string> };
       createTimeoutMs?: number;
+      updates?: { repo: string; currentVersion: string; fetch?: (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> };
     } = {},
   ) {
     root = await mkdtemp(join(tmpdir(), 'relay-engine-'));
@@ -893,5 +894,26 @@ describe('RelayEngine', () => {
     await startWithBasic(client);
     const names = (await engine!.listCommands('s-basic')).map((c) => c.name);
     expect(names).toEqual(['btw', 'review']);
+  });
+  it('asks GitHub whether a newer release exists, using the version it was started with', async () => {
+    const client = new FakeAgentClient();
+    const asked: string[] = [];
+    await startWithBasic(client, undefined, {
+      updates: {
+        repo: 'o/r',
+        currentVersion: '0.1.0',
+        fetch: async (url) => {
+          asked.push(url);
+          return { ok: true, status: 200, json: async () => ({ tag_name: 'v0.3.0', html_url: 'https://github.com/o/r/releases/tag/v0.3.0', body: 'notes' }) };
+        },
+      },
+    });
+    expect(await engine!.checkForUpdate()).toMatchObject({ current: '0.1.0', latest: '0.3.0', newer: true, notes: 'notes' });
+    expect(asked).toEqual(['https://api.github.com/repos/o/r/releases/latest']);
+  });
+
+  it('says so when a build was not told where its releases live', async () => {
+    await startWithBasic(new FakeAgentClient());
+    expect(await engine!.checkForUpdate()).toMatchObject({ newer: false, error: expect.stringContaining('releases') });
   });
 });

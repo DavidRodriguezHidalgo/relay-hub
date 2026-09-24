@@ -44,6 +44,7 @@ describe('App', () => {
       setAllowAllActions: vi.fn().mockResolvedValue(undefined),
       channels: vi.fn().mockResolvedValue(Object.values(IPC)),
       aside: vi.fn().mockResolvedValue('an answer'),
+      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: '0.1.0', newer: false, url: null, notes: null, publishedAt: null, error: null }),
     };
     Object.assign(window, { relay });
   });
@@ -337,7 +338,7 @@ describe('App', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: /Allow all actions/ }));
     expect(relay.setAllowAllActions).toHaveBeenCalledWith(true);
-    expect(await screen.findByRole('status')).toHaveTextContent(/allowing every action/);
+    expect(await screen.findByText(/allowing every action/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));
     expect(relay.setAllowAllActions).toHaveBeenLastCalledWith(false);
@@ -354,5 +355,11 @@ describe('App', () => {
     relay.channels.mockRejectedValue(new Error("No handler registered for 'relay:channels'"));
     render(<App />);
     expect(await screen.findByRole('alert')).toHaveTextContent(/Restart the app/);
+  });
+  it('points at a newer release as soon as it starts', async () => {
+    relay.checkForUpdate.mockResolvedValue({ current: '0.1.0', latest: '0.2.0', newer: true, url: 'https://github.com/o/r/releases/tag/v0.2.0', notes: 'x', publishedAt: null, error: null });
+    render(<App />);
+    expect(await screen.findByText(/Relay Hub 0\.2\.0 is available/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('href', 'https://github.com/o/r/releases/tag/v0.2.0');
   });
 });

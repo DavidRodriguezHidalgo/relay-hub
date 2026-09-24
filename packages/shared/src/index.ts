@@ -25,3 +25,4 @@ export type {
 } from './runner';
 export type { SendRequest } from './ipc';
 export { ORCHESTRATOR_KEY } from './runner';
+export type { UpdateCheck } from './updates';

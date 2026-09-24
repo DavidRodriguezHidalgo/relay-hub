@@ -1,4 +1,6 @@
 import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
+import { repoFromPackage } from '@relay/engine';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
@@ -22,6 +24,17 @@ function keepNavigationInside(win: BrowserWindow): void {
   });
 }
 
+/** Version and repository from the app's own package.json; releases live there. */
+function releasesFor(application: typeof app): { repo: string; currentVersion: string } | undefined {
+  try {
+    const pkg = JSON.parse(readFileSync(join(application.getAppPath(), 'package.json'), 'utf8')) as { repository?: unknown };
+    const repo = repoFromPackage(pkg.repository);
+    return repo ? { repo, currentVersion: application.getVersion() } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1400,
@@ -42,6 +55,7 @@ async function start(): Promise<void> {
     projectsDir: process.env.RELAY_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects'),
     dbPath: join(app.getPath('userData'), 'relay.db'),
     orchestratorDir: join(app.getPath('userData'), 'orchestrator'),
+    updates: releasesFor(app),
   });
   engine.onError((err) => console.error('[relay] indexing problem:', err.message));
   registerEngineIpc(engine);

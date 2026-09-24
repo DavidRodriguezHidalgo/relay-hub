@@ -43,3 +43,4 @@ export type { PrListing } from './orchestrator/relay-tools';
 export { carryForward } from './pr/snapshot';
 export { createWorktree, repoRoot, worktreePath } from './git/worktrees';
 export type { Project, Worktrees } from './relay-engine';
+export { repoFromPackage } from './updates/update-check';

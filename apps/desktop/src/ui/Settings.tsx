@@ -1,3 +1,4 @@
+import type { UpdateCheck } from '@relay/shared';
 import type { Theme } from './theme';
 
 interface Props {
@@ -8,6 +9,18 @@ interface Props {
   /** Why the last change did not take, when it did not. */
   error: string | null;
   onClose: () => void;
+  /** The last update check, or null before one has run. */
+  update: UpdateCheck | null;
+  checkingUpdate: boolean;
+  onCheckForUpdate: () => void;
+}
+
+/** One line saying where the app stands against its releases. */
+function updateLine(u: UpdateCheck): string {
+  if (u.error) return `Couldn’t check: ${u.error}`;
+  if (u.latest === null) return 'No release has been published yet.';
+  if (u.newer) return `Version ${u.latest} is available.`;
+  return `You’re up to date (${u.latest} is the newest release).`;
 }
 
 export function Settings(p: Props) {
@@ -53,6 +66,29 @@ export function Settings(p: Props) {
             override a session’s own settings, and take-over and bulk runs are still confirmed. It applies to every
             session Relay drives.
           </p>
+        </section>
+        <section className="settings__section">
+          <h3>About</h3>
+          <p className="settings__row">
+            Relay Hub {p.update ? p.update.current : ''}
+            <button type="button" disabled={p.checkingUpdate} onClick={p.onCheckForUpdate}>
+              {p.checkingUpdate ? 'Checking…' : 'Check for updates'}
+            </button>
+          </p>
+          {p.update && (
+            <p role="status" className="settings__note">
+              {updateLine(p.update)}
+              {p.update.newer && p.update.url && (
+                <>
+                  {' '}
+                  <a href={p.update.url} target="_blank" rel="noreferrer">
+                    Open the release
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+          {p.update?.newer && p.update.notes && <pre className="settings__notes">{p.update.notes}</pre>}
         </section>
       </div>
     </div>

@@ -1,22 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import {
-  ORCHESTRATOR_KEY,
-  type ApprovalDecision,
-  type BulkRowStatus,
-  type PrEvent,
-  type PrWatch,
-  type SessionState,
-  type BulkRun,
-  type DeliveryMode,
-  type Invocable,
-  type MessageOrigin,
-  type RunnerEvent,
-  type RunState,
-  type SessionSummary,
-  type TranscriptEntry,
-} from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -32,6 +17,7 @@ import { SessionBusyError } from './runner/session-busy-error';
 import { ClaudeSessionRegistry, type SessionRegistry } from './runner/session-registry';
 import { CommandCatalog } from './commands/command-catalog';
 import { RELAY_COMMANDS } from './commands/relay-commands';
+import { checkForUpdate, type UpdateSource } from './updates/update-check';
 import { AsyncQueue } from './runner/async-queue';
 import type { AgentInput } from './runner/agent-client';
 import { SessionRunner, type TurnEnd } from './runner/session-runner';
@@ -75,6 +61,8 @@ export interface RelayEngineOptions {
   externalPollMs?: number;
   /** How long createSession waits for a new session to report its id. */
   createTimeoutMs?: number;
+  /** Where releases are published and what version this is; without it, checks report that. */
+  updates?: UpdateSource;
 }
 
 /** Git operations createSession needs; injectable for tests. */
@@ -117,6 +105,7 @@ export class RelayEngine {
   /** The orchestrator dir as given and with symlinks resolved (transcripts record the real path). */
   private readonly orchestratorCwds: Set<string>;
   private closing = false;
+  private updates: UpdateSource | null = null;
   private external: Record<string, 'busy' | 'idle'> = {};
   private readonly commands: CommandCatalog;
   private externalTimer: NodeJS.Timeout | null = null;
@@ -238,6 +227,7 @@ export class RelayEngine {
     );
     engine.pruneWatches();
     engine.watcher.start();
+    engine.updates = opts.updates ?? null;
     engine.watchExternal(opts.externalPollMs ?? 3_000);
     return engine;
   }
@@ -346,6 +336,14 @@ export class RelayEngine {
       input.end();
     }
     return answer;
+  }
+
+  /** Whether a newer release exists than the one running. Never throws; failures come back in `error`. */
+  checkForUpdate(): Promise<UpdateCheck> {
+    if (!this.updates) {
+      return Promise.resolve({ current: 'unknown', latest: null, newer: false, url: null, notes: null, publishedAt: null, error: 'this build does not know where its releases live' });
+    }
+    return checkForUpdate(this.updates);
   }
 
   /** What the user has turned on for themselves; kept across restarts. */

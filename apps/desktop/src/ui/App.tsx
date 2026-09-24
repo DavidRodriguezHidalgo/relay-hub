@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry } from '@relay/shared';
+import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
@@ -32,6 +32,22 @@ export function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   /** Set when the process behind this window does not answer everything the window will ask. */
   const [staleMain, setStaleMain] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateCheck | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const checkForUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      setUpdate(await window.relay.checkForUpdate());
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  // once at startup, so a newer release is noticed without anyone asking
+  useEffect(() => {
+    void checkForUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const wanted = Object.values(IPC).filter((c) => c !== IPC.sessionsChanged && c !== IPC.runnerEvent);
@@ -127,6 +143,16 @@ export function App() {
           Settings
         </button>
       </div>
+      {update?.newer && (
+        <div role="status" className="update-banner">
+          Relay Hub {update.latest} is available.
+          {update.url && (
+            <a href={update.url} target="_blank" rel="noreferrer">
+              Open the release
+            </a>
+          )}
+        </div>
+      )}
       {staleMain && (
         <div role="alert" className="stale-banner">
           {staleMain}
@@ -152,6 +178,9 @@ export function App() {
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
           error={settingsError}
+          update={update}
+          checkingUpdate={checkingUpdate}
+          onCheckForUpdate={() => void checkForUpdate()}
           onClose={() => setSettingsOpen(false)}
         />
       )}

@@ -10,6 +10,9 @@ const base = {
   onAllowAllActions: vi.fn(),
   onClose: vi.fn(),
   error: null,
+  update: null,
+  checkingUpdate: false,
+  onCheckForUpdate: vi.fn(),
 };
 
 describe('Settings', () => {
@@ -45,5 +48,27 @@ describe('Settings', () => {
   it('says why a change did not take, instead of leaving a dead control', () => {
     render(<Settings {...base} error="No handler registered for 'relay:setAllowAllActions'" />);
     expect(screen.getByRole('alert')).toHaveTextContent('relay:setAllowAllActions');
+  });
+  it('checks for updates on request and says where the app stands', async () => {
+    const onCheckForUpdate = vi.fn();
+    const { rerender } = render(<Settings {...base} onCheckForUpdate={onCheckForUpdate} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    expect(onCheckForUpdate).toHaveBeenCalled();
+
+    const done = { current: '0.1.0', latest: '0.1.0', newer: false, url: 'u', notes: null, publishedAt: null, error: null };
+    rerender(<Settings {...base} update={done} />);
+    expect(screen.getByRole('status')).toHaveTextContent('up to date');
+    expect(screen.getByText(/Relay Hub 0\.1\.0/)).toBeInTheDocument();
+
+    rerender(<Settings {...base} update={{ ...done, latest: '0.2.0', newer: true, notes: '- faster' }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Version 0.2.0 is available');
+    expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('- faster')).toBeInTheDocument();
+
+    rerender(<Settings {...base} update={{ ...done, latest: null }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('No release has been published yet');
+
+    rerender(<Settings {...base} update={{ ...done, error: 'GitHub answered 403' }} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Couldn’t check: GitHub answered 403');
   });
 });

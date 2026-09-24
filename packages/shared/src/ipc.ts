@@ -1,6 +1,7 @@
 import type { Invocable } from './commands';
 import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
+import type { UpdateCheck } from './updates';
 import type { TranscriptEntry } from './transcript';
 
 export const IPC = {
@@ -27,6 +28,7 @@ export const IPC = {
   setAllowAllActions: 'relay:setAllowAllActions',
   channels: 'relay:channels',
   aside: 'relay:aside',
+  checkForUpdate: 'relay:checkForUpdate',
 } as const;
 
 export interface SendRequest {
@@ -63,6 +65,7 @@ export interface RelayApi {
   channels(): Promise<string[]>;
   /** A side question answered from a copy of the session; resolves with the answer. */
   aside(sessionId: string, question: string): Promise<string>;
+  checkForUpdate(): Promise<UpdateCheck>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

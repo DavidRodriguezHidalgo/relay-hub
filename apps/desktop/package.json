@@ -2,6 +2,7 @@
   "name": "@relay/desktop",
   "productName": "Relay Hub",
   "version": "0.1.0",
+  "repository": "github:DavidRodriguezHidalgo/relay-hub",
   "description": "One place for all your Claude Code sessions",
   "main": ".vite/build/main.js",
   "private": true,
