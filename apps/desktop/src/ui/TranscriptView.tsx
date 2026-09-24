@@ -53,10 +53,10 @@ const EntryRow = memo(function EntryRow({
   onOpenSession,
 }: { entry: ViewEntry } & Pick<Props, 'sessions' | 'onOpenSession'>) {
   return (
-    <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}`}>
+    <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}${entry.origin === 'aside' ? ' entry--aside' : ''}`}>
       <header>
         <span>{entry.role}</span>
-        {entry.origin && <span className="origin">{entry.origin}</span>}
+        {entry.origin && <span className="origin">{entry.origin === 'aside' ? 'side thread' : entry.origin}</span>}
         <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
       </header>
       {entry.blocks.map((b, i) => (

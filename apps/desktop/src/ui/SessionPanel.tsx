@@ -36,6 +36,8 @@ interface Props {
   /** Set when another Claude process has this session open, so it can be taken over. */
   heldElsewhere: 'busy' | 'idle' | null;
   onTakeOver: () => void;
+  /** A /btw question: answered beside the work, never sent into it. */
+  onAside: (question: string) => void;
   /** Why the last send or watch request failed; shown next to the send box. */
   notice: string | null;
   /** Commands, skills and plugins this session can be asked to run. */
@@ -49,6 +51,8 @@ export function SessionPanel(p: Props) {
   const [mode, setMode] = useState<DeliveryMode>('steer');
   /** Taking over stops someone else's Claude, so it takes two presses. */
   const [confirmingTakeOver, setConfirmingTakeOver] = useState(false);
+  /** Why the last thing typed was not sent, e.g. a /btw with no question. */
+  const [hint, setHint] = useState<string | null>(null);
   const [caret, setCaret] = useState(0);
   const [active, setActive] = useState(0);
   /** Escape shuts the menu for this command; it opens again only once a new one is started. */
@@ -103,8 +107,20 @@ export function SessionPanel(p: Props) {
   const state = p.state?.state ?? 'idle';
   const dot = p.dot ?? dotState(p.session.id, p.state ? { [p.session.id]: p.state } : undefined);
   const submit = () => {
-    if (!draft.trim()) return;
-    p.onSend(draft, mode);
+    const text = draft.trim();
+    if (!text) return;
+    const aside = text.match(/^\/btw(?:\s+([\s\S]*))?$/);
+    if (aside) {
+      const question = (aside[1] ?? '').trim();
+      if (!question) {
+        setHint('Put the side question after /btw, e.g. /btw why did you pick sqlite?');
+        return;
+      }
+      p.onAside(question);
+    } else {
+      p.onSend(draft, mode);
+    }
+    setHint(null);
     setDraft('');
   };
   return (
@@ -190,6 +206,11 @@ export function SessionPanel(p: Props) {
             </p>
           )}
           <SlashMenu items={matches} activeIndex={active} onPick={pick} onHover={setActive} />
+          {hint && (
+            <p role="alert" className="error">
+              {hint}
+            </p>
+          )}
           <textarea
             ref={boxRef}
             placeholder="Send to this session (dev)"

@@ -103,7 +103,12 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
 }
 
 function profileOptions(opts: AgentStartOptions): Options {
-  const base: Options = { cwd: opts.cwd, ...(opts.sessionId ? { resume: opts.sessionId } : {}) };
+  const base: Options = {
+    cwd: opts.cwd,
+    ...(opts.sessionId ? { resume: opts.sessionId } : {}),
+    ...(opts.fork ? { forkSession: true } : {}),
+    ...(opts.persist === false ? { persistSession: false } : {}),
+  };
   const profile = opts.profile ?? { kind: 'session' };
   if (profile.kind === 'session') {
     // Every settings source loads, like the terminal: CLAUDE.md, skills, commands, plugins, hooks.

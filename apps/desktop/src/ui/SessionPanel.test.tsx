@@ -21,7 +21,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(),
 };
 
 const commands = [
@@ -345,5 +345,37 @@ describe('SessionPanel', () => {
     } finally {
       Reflect.deleteProperty(window, 'relay');
     }
+  });
+});
+
+describe('SessionPanel side questions', () => {
+  it('sends /btw to the aside, not to the session, and clears the box', async () => {
+    const onSend = vi.fn();
+    const onAside = vi.fn();
+    renderPanel({ onSend, onAside });
+    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    await userEvent.click(box);
+    await userEvent.keyboard('/btw why sqlite?{Enter}');
+    expect(onAside).toHaveBeenCalledWith('why sqlite?');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue('');
+  });
+
+  it('asks for the question when /btw is sent on its own', async () => {
+    const onAside = vi.fn();
+    renderPanel({ onAside });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/btw{Enter}');
+    expect(onAside).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/question/i);
+  });
+
+  it('marks an aside as a side thread in the transcript', () => {
+    const aside: LiveEntry = { ...entry('q1', 'why?'), role: 'user', origin: 'aside' };
+    render(
+      <SessionPanel {...base} entries={[]} liveEntries={[aside]} state={undefined} approvals={[]} />,
+    );
+    expect(screen.getByText('side thread')).toBeInTheDocument();
+    expect(document.querySelector('li.entry--aside')).not.toBeNull();
   });
 });

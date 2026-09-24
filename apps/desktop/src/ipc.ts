@@ -34,6 +34,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.settings,
     IPC.setAllowAllActions,
     IPC.channels,
+    IPC.aside,
   ];
   const handle = (channel: string, fn: (...args: never[]) => unknown) => {
     ipcMain.handle(channel, (event, ...args) => {
@@ -60,6 +61,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.settings, () => engine.settings());
   handle(IPC.setAllowAllActions, (on: boolean) => engine.setAllowAllActions(on));
   handle(IPC.channels, () => channels);
+  handle(IPC.aside, (sessionId: string, question: string) => engine.aside(sessionId, question));
   handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );

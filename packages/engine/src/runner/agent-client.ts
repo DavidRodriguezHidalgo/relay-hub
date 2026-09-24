@@ -71,6 +71,10 @@ export interface AgentStartOptions {
   canUseTool: CanUseToolFn;
   /** Calls that must reach `canUseTool` even when the session's settings would pre-approve them. */
   needsApproval?: (toolName: string, input: Record<string, unknown>) => boolean;
+  /** Start from a copy of the resumed session rather than continuing it. */
+  fork?: boolean;
+  /** Keep the run off disk; false for something that must leave no session behind. */
+  persist?: boolean;
   profile?: AgentProfile;
 }
 

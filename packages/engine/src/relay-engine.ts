@@ -31,6 +31,9 @@ import { SdkAgentClient } from './runner/sdk-agent-client';
 import { SessionBusyError } from './runner/session-busy-error';
 import { ClaudeSessionRegistry, type SessionRegistry } from './runner/session-registry';
 import { CommandCatalog } from './commands/command-catalog';
+import { RELAY_COMMANDS } from './commands/relay-commands';
+import { AsyncQueue } from './runner/async-queue';
+import type { AgentInput } from './runner/agent-client';
 import { SessionRunner, type TurnEnd } from './runner/session-runner';
 import { SessionStore } from './store/session-store';
 
@@ -293,6 +296,58 @@ export class RelayEngine {
     return pids;
   }
 
+  /**
+   * Answers a question about a session without touching it. The question runs against a fork of
+   * the conversation as saved so far, kept off disk, so the session's own turn carries on and its
+   * history never contains the aside. Both halves are shown under the session as a side thread.
+   * Mid-turn, the fork knows the conversation only up to its last saved line.
+   */
+  async aside(sessionId: string, question: string): Promise<string> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const cwd = session.cwd;
+    const input = new AsyncQueue<AgentInput>();
+    const run = this.agent.start({
+      sessionId,
+      cwd,
+      input,
+      fork: true,
+      persist: false,
+      canUseTool: (toolName, args, blockedPath, signal) =>
+        this.approvals.request({ sessionId, toolName, input: args, cwd, blockedPath, signal }),
+      needsApproval: (toolName, args) => this.approvals.needsApproval({ sessionId, toolName, input: args, cwd }),
+    });
+    const asked = this.now().toISOString();
+    this.publish({
+      type: 'entry',
+      sessionId,
+      entry: { uuid: randomUUID(), role: 'user', timestamp: asked, isSidechain: false, isMeta: false, blocks: [{ kind: 'text', text: question }], origin: 'aside' },
+    });
+    input.push({ id: randomUUID(), text: question, priority: 'now', origin: 'aside' });
+    let answer = '';
+    try {
+      for await (const m of run.messages) {
+        if (m.type === 'init') continue; // the fork announcing its own id: nothing to show
+        if (m.type === 'result') {
+          if (m.isError) throw new Error(m.error ?? 'the side question failed');
+          break;
+        }
+        this.publish({
+          type: 'entry',
+          sessionId,
+          entry: { uuid: m.uuid, role: m.type === 'assistant' ? 'assistant' : 'user', timestamp: m.timestamp, isSidechain: m.sidechain, isMeta: false, blocks: m.blocks, origin: 'aside' },
+        });
+        if (m.type === 'assistant') {
+          const text = m.blocks.flatMap((b) => (b.kind === 'text' ? [b.text] : [])).join('\n').trim();
+          if (text) answer = text;
+        }
+      }
+    } finally {
+      input.end();
+    }
+    return answer;
+  }
+
   /** What the user has turned on for themselves; kept across restarts. */
   settings(): RelaySettings {
     return { allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true' };
@@ -357,7 +412,7 @@ export class RelayEngine {
   async listCommands(sessionId: string): Promise<Invocable[]> {
     const session = this.listSessions().find((x) => x.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
-    return this.commands.list(session.cwd);
+    return [...RELAY_COMMANDS, ...(await this.commands.list(session.cwd))];
   }
 
   watchDelete(watchId: string): void {

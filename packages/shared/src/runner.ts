@@ -7,7 +7,7 @@ export type SessionState = 'idle' | 'running' | 'waiting-approval' | 'error';
 
 export type DeliveryMode = 'steer' | 'queue' | 'interrupt';
 
-export type MessageOrigin = 'user' | 'orchestrator' | `watch:${string}` | `bulk:${string}`;
+export type MessageOrigin = 'user' | 'orchestrator' | 'aside' | `watch:${string}` | `bulk:${string}`;
 
 /** A transcript entry produced while Relay drives the session; `origin` names who caused the turn. */
 export interface LiveEntry extends TranscriptEntry {

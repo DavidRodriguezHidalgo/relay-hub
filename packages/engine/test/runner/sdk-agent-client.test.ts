@@ -256,4 +256,18 @@ describe('SdkAgentClient', () => {
       ["u2", null, true],
     ]);
   });
+  it('forks a session for a side question and keeps the fork off disk', () => {
+    let seen: Parameters<SdkQueryFn>[0] | null = null;
+    const fakeQuery = ((params: Parameters<SdkQueryFn>[0]) => {
+      seen = params;
+      async function* gen() {}
+      const g = gen() as FakeGen;
+      g.interrupt = async () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    new SdkAgentClient(fakeQuery).start({
+      sessionId: 'abc', cwd: '/r', input: new AsyncQueue(), canUseTool: async () => ({ behavior: 'allow' }), fork: true, persist: false,
+    });
+    expect(seen!.options).toMatchObject({ resume: 'abc', forkSession: true, persistSession: false });
+  });
 });

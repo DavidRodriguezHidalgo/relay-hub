@@ -26,6 +26,7 @@ export const IPC = {
   settings: 'relay:settings',
   setAllowAllActions: 'relay:setAllowAllActions',
   channels: 'relay:channels',
+  aside: 'relay:aside',
 } as const;
 
 export interface SendRequest {
@@ -60,6 +61,8 @@ export interface RelayApi {
   setAllowAllActions(on: boolean): Promise<void>;
   /** The channels the running main process answers; a window compares it with what it expects. */
   channels(): Promise<string[]>;
+  /** A side question answered from a copy of the session; resolves with the answer. */
+  aside(sessionId: string, question: string): Promise<string>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

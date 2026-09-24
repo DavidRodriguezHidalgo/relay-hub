@@ -43,6 +43,7 @@ describe('App', () => {
       settings: vi.fn().mockResolvedValue({ allowAllActions: false }),
       setAllowAllActions: vi.fn().mockResolvedValue(undefined),
       channels: vi.fn().mockResolvedValue(Object.values(IPC)),
+      aside: vi.fn().mockResolvedValue('an answer'),
     };
     Object.assign(window, { relay });
   });

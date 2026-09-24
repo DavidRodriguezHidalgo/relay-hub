@@ -231,6 +231,12 @@ export function App() {
             }
             onUnwatch={(id) => void window.relay.watchDelete(id)}
             heldElsewhere={run.external[selected.id] ?? null}
+            onAside={(question) =>
+              void window.relay
+                .aside(selected.id, question)
+                .then(() => setSendError(null))
+                .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
+            }
             onTakeOver={() =>
               void window.relay
                 .takeOver(selected.id)

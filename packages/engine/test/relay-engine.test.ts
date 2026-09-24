@@ -116,9 +116,8 @@ describe('RelayEngine', () => {
     const client = new FakeAgentClient();
     client.invocables = [{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }];
     const { cwd } = await startWithBasic(client);
-    expect(await engine!.listCommands('s-basic')).toEqual([
-      { name: 'review', description: 'Review the diff', argumentHint: '[pr]' },
-    ]);
+    // Relay's own commands come first, then what this directory offers
+    expect((await engine!.listCommands('s-basic')).map((c) => c.name)).toEqual(['btw', 'review']);
     expect(client.described).toEqual([cwd]);
     await expect(engine!.listCommands('nope')).rejects.toThrow('Unknown session nope');
   });
@@ -858,5 +857,41 @@ describe('RelayEngine', () => {
       registry: { foreignHolders: async () => [] },
     });
     expect(engine!.settings()).toEqual({ allowAllActions: true });
+  });
+  it('answers a side question from a fork of the session, leaving the session and its turn alone', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    // the main session is mid-turn
+    await engine!.send({ sessionId: 's-basic', prompt: 'keep working', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts).toHaveLength(1);
+    const seen: RunnerEvent[] = [];
+    engine!.onEvent((e) => seen.push(e));
+
+    const answer = engine!.aside('s-basic', 'why did you pick sqlite?');
+    await tick();
+    // a second run, forked from the same id, kept off disk, and never registered as the session's runner
+    expect(client.starts).toHaveLength(2);
+    expect(client.starts[1]).toMatchObject({ sessionId: 's-basic', fork: true, persist: false });
+    expect(client.received.at(-1)).toMatchObject({ text: 'why did you pick sqlite?', origin: 'aside', priority: 'now' });
+    client.assistant('a1', 'Because it needs no server.');
+    client.result();
+    await expect(answer).resolves.toBe('Because it needs no server.');
+
+    const entries = seen.filter((e) => e.type === 'entry' && e.sessionId === 's-basic');
+    expect(entries.map((e) => (e.type === 'entry' ? e.entry.origin : null))).toEqual(['aside', 'aside']);
+    expect(entries.map((e) => (e.type === 'entry' ? e.entry.role : null))).toEqual(['user', 'assistant']);
+    // the main turn was never interrupted or touched
+    expect(client.interrupts).toBe(0);
+    expect(engine!.runState().states['s-basic']?.state).toBe('running');
+    await expect(engine!.aside('nope', 'x')).rejects.toThrow('Unknown session nope');
+  });
+
+  it('puts Relay’s own commands ahead of the session’s in the / menu', async () => {
+    const client = new FakeAgentClient();
+    client.invocables = [{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }];
+    await startWithBasic(client);
+    const names = (await engine!.listCommands('s-basic')).map((c) => c.name);
+    expect(names).toEqual(['btw', 'review']);
   });
 });
