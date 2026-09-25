@@ -41,6 +41,13 @@ fails, when someone reviews or comments, or when the branch falls behind, it wak
 with the news. A merged PR stops being watched. Watching costs nothing — no AI usage, just Relay
 checking.
 
+## Demo
+
+
+https://github.com/user-attachments/assets/3553daa8-7bb2-42aa-911a-f1df210b061e
+
+
+
 ## What you need
 
 - A Mac.
