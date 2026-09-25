@@ -11,6 +11,7 @@ import {
 } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { collisionFor } from './collisions';
+import { stalenessOf } from './staleness';
 import { dismissedCollisions, dismissCollision } from './dismissed';
 import { ColumnResizer } from './ColumnResizer';
 import { Settings } from './Settings';
@@ -44,7 +45,10 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   /** Set when the process behind this window does not answer everything the window will ask. */
-  const [staleMain, setStaleMain] = useState<string | null>(null);
+  /** Channels the app process does not answer; 0 once it has been asked and agreed. */
+  const [missingChannels, setMissingChannels] = useState(0);
+  /** The session as this window drew it, to compare with what the index says now. */
+  const [shownSession, setShownSession] = useState<SessionSummary | null>(null);
   const [dismissed, setDismissed] = useState<string[]>(dismissedCollisions);
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -67,12 +71,9 @@ export function App() {
     const wanted = Object.values(IPC).filter((c) => c !== IPC.sessionsChanged && c !== IPC.runnerEvent);
     window.relay.channels().then(
       (have) => {
-        const missing = wanted.filter((c) => !have.includes(c));
-        if (missing.length > 0) {
-          setStaleMain(`This window is newer than the app process behind it (${missing.length} missing). Restart the app.`);
-        }
+        setMissingChannels(wanted.filter((c) => !have.includes(c)).length);
       },
-      () => setStaleMain('This window is newer than the app process behind it. Restart the app.'),
+      () => setMissingChannels(1),
     );
   }, []);
   /** Null until the user picks one, so the app keeps following the system before then. */
@@ -107,6 +108,11 @@ export function App() {
   };
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const entries = loaded.id === selectedId ? loaded.entries : NO_ENTRIES;
+  const stale = stalenessOf({
+    missingChannels,
+    shown: shownSession,
+    current: selected,
+  });
   const liveEntries = selected ? (run.liveEntries[selected.id] ?? []) : [];
 
   useEffect(() => {
@@ -122,7 +128,10 @@ export function App() {
     if (!selectedId) return;
     let cancelled = false;
     void window.relay.getTranscript(selectedId).then((t) => {
-      if (!cancelled) setLoaded({ id: selectedId, entries: t });
+      if (!cancelled) {
+        setLoaded({ id: selectedId, entries: t });
+        setShownSession(sessions.find((x) => x.id === selectedId) ?? null);
+      }
     });
     return () => {
       cancelled = true;
@@ -181,9 +190,9 @@ export function App() {
           )}
         </div>
       )}
-      {staleMain && (
+      {stale && (
         <div role="alert" className="stale-banner">
-          {staleMain}
+          {stale.message}
         </div>
       )}
       {allowAllActions && (

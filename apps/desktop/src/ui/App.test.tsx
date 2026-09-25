@@ -368,6 +368,26 @@ describe('App', () => {
     expect(await screen.findByText(/Relay Hub 0\.2\.0 is available/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('href', 'https://github.com/o/r/releases/tag/v0.2.0');
   });
+
+  it('says plainly when a session has moved to another directory under it', async () => {
+    let push: ((s: SessionSummary[]) => void) | null = null;
+    relay.onSessionsChanged.mockImplementation((l: (s: SessionSummary[]) => void) => {
+      push = l;
+      return () => undefined;
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByText('Alpha'));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await act(async () => push?.([s({ id: 'a', title: 'Alpha', cwd: '/moved/elsewhere' }), s({ id: 'b', title: 'Beta' })]));
+    expect(await screen.findByRole('alert')).toHaveTextContent('/moved/elsewhere');
+  });
+
+  it('still puts the app process first, since nothing works until it restarts', async () => {
+    relay.channels.mockResolvedValue(Object.values(IPC).filter((c) => c !== IPC.sessionStatus));
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Restart the app/);
+  });
 });
 
 describe('App collisions', () => {
