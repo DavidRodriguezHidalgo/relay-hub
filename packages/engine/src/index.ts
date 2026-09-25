@@ -45,3 +45,4 @@ export { createWorktree, repoRoot, worktreePath } from './git/worktrees';
 export type { Project, Worktrees } from './relay-engine';
 export { repoFromPackage } from './updates/update-check';
 export { downloadRelease } from './updates/download';
+export { applyCheckout, inspectCheckout } from './updates/checkout-update';

@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
-import { downloadRelease, repoFromPackage } from '@relay/engine';
+import { applyCheckout, downloadRelease, inspectCheckout, repoFromPackage } from '@relay/engine';
 import { readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { ipcMain } from 'electron';
 import { IPC } from '@relay/shared';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
@@ -63,6 +65,16 @@ async function start(): Promise<void> {
   engine.onError((err) => console.error('[relay] indexing problem:', err.message));
   registerEngineIpc(engine);
   // unsigned builds cannot install over themselves, so this fetches the build and shows it
+  // a working copy updates by pulling; a packaged build by being replaced
+  const runCommand = promisify(execFile);
+  const checkoutDir = app.getAppPath();
+  const run = async (cmd: string, args: string[], cwd: string) => {
+    const { stdout } = await runCommand(cmd, args, { cwd, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
+    return { stdout };
+  };
+  ipcMain.handle(IPC.updateMode, () => (app.isPackaged ? 'packaged' : 'checkout'));
+  ipcMain.handle(IPC.checkoutPlan, () => inspectCheckout(checkoutDir, run));
+  ipcMain.handle(IPC.applyCheckout, () => applyCheckout(checkoutDir, run));
   ipcMain.handle(IPC.downloadUpdate, async (_event, url: string, name: string) => {
     const path = await downloadRelease({
       url,

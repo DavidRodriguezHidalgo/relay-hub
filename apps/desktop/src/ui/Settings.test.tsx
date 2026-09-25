@@ -17,6 +17,11 @@ const base = {
   downloading: false,
   downloadError: null,
   onDownloadUpdate: vi.fn(),
+  updateMode: 'packaged' as const,
+  checkoutPlan: null,
+  checkoutResult: null,
+  pulling: false,
+  onPull: vi.fn(),
 };
 
 describe('Settings', () => {
@@ -113,5 +118,59 @@ describe('Settings update button', () => {
   it('always says which version is running', () => {
     render(<Settings {...base} update={{ ...offered, newer: false, latest: '0.1.0' }} />);
     expect(screen.getByText(/Relay Hub 0\.1\.0/)).toBeInTheDocument();
+  });
+});
+
+describe('Settings in a git working copy', () => {
+  const checkout = { updateMode: 'checkout' as const };
+  const ready = {
+    kind: 'ready' as const, reason: null, branch: 'main', upstream: 'origin/main',
+    commits: [{ sha: 'aaaaaaaaaa', subject: 'first thing' }, { sha: 'bbbbbbbbbb', subject: 'second thing' }],
+    needsInstall: false,
+  };
+
+  it('says what it will pull, and from where, before doing it', async () => {
+    const onPull = vi.fn();
+    render(<Settings {...base} {...checkout} checkoutPlan={ready} onPull={onPull} />);
+    expect(screen.getByText(/2 commits to pull from/)).toBeInTheDocument();
+    expect(screen.getByText(/first thing/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Pull and update this working copy' }));
+    expect(onPull).toHaveBeenCalled();
+  });
+
+  it('warns that the dependencies will be reinstalled when they changed', () => {
+    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, needsInstall: true }} />);
+    expect(screen.getByText(/dependencies will be installed again/)).toBeInTheDocument();
+  });
+
+  it('refuses with the reason, and offers no button at all', () => {
+    render(<Settings {...base} {...checkout} checkoutPlan={{
+      ...ready, kind: 'refused', commits: [],
+      reason: '2 files changed but not committed. Commit or put them aside yourself first — Relay will not touch them.',
+    }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/not committed/);
+    expect(screen.queryByRole('button', { name: /Pull/ })).not.toBeInTheDocument();
+  });
+
+  it('says what was pulled and to restart', () => {
+    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+      checkoutResult={{ pulled: [{ sha: 'a', subject: 'x' }], installed: true, error: null }} />);
+    const said = screen.getAllByRole('status').map((n) => n.textContent).join(' ');
+    expect(said).toMatch(/Pulled 1 commit/);
+    expect(said).toMatch(/installed the dependencies/);
+    expect(said).toMatch(/Restart Relay/);
+  });
+
+  it('says when the pull worked but installing did not', () => {
+    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+      checkoutResult={{ pulled: [{ sha: 'a', subject: 'x' }], installed: false, error: 'The changes were pulled, but installing the dependencies failed: network down. Run pnpm install yourself.' }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/pulled, but installing/);
+  });
+
+  it('never offers the packaged path in a working copy', () => {
+    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+      update={{ current: '0.1.0', latest: '0.2.0', newer: true, url: 'u', notes: null, publishedAt: null, assetUrl: 'https://x/z.zip', assetName: 'z.zip', error: null }} />);
+    expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/level with origin\/main/)).toBeInTheDocument();
   });
 });

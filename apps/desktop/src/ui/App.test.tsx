@@ -53,6 +53,9 @@ describe('App', () => {
       sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
       accomplished: vi.fn().mockResolvedValue({ commits: [], files: [], moreFiles: 0, base: null, open: [], note: null }),
       downloadUpdate: vi.fn().mockResolvedValue('/Users/me/Downloads/Relay.zip'),
+      updateMode: vi.fn().mockResolvedValue('packaged'),
+      checkoutPlan: vi.fn().mockResolvedValue({ kind: 'up-to-date' as const, reason: null, branch: 'main', upstream: 'origin/main', commits: [], needsInstall: false }),
+      applyCheckout: vi.fn().mockResolvedValue({ pulled: [], installed: false, error: null }),
     };
     Object.assign(window, { relay });
   });
@@ -418,6 +421,9 @@ describe('App collisions', () => {
       sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
       accomplished: vi.fn().mockResolvedValue({ commits: [], files: [], moreFiles: 0, base: null, open: [], note: null }),
       downloadUpdate: vi.fn().mockResolvedValue('/Users/me/Downloads/Relay.zip'),
+      updateMode: vi.fn().mockResolvedValue('packaged'),
+      checkoutPlan: vi.fn().mockResolvedValue({ kind: 'up-to-date' as const, reason: null, branch: 'main', upstream: 'origin/main', commits: [], needsInstall: false }),
+      applyCheckout: vi.fn().mockResolvedValue({ pulled: [], installed: false, error: null }),
     };
     Object.assign(window, { relay });
   });

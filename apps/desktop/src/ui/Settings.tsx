@@ -1,4 +1,4 @@
-import type { UpdateCheck } from '@relay/shared';
+import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
 import type { Theme } from './theme';
 
 interface Props {
@@ -18,6 +18,12 @@ interface Props {
   downloading: boolean;
   downloadError: string | null;
   onDownloadUpdate: () => void;
+  /** How this copy updates; the other path is not offered. */
+  updateMode: UpdateMode;
+  checkoutPlan: CheckoutPlan | null;
+  checkoutResult: CheckoutResult | null;
+  pulling: boolean;
+  onPull: () => void;
 }
 
 /** One line saying where the app stands against its releases. */
@@ -94,7 +100,50 @@ export function Settings(p: Props) {
             </p>
           )}
           {p.update?.newer && p.update.notes && <pre className="settings__notes">{p.update.notes}</pre>}
-          {p.update?.newer && (
+          {p.updateMode === 'checkout' && p.checkoutPlan && (
+            <div className="settings__update">
+              {p.checkoutPlan.kind === 'up-to-date' && (
+                <span className="settings__note">This working copy is level with {p.checkoutPlan.upstream}.</span>
+              )}
+              {p.checkoutPlan.kind === 'refused' && (
+                <p role="alert" className="error">
+                  {p.checkoutPlan.reason}
+                </p>
+              )}
+              {p.checkoutPlan.kind === 'ready' && (
+                <>
+                  <p className="settings__note">
+                    {p.checkoutPlan.commits.length} commit{p.checkoutPlan.commits.length === 1 ? '' : 's'} to pull from{' '}
+                    {p.checkoutPlan.upstream} into {p.checkoutPlan.branch}
+                    {p.checkoutPlan.needsInstall ? ', and the dependencies will be installed again' : ''}.
+                  </p>
+                  <ul className="settings__commits">
+                    {p.checkoutPlan.commits.map((c) => (
+                      <li key={c.sha}>
+                        <code>{c.sha.slice(0, 7)}</code> {c.subject}
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" disabled={p.pulling} onClick={p.onPull}>
+                    {p.pulling ? 'Pulling…' : 'Pull and update this working copy'}
+                  </button>
+                </>
+              )}
+              {p.checkoutResult && (
+                <p role="status" className="settings__note">
+                  Pulled {p.checkoutResult.pulled.length} commit
+                  {p.checkoutResult.pulled.length === 1 ? '' : 's'}
+                  {p.checkoutResult.installed ? ' and installed the dependencies' : ''}. Restart Relay to run it.
+                </p>
+              )}
+              {p.checkoutResult?.error && (
+                <p role="alert" className="error">
+                  {p.checkoutResult.error}
+                </p>
+              )}
+            </div>
+          )}
+          {p.updateMode === 'packaged' && p.update?.newer && (
             <div className="settings__update">
               {p.update.assetUrl ? (
                 <button type="button" disabled={p.downloading} onClick={p.onDownloadUpdate}>

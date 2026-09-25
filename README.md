@@ -95,6 +95,12 @@ are on and what is new. **Download the new version** fetches the build to your D
 and shows it in Finder; you quit Relay, drag the new app over the old one and open it again. It
 cannot install over itself, because an unsigned app is not allowed to.
 
+Run from this checkout instead and Settings offers the other path: it lists the commits waiting
+on your branch and **Pull and update this working copy** fast-forwards, reinstalling dependencies
+if they changed. It refuses, with the reason, if anything is uncommitted, the branch tracks
+nothing, the head is detached, or the pull would need a merge — it never stashes, resets or
+discards anything.
+
 One thing is missing from the built app today: the box for typing directly to a single session,
 and its `/` menu of your commands and skills, only appear when you run with `pnpm dev`. In the
 built app you drive sessions through the Relay chat instead. Everything else works in both.

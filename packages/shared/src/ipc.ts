@@ -4,7 +4,7 @@ import type { SessionSummary } from './session';
 import type { Accomplished } from './accomplished';
 import type { ModelChoice } from './models';
 import type { SessionStatus } from './status';
-import type { UpdateCheck } from './updates';
+import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
 import type { TranscriptEntry } from './transcript';
 
 export const IPC = {
@@ -37,6 +37,9 @@ export const IPC = {
   sessionStatus: 'relay:sessionStatus',
   accomplished: 'relay:accomplished',
   downloadUpdate: 'relay:downloadUpdate',
+  updateMode: 'relay:updateMode',
+  checkoutPlan: 'relay:checkoutPlan',
+  applyCheckout: 'relay:applyCheckout',
 } as const;
 
 export interface SendRequest {
@@ -80,6 +83,10 @@ export interface RelayApi {
   accomplished(sessionId: string): Promise<Accomplished>;
   /** Fetches the published build and reveals it; resolves with where it landed. */
   downloadUpdate(url: string, name: string): Promise<string>;
+  /** Whether this copy updates by replacing a build or by pulling a working copy. */
+  updateMode(): Promise<UpdateMode>;
+  checkoutPlan(): Promise<CheckoutPlan>;
+  applyCheckout(): Promise<CheckoutResult>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

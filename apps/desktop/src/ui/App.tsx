@@ -9,6 +9,9 @@ import {
   type UpdateCheck,
   type ModelChoice,
   type SessionStatus,
+  type CheckoutPlan,
+  type CheckoutResult,
+  type UpdateMode,
 } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { collisionFor } from './collisions';
@@ -57,6 +60,21 @@ export function App() {
   const [downloading, setDownloading] = useState(false);
   const [downloadedTo, setDownloadedTo] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [updateMode, setUpdateMode] = useState<UpdateMode>('packaged');
+  const [checkoutPlan, setCheckoutPlan] = useState<CheckoutPlan | null>(null);
+  const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
+  const [pulling, setPulling] = useState(false);
+  const pull = async () => {
+    setPulling(true);
+    try {
+      setCheckoutResult(await window.relay.applyCheckout());
+      setCheckoutPlan(await window.relay.checkoutPlan());
+    } catch (e: unknown) {
+      setCheckoutResult({ pulled: [], installed: false, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setPulling(false);
+    }
+  };
   const downloadUpdate = async () => {
     if (!update?.assetUrl || !update.assetName) return;
     setDownloading(true);
@@ -81,6 +99,11 @@ export function App() {
   // once at startup, so a newer release is noticed without anyone asking
   useEffect(() => {
     void checkForUpdate();
+    // a working copy is pulled, a packaged build replaced: only the right one is offered
+    void window.relay.updateMode().then((mode) => {
+      setUpdateMode(mode);
+      if (mode === 'checkout') void window.relay.checkoutPlan().then(setCheckoutPlan, () => undefined);
+    }, () => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -246,6 +269,11 @@ export function App() {
           downloading={downloading}
           downloadError={downloadError}
           onDownloadUpdate={() => void downloadUpdate()}
+          updateMode={updateMode}
+          checkoutPlan={checkoutPlan}
+          checkoutResult={checkoutResult}
+          pulling={pulling}
+          onPull={() => void pull()}
           onClose={() => setSettingsOpen(false)}
         />
       )}

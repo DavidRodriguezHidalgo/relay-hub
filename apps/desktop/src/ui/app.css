@@ -229,6 +229,7 @@
 
   .update-banner { @apply flex shrink-0 items-center justify-center gap-3 bg-accent px-3 py-1 text-[12px] font-semibold text-on-accent; }
   .update-banner a { @apply text-on-accent underline; }
+  .settings__commits { @apply m-0 max-h-32 list-none overflow-auto p-0 text-[12px] [overflow-wrap:anywhere]; }
   .settings__update { @apply mt-1.5 flex flex-col gap-1.5; }
   .settings__notes { @apply mt-1 mb-0 max-h-40 overflow-auto rounded bg-bg p-2 text-[12px] whitespace-pre-wrap text-muted; }
   .stale-banner { @apply shrink-0 bg-danger px-3 py-1 text-center text-[12px] font-semibold text-bg; }

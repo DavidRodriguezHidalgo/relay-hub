@@ -14,3 +14,23 @@ export interface UpdateCheck {
   /** Why the check could not be completed, when it could not. */
   error: string | null;
 }
+
+/** How this copy of Relay updates: a packaged build is replaced, a working copy is pulled. */
+export type UpdateMode = 'packaged' | 'checkout';
+
+/** What pulling would do, shown before anything touches the working copy. */
+export interface CheckoutPlan {
+  kind: 'up-to-date' | 'ready' | 'refused';
+  reason: string | null;
+  branch: string | null;
+  upstream: string | null;
+  commits: { sha: string; subject: string }[];
+  needsInstall: boolean;
+}
+
+/** What pulling did. A pull that succeeded stands even if installing afterwards did not. */
+export interface CheckoutResult {
+  pulled: { sha: string; subject: string }[];
+  installed: boolean;
+  error: string | null;
+}
