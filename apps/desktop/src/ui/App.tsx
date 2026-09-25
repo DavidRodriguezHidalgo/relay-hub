@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { IPC, ORCHESTRATOR_KEY, type Invocable, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
+import {
+  IPC,
+  ORCHESTRATOR_KEY,
+  type Invocable,
+  type SessionSummary,
+  type TranscriptEntry,
+  type UpdateCheck,
+  type ModelChoice,
+  type SessionStatus,
+} from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { collisionFor } from './collisions';
 import { dismissedCollisions, dismissCollision } from './dismissed';
@@ -29,6 +38,7 @@ export function App() {
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const [commands, setCommands] = useState<Invocable[]>([]);
   const [models, setModels] = useState<ModelChoice[]>([]);
+  const [standing, setStanding] = useState<SessionStatus | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -123,12 +133,19 @@ export function App() {
     setSendError(null);
     setCommands([]);
     setModels([]);
+    setStanding(null);
     if (!selectedId) return;
     let cancelled = false;
     // what this session can run depends on its directory, so it is asked per session
     void window.relay.listCommands(selectedId).then(
       (list) => {
         if (!cancelled) setCommands(list);
+      },
+      () => undefined,
+    );
+    void window.relay.sessionStatus(selectedId).then(
+      (s) => {
+        if (!cancelled) setStanding(s);
       },
       () => undefined,
     );
@@ -280,6 +297,7 @@ export function App() {
               const hit = collisionFor(sessions, selected.id, { states: run.states, external: run.external, now: Date.now() });
               if (hit) setDismissed(dismissCollision(hit.key));
             }}
+            standing={standing}
             queue={run.queue[selected.id] ?? []}
             models={models}
             onSetModel={(id) =>

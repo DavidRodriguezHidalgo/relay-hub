@@ -50,6 +50,7 @@ describe('App', () => {
       listModels: vi.fn().mockResolvedValue([]),
       setModel: vi.fn().mockResolvedValue(undefined),
       checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: '0.1.0', newer: false, url: null, notes: null, publishedAt: null, error: null }),
+      sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
     };
     Object.assign(window, { relay });
   });
@@ -392,6 +393,7 @@ describe('App collisions', () => {
       pathForFile: vi.fn(() => ''), channels: vi.fn().mockResolvedValue(Object.values(IPC)),
       aside: vi.fn(), listModels: vi.fn().mockResolvedValue([]), setModel: vi.fn(),
       checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: null, newer: false, url: null, notes: null, publishedAt: null, error: null }),
+      sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
     };
     Object.assign(window, { relay });
   });

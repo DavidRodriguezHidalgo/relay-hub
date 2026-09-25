@@ -11,6 +11,7 @@ import type {
   SessionState,
   SessionSummary,
   TranscriptEntry,
+  SessionStatus,
 } from '@relay/shared';
 import { ApprovalCard } from './ApprovalCard';
 import type { Collision } from './collisions';
@@ -21,6 +22,7 @@ import { imagePathsFrom, withPaths } from './fileDrop';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
 import { WorkingLine } from './WorkingLine';
+import { WorkStanding } from './WorkStanding';
 
 interface Props {
   session: SessionSummary;
@@ -47,6 +49,8 @@ interface Props {
   onSetModel: (id: string) => void;
   /** What has been sent to this session and what became of it. */
   queue: QueuedMessage[];
+  /** What git and the forge say about this work; null until read. */
+  standing: SessionStatus | null;
   /** Another live session working in the same place, when there is one. */
   collision: Collision | null;
   onNewWorktree: () => void;
@@ -277,6 +281,7 @@ export function SessionPanel(p: Props) {
           </div>
         </div>
       )}
+      <WorkStanding status={p.standing} />
       <InstructionQueue queue={p.queue} />
       {state === 'running' && <WorkingLine />}
       {p.heldElsewhere && (

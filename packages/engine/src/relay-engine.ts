@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
+import { workState, type WorkState } from './git/work-state';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
 import { createWorktree, repoRoot } from './git/worktrees';
@@ -64,6 +65,8 @@ export interface RelayEngineOptions {
   externalPollMs?: number;
   /** How long createSession waits for a new session to report its id. */
   createTimeoutMs?: number;
+  /** Reads git facts about a directory; the real one shells out to git. */
+  workState?: (cwd: string) => Promise<WorkState>;
   /** Where releases are published and what version this is; without it, checks report that. */
   updates?: UpdateSource;
 }
@@ -109,6 +112,7 @@ export class RelayEngine {
   private readonly orchestratorCwds: Set<string>;
   private closing = false;
   private updates: UpdateSource | null = null;
+  private readState: (cwd: string) => Promise<WorkState> = workState;
   private external: Record<string, 'busy' | 'idle'> = {};
   private readonly commands: CommandCatalog;
   private externalTimer: NodeJS.Timeout | null = null;
@@ -231,6 +235,7 @@ export class RelayEngine {
     engine.pruneWatches();
     engine.watcher.start();
     engine.updates = opts.updates ?? null;
+    if (opts.workState) engine.readState = opts.workState;
     engine.watchExternal(opts.externalPollMs ?? 3_000);
     return engine;
   }
@@ -339,6 +344,36 @@ export class RelayEngine {
       input.end();
     }
     return answer;
+  }
+
+  /**
+   * Where a session's work actually stands, read from git and the forge rather than narrated.
+   *
+   * Checks come from the pull request, which is the only place Relay can see whether the
+   * typecheck, tests and end-to-end run passed. Without one there is nothing to report, and
+   * `note` says so instead of leaving a blank that looks like a pass.
+   */
+  async sessionStatus(sessionId: string): Promise<SessionStatus> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const git = await this.readState(session.cwd);
+    const base: SessionStatus = { ...git, pr: null, checks: null, note: null };
+
+    const repo = session.prUrl?.match(/github\.com\/([^/]+\/[^/]+)\/pull\//)?.[1];
+    if (!session.prNumber || !repo) {
+      return { ...base, note: 'No pull request for this branch, so there are no checks to report.' };
+    }
+    try {
+      const pr = await this.gh.viewPr(repo, session.prNumber);
+      return {
+        ...base,
+        pr: { number: pr.number, url: pr.url, state: pr.state },
+        checks: pr.checks.map((c) => ({ name: c.name, conclusion: c.conclusion ?? c.status ?? 'pending' })),
+        note: pr.checks.length === 0 ? 'No checks have run on this pull request.' : null,
+      };
+    } catch (err) {
+      return { ...base, note: `Could not ask GitHub: ${err instanceof Error ? err.message : String(err)}` };
+    }
   }
 
   /** The models this session can run on, with the one it is on marked. */

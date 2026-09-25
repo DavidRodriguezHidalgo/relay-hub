@@ -2,6 +2,7 @@ import type { Invocable } from './commands';
 import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { ModelChoice } from './models';
+import type { SessionStatus } from './status';
 import type { UpdateCheck } from './updates';
 import type { TranscriptEntry } from './transcript';
 
@@ -32,6 +33,7 @@ export const IPC = {
   checkForUpdate: 'relay:checkForUpdate',
   listModels: 'relay:listModels',
   setModel: 'relay:setModel',
+  sessionStatus: 'relay:sessionStatus',
 } as const;
 
 export interface SendRequest {
@@ -71,6 +73,7 @@ export interface RelayApi {
   checkForUpdate(): Promise<UpdateCheck>;
   listModels(sessionId: string): Promise<ModelChoice[]>;
   setModel(sessionId: string, model: string): Promise<void>;
+  sessionStatus(sessionId: string): Promise<SessionStatus>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

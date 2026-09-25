@@ -57,6 +57,7 @@ describe('RelayEngine', () => {
       gh?: GhClient;
       worktrees?: { repoRoot(cwd: string): Promise<string | null>; createWorktree(root: string, branch: string): Promise<string> };
       createTimeoutMs?: number;
+      workState?: () => Promise<import('../src/git/work-state').WorkState>;
       updates?: { repo: string; currentVersion: string; fetch?: (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> };
     } = {},
   ) {
@@ -975,5 +976,66 @@ describe('RelayEngine', () => {
     client.result();
     await tick();
     expect(engine!.runState().queue['s-basic']?.[0]?.state).toBe('done');
+  });
+
+  it('reports where the work stands, from git and the pull request', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      workState: async () => ({
+        branch: 'feat/a',
+        lastCommit: { sha: 'abc1234def', subject: 'the last thing', at: '2026-09-25T09:00:00.000Z' },
+        uncommitted: 2,
+        unpushed: 1,
+        upstream: 'origin/feat/a',
+      }),
+      gh: {
+        viewer: async () => 'me',
+        viewPr: async () => ({
+          number: 12, url: 'https://github.com/o/r/pull/12', title: 'T', state: 'OPEN' as const,
+          headRefName: 'feat/a', headRefOid: 'x', baseRefName: 'main', mergeable: 'MERGEABLE' as const,
+          mergeStateStatus: 'CLEAN',
+          checks: [{ name: 'typecheck', conclusion: 'SUCCESS', status: null }, { name: 'e2e', conclusion: 'FAILURE', status: null }],
+          feedback: [],
+        }),
+        findPrForBranch: async () => null,
+        listMyPrs: async () => [],
+      },
+    });
+    const status = await engine!.sessionStatus('s-basic');
+    expect(status).toMatchObject({
+      branch: 'feat/a', uncommitted: 2, unpushed: 1,
+      lastCommit: { subject: 'the last thing' },
+      pr: { number: 12, state: 'OPEN' },
+      note: null,
+    });
+    expect(status.checks).toEqual([{ name: 'typecheck', conclusion: 'SUCCESS' }, { name: 'e2e', conclusion: 'FAILURE' }]);
+  });
+
+  it('says there is nothing to report rather than leaving a blank that looks like a pass', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      noPr: true,
+      workState: async () => ({ branch: 'feat/a', lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null }),
+    });
+    const status = await engine!.sessionStatus('s-nopr');
+    expect(status.checks).toBeNull();
+    expect(status.note).toMatch(/no pull request/i);
+  });
+
+  it('reports a forge that could not be asked, instead of pretending there are no checks', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      workState: async () => ({ branch: 'feat/a', lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null }),
+      gh: {
+        viewer: async () => 'me',
+        viewPr: async () => { throw new Error('gh: not logged in'); },
+        findPrForBranch: async () => null,
+        listMyPrs: async () => [],
+      },
+    });
+    const status = await engine!.sessionStatus('s-basic');
+    expect(status.checks).toBeNull();
+    expect(status.note).toMatch(/not logged in/);
+    await expect(engine!.sessionStatus('nope')).rejects.toThrow('Unknown session nope');
   });
 });

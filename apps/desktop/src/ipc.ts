@@ -38,6 +38,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.checkForUpdate,
     IPC.listModels,
     IPC.setModel,
+    IPC.sessionStatus,
   ];
   const handle = (channel: string, fn: (...args: never[]) => unknown) => {
     ipcMain.handle(channel, (event, ...args) => {
@@ -68,6 +69,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.checkForUpdate, () => engine.checkForUpdate());
   handle(IPC.listModels, (sessionId: string) => engine.listModels(sessionId));
   handle(IPC.setModel, (sessionId: string, model: string) => engine.setModel(sessionId, model));
+  handle(IPC.sessionStatus, (sessionId: string) => engine.sessionStatus(sessionId));
   handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );

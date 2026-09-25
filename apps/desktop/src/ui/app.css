@@ -168,6 +168,17 @@
   .collision__what { @apply m-0 text-waiting; }
   .collision__who { @apply mt-1 mb-2 text-[12px] text-muted; }
   .collision__actions { @apply flex flex-wrap gap-1.5; }
+  .standing { @apply mb-2 rounded-lg border border-line bg-surface-2 px-3 py-2; }
+  .standing__heading { @apply m-0 mb-1 text-[12px] font-semibold text-muted; }
+  .standing__commit { @apply m-0 text-[13px] [overflow-wrap:anywhere]; }
+  .standing__git { @apply m-0 mt-0.5 text-[12px] text-muted; }
+  .standing__checks { @apply m-0 mt-0.5 text-[12px]; }
+  .standing__note { @apply m-0 mt-0.5 text-[12px] text-muted; }
+  .standing__pr { @apply m-0 mt-0.5 text-[12px]; }
+  .standing__warn { @apply text-waiting; }
+  .standing__failed { @apply font-semibold text-danger; }
+  .standing__passed { @apply text-success; }
+  .standing__pending { @apply text-muted; }
   .queue { @apply mb-2 rounded-lg border border-line bg-surface-2 px-3 py-2; }
   .queue__heading { @apply m-0 mb-1 text-[12px] font-semibold text-muted; }
   .queue__list { @apply m-0 list-none p-0; }
