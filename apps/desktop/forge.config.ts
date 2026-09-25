@@ -5,7 +5,8 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 const config: ForgeConfig = {
-  packagerConfig: { asar: true },
+  // the extension is left off on purpose: packager appends .icns on macOS, .ico on Windows
+  packagerConfig: { asar: true, icon: './assets/icon' },
   rebuildConfig: {},
   makers: [new MakerZIP({}, ['darwin'])],
   plugins: [

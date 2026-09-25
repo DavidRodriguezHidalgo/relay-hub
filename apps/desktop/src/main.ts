@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
 import { applyCheckout, downloadRelease, inspectCheckout, repoFromPackage } from '@relay/engine';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { ipcMain } from 'electron';
 import { IPC } from '@relay/shared';
@@ -38,6 +38,17 @@ function releasesFor(application: typeof app): { repo: string; currentVersion: s
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Shows the app icon in the Dock when running from the checkout. The icon named in
+ * forge.config only reaches a packaged build, so a `pnpm dev` run would otherwise carry
+ * Electron's own icon.
+ */
+function showDockIcon(): void {
+  if (app.isPackaged || !app.dock) return;
+  const icon = join(__dirname, '..', '..', 'assets', 'icon.png');
+  if (existsSync(icon)) app.dock.setIcon(icon);
 }
 
 function createWindow(): void {
@@ -101,6 +112,7 @@ async function start(): Promise<void> {
       new Notification({ title: 'Relay Hub: session error', body: event.error ?? 'unknown error' }).show();
     }
   });
+  showDockIcon();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
