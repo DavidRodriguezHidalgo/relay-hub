@@ -674,6 +674,23 @@ export class RelayEngine {
     });
     runner.on('entry', (entry) => this.publish({ type: 'entry', sessionId, entry }));
     runner.on('queue', (queue) => this.publish({ type: 'queue', sessionId, queue }));
+    runner.on('turn-end', (end) => {
+      if (!end.aborted) return;
+      this.publish({
+        type: 'entry',
+        sessionId,
+        entry: {
+          uuid: randomUUID(),
+          role: 'assistant',
+          timestamp: this.now().toISOString(),
+          isSidechain: false,
+          isMeta: false,
+          blocks: [],
+          origin: null,
+          notice: 'You stopped this turn.',
+        },
+      });
+    });
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));
     this.runners.set(sessionId, runner);

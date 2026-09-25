@@ -94,6 +94,10 @@
   .entry--user { @apply border border-line bg-surface-2; }
   /* marked by position and a dashed rule, not by fading: faded text would fail the contrast rules */
   /* a side question and its answer: beside the work, never part of it */
+  /* Relay's own word about a turn, not the agent's */
+  .entry--notice { @apply my-2 border-none bg-transparent px-0 py-0 text-center text-[12px] font-semibold text-waiting; }
+  .stop { @apply flex items-center justify-between gap-3; }
+  .stop__button { @apply shrink-0 border-waiting text-waiting; }
   .entry--aside { @apply border-l-2 border-accent bg-surface-2; }
   .entry--sidechain { @apply ml-3 border-l-2 border-dashed border-line; }
   .entry header { @apply mb-1 flex justify-between gap-2 text-[11px] text-muted; }

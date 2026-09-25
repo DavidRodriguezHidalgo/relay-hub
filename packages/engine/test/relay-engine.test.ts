@@ -1073,4 +1073,31 @@ describe('RelayEngine', () => {
     const done = await engine!.accomplished('s-basic');
     expect(done.open).toContain('1 approval waiting on you');
   });
+
+  it('marks a stopped turn in the transcript, so it reads differently from a normal ending', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const seen: RunnerEvent[] = [];
+    engine!.onEvent((e) => seen.push(e));
+    await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(await engine!.interrupt('s-basic')).toBe(true);
+    await tick();
+    const notices = seen.filter((e) => e.type === 'entry' && e.entry.notice);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.type === 'entry' && notices[0]!.entry.notice).toBe('You stopped this turn.');
+    expect(engine!.runState().states['s-basic']).toEqual({ state: 'idle', error: null });
+  });
+
+  it('says nothing about stopping when a turn simply finishes', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const seen: RunnerEvent[] = [];
+    engine!.onEvent((e) => seen.push(e));
+    await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result();
+    await tick();
+    expect(seen.filter((e) => e.type === 'entry' && e.entry.notice)).toEqual([]);
+  });
 });

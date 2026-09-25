@@ -3,7 +3,7 @@ import type { LiveEntry, TranscriptBlock, TranscriptEntry } from '@relay/shared'
 import { Markdown } from './Markdown';
 
 /** A file entry, or a live one that also knows who caused it. */
-export type ViewEntry = TranscriptEntry & { origin?: LiveEntry['origin'] };
+export type ViewEntry = TranscriptEntry & { origin?: LiveEntry['origin']; notice?: LiveEntry['notice'] };
 
 interface Props {
   entries: ViewEntry[];
@@ -52,6 +52,13 @@ const EntryRow = memo(function EntryRow({
   sessions,
   onOpenSession,
 }: { entry: ViewEntry } & Pick<Props, 'sessions' | 'onOpenSession'>) {
+  if (entry.notice) {
+    return (
+      <li className="entry entry--notice" role="note">
+        {entry.notice}
+      </li>
+    );
+  }
   return (
     <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}${entry.origin === 'aside' ? ' entry--aside' : ''}`}>
       <header>
@@ -71,7 +78,11 @@ export function TranscriptView({ entries, hideSidechain, sessions, onOpenSession
   const visible = useMemo(
     () =>
       entries.filter(
-        (e) => !e.isMeta && (!hideSidechain || !e.isSidechain) && e.blocks.some((b) => b.kind !== 'thinking'),
+        (e) =>
+          !e.isMeta &&
+          (!hideSidechain || !e.isSidechain) &&
+          // a notice carries no blocks of its own, but is the point of the line
+          (e.notice !== undefined || e.blocks.some((b) => b.kind !== 'thinking')),
       ),
     [entries, hideSidechain],
   );

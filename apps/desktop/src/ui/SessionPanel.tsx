@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Accomplished as AccomplishedWork } from '@relay/shared';
 import type {
   ApprovalDecision,
@@ -38,6 +38,8 @@ interface Props {
   onDecide: (id: string, decision: ApprovalDecision) => void;
   onSend: (prompt: string, mode: DeliveryMode) => void;
   onInterrupt: () => void;
+  /** True from the moment a stop is asked for until the turn actually ends. */
+  stopping: boolean;
   devTools: boolean;
   watch: PrWatch | null;
   onWatch: () => void;
@@ -105,6 +107,8 @@ function InstructionQueue({ queue }: { queue: QueuedMessage[] }) {
 }
 
 export function SessionPanel(p: Props) {
+  const panelState = p.state?.state ?? 'idle';
+  const working = panelState === 'running' || panelState === 'waiting-approval';
   const [draft, setDraft] = useState('');
   const [mode, setMode] = useState<DeliveryMode>('steer');
   /** Taking over stops someone else's Claude, so it takes two presses. */
@@ -120,6 +124,18 @@ export function SessionPanel(p: Props) {
   const [caretAfterPick, setCaretAfterPick] = useState<number | null>(null);
 
   // synchronously, before the user can type: a frame's delay lets keystrokes land at the old spot
+  useEffect(() => {
+    if (!working) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '.' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        p.onInterrupt();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [working, p.onInterrupt]);
+
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || caretAfterPick === null) return;
@@ -287,7 +303,20 @@ export function SessionPanel(p: Props) {
       <WorkStanding status={p.standing} />
       <Accomplished work={p.accomplished} />
       <InstructionQueue queue={p.queue} />
-      {state === 'running' && <WorkingLine />}
+      {working && (
+        <div className="stop">
+          <WorkingLine />
+          <button
+            type="button"
+            className="stop__button"
+            disabled={p.stopping}
+            onClick={p.onInterrupt}
+            title="Stop this turn (⌘.)"
+          >
+            {p.stopping ? 'Stopping…' : 'Stop'}
+          </button>
+        </div>
+      )}
       {p.heldElsewhere && (
         <div className="held-elsewhere">
           <span>

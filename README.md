@@ -105,6 +105,17 @@ One thing is missing from the built app today: the box for typing directly to a 
 and its `/` menu of your commands and skills, only appear when you run with `pnpm dev`. In the
 built app you drive sessions through the Relay chat instead. Everything else works in both.
 
+## Stopping a session
+
+While a session is working the panel shows **Stop** beside what it is doing; ⌘. does the same
+from anywhere in the panel. The turn ends, the transcript records that you stopped it, and the
+session is ready for the next instruction at once.
+
+What stopping cannot undo: a tool call already in flight finishes on its own terms. A file the
+agent had begun writing stays as it was written, a shell command already started keeps running
+to its end, and a commit already made stays made. Stopping ends the turn, not the work the turn
+had already set in motion — so check `git status` after stopping something that was editing.
+
 ## Licence
 
 [MIT](LICENSE). Use it, change it, ship it; keep the copyright notice.

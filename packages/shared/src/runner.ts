@@ -13,6 +13,8 @@ export type MessageOrigin = 'user' | 'orchestrator' | 'aside' | `watch:${string}
 /** A transcript entry produced while Relay drives the session; `origin` names who caused the turn. */
 export interface LiveEntry extends TranscriptEntry {
   origin: MessageOrigin | null;
+  /** Relay's own words about the turn, such as it having been stopped; not the agent's. */
+  notice?: string;
 }
 
 export type ApprovalReason = 'destructive-git' | 'outside-cwd' | 'blocked-path';

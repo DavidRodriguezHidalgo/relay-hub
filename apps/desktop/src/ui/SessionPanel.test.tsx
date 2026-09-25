@@ -23,7 +23,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], queue: [] as QueuedMessage[], standing: null, accomplished: null, onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], queue: [] as QueuedMessage[], standing: null, accomplished: null, stopping: false, onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
 };
 
 const commands = [
@@ -543,5 +543,58 @@ describe('SessionPanel slash routing', () => {
     await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
     await userEvent.keyboard('look at src/a.ts and/or src/b.ts{Enter}');
     expect(onSend).toHaveBeenCalledWith('look at src/a.ts and/or src/b.ts', 'steer');
+  });
+});
+
+describe('SessionPanel stopping a turn', () => {
+  const props = { ...base, entries: [], liveEntries: [], approvals: [] };
+  const running = { state: 'running' as const, error: null };
+
+  it('offers Stop while the agent is working, and not when it is idle', () => {
+    const { unmount } = render(<SessionPanel {...props} state={running} />);
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+    unmount();
+    render(<SessionPanel {...props} state={{ state: 'idle', error: null }} />);
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
+  });
+
+  it('offers Stop while a turn waits on an approval too', () => {
+    render(<SessionPanel {...props} state={{ state: 'waiting-approval', error: null }} />);
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
+  });
+
+  it('asks to stop when pressed', async () => {
+    const onInterrupt = vi.fn();
+    render(<SessionPanel {...props} state={running} onInterrupt={onInterrupt} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the stop was registered rather than looking like nothing happened', () => {
+    render(<SessionPanel {...props} state={running} stopping />);
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+  });
+
+  it('stops on the keyboard, since it is the kind of thing you hit fast', async () => {
+    const onInterrupt = vi.fn();
+    render(<SessionPanel {...props} state={running} onInterrupt={onInterrupt} />);
+    await userEvent.keyboard('{Meta>}.{/Meta}');
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not stop anything with the keyboard when nothing is running', async () => {
+    const onInterrupt = vi.fn();
+    render(<SessionPanel {...props} state={{ state: 'idle', error: null }} onInterrupt={onInterrupt} />);
+    await userEvent.keyboard('{Meta>}.{/Meta}');
+    expect(onInterrupt).not.toHaveBeenCalled();
+  });
+
+  it('marks a stopped turn in the transcript, apart from the agent’s own words', () => {
+    const stopped: LiveEntry = {
+      uuid: 'n1', role: 'assistant', timestamp: '2026-09-25T10:00:00.000Z', isSidechain: false, isMeta: false,
+      blocks: [], origin: null, notice: 'You stopped this turn.',
+    };
+    render(<SessionPanel {...props} liveEntries={[stopped]} state={undefined} />);
+    expect(screen.getByRole('note')).toHaveTextContent('You stopped this turn.');
   });
 });

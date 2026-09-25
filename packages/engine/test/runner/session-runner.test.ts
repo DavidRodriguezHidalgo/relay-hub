@@ -407,3 +407,29 @@ describe('SessionRunner instruction queue', () => {
     expect(runner.queue.at(-1)?.text).toBe('instruction 29');
   });
 });
+
+describe('SessionRunner when a turn is stopped', () => {
+  it('shows the instructions it was working on as never answered, not as done', async () => {
+    const { client, runner } = setup();
+    await runner.send('go a long way', { mode: 'steer', origin: 'user' });
+    await tick();
+    await runner.interrupt();
+    await tick();
+    expect(runner.queue.map((m) => [m.text, m.state])).toEqual([['go a long way', 'dropped']]);
+    expect(runner.state).toBe('idle');
+    void client;
+  });
+
+  it('is ready for the next instruction straight away', async () => {
+    const { client, runner } = setup();
+    await runner.send('first', { mode: 'steer', origin: 'user' });
+    await tick();
+    await runner.interrupt();
+    await tick();
+    expect(runner.state).toBe('idle');
+    await runner.send('second', { mode: 'steer', origin: 'user' });
+    await tick();
+    expect(runner.state).toBe('running');
+    expect(client.received.at(-1)?.text).toBe('second');
+  });
+});

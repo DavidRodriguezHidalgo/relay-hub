@@ -39,6 +39,8 @@ export function App() {
   const [loaded, setLoaded] = useState<{ id: string | null; entries: TranscriptEntry[] }>({ id: null, entries: [] });
   const [showSidechain, setShowSidechain] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  /** Sessions a stop has been asked for, until their turn actually ends. */
+  const [stopping, setStopping] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [orchHistory, setOrchHistory] = useState<TranscriptEntry[]>([]);
   const [commands, setCommands] = useState<Invocable[]>([]);
@@ -148,6 +150,13 @@ export function App() {
   };
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const entries = loaded.id === selectedId ? loaded.entries : NO_ENTRIES;
+  const selectedState = selected ? run.states[selected.id]?.state : undefined;
+  useEffect(() => {
+    if (selectedState !== 'running' && selectedState !== 'waiting-approval') {
+      setStopping((ids) => (selected && ids.includes(selected.id) ? ids.filter((i) => i !== selected.id) : ids));
+    }
+  }, [selectedState, selected]);
+
   const stale = stalenessOf({
     missingChannels,
     shown: shownSession,
@@ -342,7 +351,11 @@ export function App() {
                 .then(() => setSendError(null))
                 .catch((e: unknown) => setSendError(e instanceof Error ? e.message : String(e)))
             }
-            onInterrupt={() => void window.relay.interrupt(selected.id)}
+            stopping={stopping.includes(selected.id)}
+            onInterrupt={() => {
+              setStopping((ids) => (ids.includes(selected.id) ? ids : [...ids, selected.id]));
+              void window.relay.interrupt(selected.id).catch(() => undefined);
+            }}
             devTools={import.meta.env.DEV}
             watch={run.watches.find((w) => w.sessionId === selected.id && w.active) ?? null}
             onWatch={() =>
