@@ -28,3 +28,4 @@ export { ORCHESTRATOR_KEY } from './runner';
 export type { UpdateCheck } from './updates';
 export type { ModelChoice } from './models';
 export type { QueuedMessage, QueuedState } from './queue';
+export type { SessionStatus, StatusCheck } from './status';
