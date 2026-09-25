@@ -90,6 +90,11 @@ The zip lands in `apps/desktop/out/make/`.
 The built app is not signed, so the first time you open it macOS will warn you it is from an
 unidentified developer. Right-click the app and choose Open to get past it.
 
+Relay checks for a newer release when it starts and offers it in Settings, with the version you
+are on and what is new. **Download the new version** fetches the build to your Downloads folder
+and shows it in Finder; you quit Relay, drag the new app over the old one and open it again. It
+cannot install over itself, because an unsigned app is not allowed to.
+
 One thing is missing from the built app today: the box for typing directly to a single session,
 and its `/` menu of your commands and skills, only appear when you run with `pnpm dev`. In the
 built app you drive sessions through the Relay chat instead. Everything else works in both.

@@ -8,6 +8,9 @@ export interface UpdateCheck {
   /** Release notes as written on the release. */
   notes: string | null;
   publishedAt: string | null;
+  /** The downloadable build of that release, when it has one; null means there is nothing to fetch. */
+  assetUrl: string | null;
+  assetName: string | null;
   /** Why the check could not be completed, when it could not. */
   error: string | null;
 }

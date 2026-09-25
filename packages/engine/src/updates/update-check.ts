@@ -47,7 +47,8 @@ export function compareVersions(a: string, b: string): -1 | 0 | 1 {
  */
 export async function checkForUpdate(source: UpdateSource): Promise<UpdateCheck> {
   const base: UpdateCheck = {
-    current: source.currentVersion, latest: null, newer: false, url: null, notes: null, publishedAt: null, error: null,
+    current: source.currentVersion, latest: null, newer: false, url: null, notes: null, publishedAt: null,
+    assetUrl: null, assetName: null, error: null,
   };
   const fetchFn = source.fetch ?? (globalThis.fetch as unknown as FetchLike | undefined);
   if (!fetchFn) return { ...base, error: 'no way to reach GitHub from here' };
@@ -61,7 +62,10 @@ export async function checkForUpdate(source: UpdateSource): Promise<UpdateCheck>
   }
   if (res.status === 404) return base; // nothing published yet
   if (!res.ok) return { ...base, error: `GitHub answered ${res.status}` };
-  const release = (await res.json()) as { tag_name?: unknown; html_url?: unknown; body?: unknown; published_at?: unknown };
+  const release = (await res.json()) as {
+    tag_name?: unknown; html_url?: unknown; body?: unknown; published_at?: unknown;
+    assets?: { name?: unknown; browser_download_url?: unknown }[];
+  };
   if (typeof release.tag_name !== 'string') return { ...base, error: 'GitHub sent a release without a version' };
   const latest = release.tag_name.replace(/^v/i, '');
   return {
@@ -71,5 +75,16 @@ export async function checkForUpdate(source: UpdateSource): Promise<UpdateCheck>
     url: typeof release.html_url === 'string' ? release.html_url : null,
     notes: typeof release.body === 'string' && release.body.trim() ? release.body.trim() : null,
     publishedAt: typeof release.published_at === 'string' ? release.published_at : null,
+    ...assetOf(release.assets),
   };
+}
+
+/** The build to download: the first zip attached to the release, since that is what Forge makes. */
+function assetOf(assets: { name?: unknown; browser_download_url?: unknown }[] | undefined) {
+  const zip = (assets ?? []).find(
+    (a) => typeof a.name === 'string' && a.name.endsWith('.zip') && typeof a.browser_download_url === 'string',
+  );
+  return zip
+    ? { assetUrl: zip.browser_download_url as string, assetName: zip.name as string }
+    : { assetUrl: null, assetName: null };
 }

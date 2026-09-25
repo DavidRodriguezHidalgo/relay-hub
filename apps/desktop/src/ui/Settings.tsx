@@ -13,6 +13,11 @@ interface Props {
   update: UpdateCheck | null;
   checkingUpdate: boolean;
   onCheckForUpdate: () => void;
+  /** Where the downloaded build landed, once it has been fetched. */
+  downloadedTo: string | null;
+  downloading: boolean;
+  downloadError: string | null;
+  onDownloadUpdate: () => void;
 }
 
 /** One line saying where the app stands against its releases. */
@@ -89,6 +94,28 @@ export function Settings(p: Props) {
             </p>
           )}
           {p.update?.newer && p.update.notes && <pre className="settings__notes">{p.update.notes}</pre>}
+          {p.update?.newer && (
+            <div className="settings__update">
+              {p.update.assetUrl ? (
+                <button type="button" disabled={p.downloading} onClick={p.onDownloadUpdate}>
+                  {p.downloading ? 'Downloading\u2026' : 'Download the new version'}
+                </button>
+              ) : (
+                <span className="settings__note">That release has no build attached to download.</span>
+              )}
+              {p.downloadedTo && (
+                <p role="status" className="settings__note">
+                  Downloaded to {p.downloadedTo} and shown in Finder. Quit Relay, drag the new app over the old
+                  one, and open it again — an unsigned app cannot replace itself while running.
+                </p>
+              )}
+              {p.downloadError && (
+                <p role="alert" className="error">
+                  {p.downloadError}
+                </p>
+              )}
+            </div>
+          )}
         </section>
       </div>
     </div>

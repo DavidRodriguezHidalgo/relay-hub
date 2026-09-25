@@ -31,7 +31,7 @@ describe('checkForUpdate', () => {
     const fetch = answer(200, { tag_name: 'v0.2.0', html_url: 'https://github.com/o/r/releases/tag/v0.2.0', body: '- faster\n- fixes\n', published_at: '2026-09-24T10:00:00Z' });
     expect(await checkForUpdate({ repo, currentVersion: '0.1.0', fetch })).toEqual({
       current: '0.1.0', latest: '0.2.0', newer: true, url: 'https://github.com/o/r/releases/tag/v0.2.0',
-      notes: '- faster\n- fixes', publishedAt: '2026-09-24T10:00:00Z', error: null,
+      notes: '- faster\n- fixes', publishedAt: '2026-09-24T10:00:00Z', assetUrl: null, assetName: null, error: null,
     });
   });
 
@@ -48,5 +48,23 @@ describe('checkForUpdate', () => {
     expect(await checkForUpdate({ repo, currentVersion: '0.1.0', fetch: answer(403, {}) })).toMatchObject({ error: 'GitHub answered 403' });
     const offline: FetchLike = async () => { throw new Error('getaddrinfo ENOTFOUND api.github.com'); };
     expect(await checkForUpdate({ repo, currentVersion: '0.1.0', fetch: offline })).toMatchObject({ error: 'getaddrinfo ENOTFOUND api.github.com' });
+  });
+
+  it('names the build to download when the release has one', async () => {
+    const fetch = answer(200, {
+      tag_name: 'v0.2.0', html_url: 'u', body: '',
+      assets: [
+        { name: 'notes.txt', browser_download_url: 'https://x/notes.txt' },
+        { name: 'Relay Hub-darwin-arm64-0.2.0.zip', browser_download_url: 'https://x/relay.zip' },
+      ],
+    });
+    expect(await checkForUpdate({ repo, currentVersion: '0.1.0', fetch })).toMatchObject({
+      assetUrl: 'https://x/relay.zip', assetName: 'Relay Hub-darwin-arm64-0.2.0.zip',
+    });
+  });
+
+  it('says there is nothing to download when the release attached no build', async () => {
+    const fetch = answer(200, { tag_name: 'v0.2.0', html_url: 'u', body: '', assets: [] });
+    expect(await checkForUpdate({ repo, currentVersion: '0.1.0', fetch })).toMatchObject({ assetUrl: null, assetName: null });
   });
 });

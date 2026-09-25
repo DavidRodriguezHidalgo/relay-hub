@@ -432,7 +432,10 @@ export class RelayEngine {
   /** Whether a newer release exists than the one running. Never throws; failures come back in `error`. */
   checkForUpdate(): Promise<UpdateCheck> {
     if (!this.updates) {
-      return Promise.resolve({ current: 'unknown', latest: null, newer: false, url: null, notes: null, publishedAt: null, error: 'this build does not know where its releases live' });
+      return Promise.resolve({
+        current: 'unknown', latest: null, newer: false, url: null, notes: null, publishedAt: null,
+        assetUrl: null, assetName: null, error: 'this build does not know where its releases live',
+      });
     }
     return checkForUpdate(this.updates);
   }

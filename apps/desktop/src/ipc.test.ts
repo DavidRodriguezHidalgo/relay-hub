@@ -24,18 +24,24 @@ const invoked = [...preload.matchAll(/ipcRenderer\.invoke\(IPC\.(\w+)/g)].map((m
 /** Broadcast from main to the window; nobody invokes these. */
 const BROADCAST = new Set<string>([IPC.sessionsChanged, IPC.runnerEvent]);
 
+/** Handled in main.ts rather than by the engine: it needs the filesystem and Finder. */
+const IN_MAIN = new Set<string>([IPC.downloadUpdate]);
+
 describe('engine IPC', () => {
   const engine = { onSessionsChanged: () => () => undefined, onEvent: () => () => undefined } as unknown as RelayEngine;
   const dispose = registerEngineIpc(engine);
 
   it('registers a handler for every channel the preload invokes', () => {
     expect(invoked.length).toBeGreaterThan(10);
-    for (const channel of invoked) expect(handled, `no handler for ${channel}`).toContain(channel);
+    for (const channel of invoked) {
+      if (IN_MAIN.has(channel)) continue;
+      expect(handled, `no handler for ${channel}`).toContain(channel);
+    }
   });
 
   it('registers a handler for every invokable channel that exists at all', () => {
     for (const channel of Object.values(IPC)) {
-      if (!BROADCAST.has(channel)) expect(handled, `no handler for ${channel}`).toContain(channel);
+      if (!BROADCAST.has(channel) && !IN_MAIN.has(channel)) expect(handled, `no handler for ${channel}`).toContain(channel);
     }
   });
 

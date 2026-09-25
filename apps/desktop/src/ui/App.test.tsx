@@ -49,9 +49,10 @@ describe('App', () => {
       aside: vi.fn().mockResolvedValue('an answer'),
       listModels: vi.fn().mockResolvedValue([]),
       setModel: vi.fn().mockResolvedValue(undefined),
-      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: '0.1.0', newer: false, url: null, notes: null, publishedAt: null, error: null }),
+      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: '0.1.0', newer: false, url: null, notes: null, publishedAt: null, assetUrl: null, assetName: null, error: null }),
       sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
       accomplished: vi.fn().mockResolvedValue({ commits: [], files: [], moreFiles: 0, base: null, open: [], note: null }),
+      downloadUpdate: vi.fn().mockResolvedValue('/Users/me/Downloads/Relay.zip'),
     };
     Object.assign(window, { relay });
   });
@@ -364,7 +365,7 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Restart the app/);
   });
   it('points at a newer release as soon as it starts', async () => {
-    relay.checkForUpdate.mockResolvedValue({ current: '0.1.0', latest: '0.2.0', newer: true, url: 'https://github.com/o/r/releases/tag/v0.2.0', notes: 'x', publishedAt: null, error: null });
+    relay.checkForUpdate.mockResolvedValue({ current: '0.1.0', latest: '0.2.0', newer: true, url: 'https://github.com/o/r/releases/tag/v0.2.0', notes: 'x', publishedAt: null, assetUrl: null, assetName: null, error: null });
     render(<App />);
     expect(await screen.findByText(/Relay Hub 0\.2\.0 is available/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('href', 'https://github.com/o/r/releases/tag/v0.2.0');
@@ -413,9 +414,10 @@ describe('App collisions', () => {
       settings: vi.fn().mockResolvedValue({ allowAllActions: false }), setAllowAllActions: vi.fn(),
       pathForFile: vi.fn(() => ''), channels: vi.fn().mockResolvedValue(Object.values(IPC)),
       aside: vi.fn(), listModels: vi.fn().mockResolvedValue([]), setModel: vi.fn(),
-      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: null, newer: false, url: null, notes: null, publishedAt: null, error: null }),
+      checkForUpdate: vi.fn().mockResolvedValue({ current: '0.1.0', latest: null, newer: false, url: null, notes: null, publishedAt: null, assetUrl: null, assetName: null, error: null }),
       sessionStatus: vi.fn().mockResolvedValue({ branch: null, lastCommit: null, uncommitted: 0, unpushed: 0, upstream: null, pr: null, checks: null, note: null }),
       accomplished: vi.fn().mockResolvedValue({ commits: [], files: [], moreFiles: 0, base: null, open: [], note: null }),
+      downloadUpdate: vi.fn().mockResolvedValue('/Users/me/Downloads/Relay.zip'),
     };
     Object.assign(window, { relay });
   });

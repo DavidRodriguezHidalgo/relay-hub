@@ -36,6 +36,7 @@ export const IPC = {
   setModel: 'relay:setModel',
   sessionStatus: 'relay:sessionStatus',
   accomplished: 'relay:accomplished',
+  downloadUpdate: 'relay:downloadUpdate',
 } as const;
 
 export interface SendRequest {
@@ -77,6 +78,8 @@ export interface RelayApi {
   setModel(sessionId: string, model: string): Promise<void>;
   sessionStatus(sessionId: string): Promise<SessionStatus>;
   accomplished(sessionId: string): Promise<Accomplished>;
+  /** Fetches the published build and reveals it; resolves with where it landed. */
+  downloadUpdate(url: string, name: string): Promise<string>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

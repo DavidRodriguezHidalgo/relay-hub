@@ -54,6 +54,21 @@ export function App() {
   const [dismissed, setDismissed] = useState<string[]>(dismissedCollisions);
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadedTo, setDownloadedTo] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadUpdate = async () => {
+    if (!update?.assetUrl || !update.assetName) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      setDownloadedTo(await window.relay.downloadUpdate(update.assetUrl, update.assetName));
+    } catch (e: unknown) {
+      setDownloadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownloading(false);
+    }
+  };
   const checkForUpdate = async () => {
     setCheckingUpdate(true);
     try {
@@ -227,6 +242,10 @@ export function App() {
           update={update}
           checkingUpdate={checkingUpdate}
           onCheckForUpdate={() => void checkForUpdate()}
+          downloadedTo={downloadedTo}
+          downloading={downloading}
+          downloadError={downloadError}
+          onDownloadUpdate={() => void downloadUpdate()}
           onClose={() => setSettingsOpen(false)}
         />
       )}

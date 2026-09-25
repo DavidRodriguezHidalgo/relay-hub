@@ -1,6 +1,9 @@
 import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
-import { repoFromPackage } from '@relay/engine';
+import { downloadRelease, repoFromPackage } from '@relay/engine';
 import { readFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { ipcMain } from 'electron';
+import { IPC } from '@relay/shared';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
@@ -59,6 +62,19 @@ async function start(): Promise<void> {
   });
   engine.onError((err) => console.error('[relay] indexing problem:', err.message));
   registerEngineIpc(engine);
+  // unsigned builds cannot install over themselves, so this fetches the build and shows it
+  ipcMain.handle(IPC.downloadUpdate, async (_event, url: string, name: string) => {
+    const path = await downloadRelease({
+      url,
+      name,
+      directory: app.getPath('downloads'),
+      join,
+      fetch: (u) => fetch(u),
+      writeFile: (p, data) => writeFile(p, data),
+    });
+    shell.showItemInFolder(path);
+    return path;
+  });
   engine.onEvent((event) => {
     if (event.type === 'approval') {
       new Notification({ title: 'Relay Hub: approval needed', body: event.approval.summary }).show();

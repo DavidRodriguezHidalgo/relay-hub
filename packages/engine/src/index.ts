@@ -44,3 +44,4 @@ export { carryForward } from './pr/snapshot';
 export { createWorktree, repoRoot, worktreePath } from './git/worktrees';
 export type { Project, Worktrees } from './relay-engine';
 export { repoFromPackage } from './updates/update-check';
+export { downloadRelease } from './updates/download';
