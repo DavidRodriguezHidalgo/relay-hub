@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SessionSummary } from '@relay/shared';
@@ -7,11 +7,11 @@ import { SessionList } from './SessionList';
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
   id: 'x', filePath: '/f', cwd: '/c', cwdExists: true, repo: 'repo', branch: 'main', title: 'T',
   lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
-  isStale: false, ...over,
+  context: null, isStale: false, ...over,
 });
 
 describe('SessionList', () => {
-  it('renders repo headers, rows with branch and PR badge, and selects on click', async () => {
+  it('renders repo headers and selects on click, without branch or PR taking the row', async () => {
     const onSelect = vi.fn();
     render(
       <SessionList
@@ -21,8 +21,9 @@ describe('SessionList', () => {
       />,
     );
     expect(screen.getByRole('heading', { name: 'repo' })).toBeInTheDocument();
-    expect(screen.getByText('feat/mileage')).toBeInTheDocument();
-    expect(screen.getByText('#115760')).toBeInTheDocument();
+    // the row is for what it is, how loaded and whether it is working; the branch and PR live in the panel
+    expect(screen.queryByText('feat/mileage')).not.toBeInTheDocument();
+    expect(screen.queryByText('#115760')).not.toBeInTheDocument();
     expect(screen.queryByText('Stale one')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('Show stale'));
@@ -86,5 +87,133 @@ describe('SessionList', () => {
     await user.click(screen.getByRole('button', { name: /repo/i }));
     const header = screen.getByRole('button', { name: /repo/i });
     expect(within(header).getByLabelText('running')).toBeInTheDocument();
+  });
+});
+
+describe('SessionList recency', () => {
+  // group collapse and the show-all choice are remembered in storage; each case starts fresh
+  beforeEach(() => localStorage.clear());
+
+  const NOW = Date.parse('2026-09-25T12:00:00.000Z');
+  const ago = (hours: number) => new Date(NOW - hours * 3600_000).toISOString();
+  const many = (count: number, hours: number, prefix: string) =>
+    Array.from({ length: count }, (_, i) => s({ id: `${prefix}${i}`, title: `${prefix}${i}`, lastActivity: ago(hours + i) }));
+
+  it('shows recent work and says how much it is holding back', () => {
+    render(
+      <SessionList sessions={[...many(5, 1, 'recent'), ...many(3, 500, 'old')]} selectedId={null} onSelect={vi.fn()} now={NOW} />,
+    );
+    expect(screen.getByText('recent0')).toBeInTheDocument();
+    expect(screen.queryByText('old0')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /3 older sessions hidden/ })).toBeInTheDocument();
+  });
+
+  it('shows everything when asked, and offers the way back', async () => {
+    const user = userEvent.setup();
+    render(
+      <SessionList sessions={[...many(5, 1, 'recent'), ...many(3, 500, 'old')]} selectedId={null} onSelect={vi.fn()} now={NOW} />,
+    );
+    await user.click(screen.getByRole('button', { name: /3 older sessions hidden/ }));
+    expect(screen.getByText('old0')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Showing all 8/ })).toBeInTheDocument();
+  });
+
+  it('counts one hidden session in the singular', () => {
+    render(
+      <SessionList sessions={[...many(5, 1, 'recent'), ...many(1, 500, 'old')]} selectedId={null} onSelect={vi.fn()} now={NOW} />,
+    );
+    expect(screen.getByRole('button', { name: /1 older session hidden/ })).toBeInTheDocument();
+  });
+
+  it('keeps an old session that is still working', () => {
+    render(
+      <SessionList
+        sessions={[...many(5, 1, 'recent'), s({ id: 'busy', title: 'busy', lastActivity: ago(900) })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        states={{ busy: { state: 'running', error: null } }}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByText('busy')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /hidden/ })).not.toBeInTheDocument();
+  });
+
+  it('searches beyond the recent window', async () => {
+    const user = userEvent.setup();
+    render(
+      <SessionList sessions={[...many(5, 1, 'recent'), ...many(3, 500, 'old')]} selectedId={null} onSelect={vi.fn()} now={NOW} />,
+    );
+    await user.type(screen.getByPlaceholderText('Search sessions'), 'old1');
+    expect(screen.getByText('old1')).toBeInTheDocument();
+  });
+
+  it('shows whatever it was given above the list', () => {
+    render(
+      <SessionList sessions={[]} selectedId={null} onSelect={vi.fn()} header={<p>todo list here</p>} now={NOW} />,
+    );
+    expect(screen.getByText('todo list here')).toBeInTheDocument();
+  });
+});
+
+describe('SessionList row at a glance', () => {
+  beforeEach(() => localStorage.clear());
+  const use = (percent: number) => ({ tokens: percent * 2000, limit: 200_000, percent, model: 'claude-opus-5', at: null });
+
+  it('shows how loaded a session is, marked approximate', () => {
+    render(<SessionList sessions={[s({ id: 'a', title: 'Mileage', context: use(42) })]} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.getByText('~42%')).toBeInTheDocument();
+  });
+
+  it('marks a nearly full session so it stands out from the rest', () => {
+    const { container } = render(
+      <SessionList sessions={[s({ id: 'a', context: use(92) })]} selectedId={null} onSelect={vi.fn()} />,
+    );
+    expect(container.querySelector('.session-row__context--full')).not.toBeNull();
+  });
+
+  it('says nothing about context for a session that never called the model', () => {
+    render(<SessionList sessions={[s({ id: 'a', context: null })]} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/~\d+%/)).not.toBeInTheDocument();
+  });
+
+  it('stays quiet for an idle session, naming only states worth noticing', () => {
+    render(<SessionList sessions={[s({ id: 'a' })]} selectedId={null} onSelect={vi.fn()} states={{ a: { state: 'idle', error: null } }} />);
+    expect(screen.queryByText('idle')).not.toBeInTheDocument();
+  });
+
+  it('names the state when a session is working or waiting', () => {
+    render(
+      <SessionList
+        sessions={[s({ id: 'a' }), s({ id: 'b' })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        states={{ a: { state: 'running', error: null }, b: { state: 'waiting-approval', error: null } }}
+      />,
+    );
+    expect(screen.getByText('running')).toBeInTheDocument();
+    expect(screen.getByText('waiting for approval')).toBeInTheDocument();
+  });
+
+  it('offers Stop on a working row and stops that session', async () => {
+    const onInterrupt = vi.fn();
+    render(
+      <SessionList
+        sessions={[s({ id: 'a', title: 'Mileage' })]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        states={{ a: { state: 'running', error: null } }}
+        onInterrupt={onInterrupt}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Stop Mileage' }));
+    expect(onInterrupt).toHaveBeenCalledWith('a');
+  });
+
+  it('offers no Stop on a session that is not working', () => {
+    render(
+      <SessionList sessions={[s({ id: 'a' })]} selectedId={null} onSelect={vi.fn()} states={{ a: { state: 'idle', error: null } }} onInterrupt={vi.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: /^stop /i })).not.toBeInTheDocument();
   });
 });

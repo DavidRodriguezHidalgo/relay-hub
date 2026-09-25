@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import type { TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import type { ContextUse, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import { contextUseFrom } from '../context/context-use';
 
 export interface ParsedTranscript {
   sessionId: string | null;
@@ -12,6 +13,8 @@ export interface ParsedTranscript {
   prNumber: number | null;
   prUrl: string | null;
   continuedIn: string | null;
+  /** How full the context was at the last request; null if the model was never called. */
+  contextUse: ContextUse | null;
   entries: TranscriptEntry[];
 }
 
@@ -106,12 +109,15 @@ export class TranscriptParser {
     prNumber: null,
     prUrl: null,
     continuedIn: null,
+    contextUse: null,
     entries: [],
   };
   private aiTitle: string | null = null;
   private customTitle: string | null = null;
   private promptTitle: string | null = null;
   private relocatedCwd: string | null = null;
+  /** The most recent record that reported usage; read once at finish rather than per line. */
+  private lastUsageRecord: unknown = null;
   private readonly keepEntries: boolean;
 
   constructor(opts: ParseOptions = {}) {
@@ -129,6 +135,7 @@ export class TranscriptParser {
     }
     const out = this.out;
     out.sessionId ??= raw.sessionId ?? null;
+    if ((raw as { message?: { usage?: unknown } }).message?.usage) this.lastUsageRecord = raw;
     switch (raw.type) {
       case 'ai-title':
         this.aiTitle = raw.aiTitle ?? this.aiTitle;
@@ -195,6 +202,7 @@ export class TranscriptParser {
     if (this.relocatedCwd) out.cwd = this.relocatedCwd;
     const title = this.customTitle ?? this.aiTitle ?? this.promptTitle;
     out.title = title ? title.trim().slice(0, TITLE_MAX) || UNTITLED : UNTITLED;
+    out.contextUse = this.lastUsageRecord ? contextUseFrom([this.lastUsageRecord]) : null;
     return out;
   }
 }

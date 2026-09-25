@@ -1,24 +1,30 @@
 import { useState, type ReactNode } from 'react';
 import type { ExternalSessions, RunState, SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
+import { recentSessions } from './recentSessions';
 import { DOT_LABEL, dotState, isActive } from './sessionDot';
 
 const COLLAPSED_KEY = 'relay.collapsedRepos';
+const SHOW_ALL_KEY = 'relay.showAllSessions';
+
+/** Past this, a session is close enough to full that the row should say so. */
+const NEARLY_FULL = 85;
 
 /** Per-viewer convenience: a failure to read or write storage just means nothing is remembered. */
-function loadCollapsed(): Set<string> {
+function readStored<T>(key: string, fallback: T): T {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]') as string[]);
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : (JSON.parse(raw) as T);
   } catch {
-    return new Set();
+    return fallback;
   }
 }
 
-function saveCollapsed(repos: Set<string>): void {
+function writeStored(key: string, value: unknown): void {
   try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...repos]));
+    localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // storage unavailable: collapse state lasts for this window only
+    // storage unavailable: the choice lasts for this window only
   }
 }
 
@@ -32,23 +38,43 @@ interface Props {
   onNewSession?: () => void;
   /** Shown under the controls, e.g. the new-session form. */
   panel?: ReactNode;
+  /** Shown above everything, e.g. the todo list. */
+  header?: ReactNode;
+  /** Stops the turn of a session that is working, straight from its row. */
+  onInterrupt?: (id: string) => void;
+  /** Injectable so a test can say when "now" is. */
+  now?: number;
 }
 
-export function SessionList({ sessions, selectedId, onSelect, states, external, onNewSession, panel }: Props) {
+export function SessionList({ sessions, selectedId, onSelect, states, external, onNewSession, panel, header, now, onInterrupt }: Props) {
   const [query, setQuery] = useState('');
   const [showStale, setShowStale] = useState(false);
-  const [collapsed, setCollapsed] = useState(loadCollapsed);
-  const groups = groupSessions(sessions, { query, showStale });
+  const [collapsed, setCollapsed] = useState(() => new Set(readStored<string[]>(COLLAPSED_KEY, [])));
+  const [showAll, setShowAll] = useState(() => readStored<boolean>(SHOW_ALL_KEY, false));
+  const { shown, hidden } = recentSessions(sessions, {
+    now: now ?? Date.now(),
+    states,
+    external,
+    selectedId,
+    searching: query.trim() !== '',
+    showAll,
+  });
+  const chooseShowAll = (on: boolean) => {
+    setShowAll(on);
+    writeStored(SHOW_ALL_KEY, on);
+  };
+  const groups = groupSessions(shown, { query, showStale });
   const toggle = (repo: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(repo)) next.delete(repo);
       else next.add(repo);
-      saveCollapsed(next);
+      writeStored(COLLAPSED_KEY, [...next]);
       return next;
     });
   return (
     <aside className="session-list">
+      {header}
       {onNewSession && (
         <button type="button" className="btn-primary session-list__new" onClick={onNewSession}>
           New session
@@ -93,7 +119,7 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
                 {g.sessions.map((s) => {
                   const dot = dotState(s.id, states, external);
                   return (
-                    <li key={s.id}>
+                    <li key={s.id} className="session-row__row">
                       <button
                         type="button"
                         className={s.id === selectedId ? 'session-row session-row--selected' : 'session-row'}
@@ -101,14 +127,37 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
                       >
                         <span className="session-row__title">
                           <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
-                          {s.title}
+                          <span className="session-row__name">{s.title}</span>
+                          {s.context && (
+                            <span
+                              className={
+                                s.context.percent >= NEARLY_FULL
+                                  ? 'session-row__context session-row__context--full'
+                                  : 'session-row__context'
+                              }
+                              title={`Approximately ${s.context.percent}% of the context window used at the last request.`}
+                            >
+                              ~{s.context.percent}%
+                            </span>
+                          )}
                         </span>
                         <span className="session-row__meta">
-                          {s.branch && <code>{s.branch}</code>}
-                          {s.prNumber !== null && <span className="badge">#{s.prNumber}</span>}
+                          {/* only what is not the resting state: an idle session says nothing here */}
+                          {dot !== 'idle' && <span className="session-row__state">{DOT_LABEL[dot]}</span>}
                           <time dateTime={s.lastActivity}>{new Date(s.lastActivity).toLocaleDateString()}</time>
                         </span>
                       </button>
+                      {isActive(dot) && onInterrupt && (
+                        <button
+                          type="button"
+                          className="session-row__stop"
+                          aria-label={`Stop ${s.title}`}
+                          title={`Stop this turn (${s.title})`}
+                          onClick={() => onInterrupt(s.id)}
+                        >
+                          Stop
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -117,6 +166,16 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
           </section>
         );
       })}
+      {hidden > 0 && (
+        <button type="button" className="session-list__older" onClick={() => chooseShowAll(true)}>
+          {hidden} older {hidden === 1 ? 'session' : 'sessions'} hidden · Show all
+        </button>
+      )}
+      {showAll && (
+        <button type="button" className="session-list__older" onClick={() => chooseShowAll(false)}>
+          Showing all {sessions.length} · Show recent only
+        </button>
+      )}
     </aside>
   );
 }

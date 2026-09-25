@@ -1,3 +1,4 @@
+import type { ContextUse } from './context';
 /** One Claude Code session as shown in the session list. */
 export interface SessionSummary {
   id: string;
@@ -16,5 +17,7 @@ export interface SessionSummary {
   prUrl: string | null;
   /** Session id this one was continued in, if any. */
   continuedIn: string | null;
+  /** How full this session’s context was at its last request; null if it never called the model. */
+  context: ContextUse | null;
   isStale: boolean;
 }

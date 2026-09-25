@@ -173,6 +173,7 @@ export class SessionIndex extends EventEmitter<IndexEvents> {
       prNumber: parsed.prNumber,
       prUrl: parsed.prUrl,
       continuedIn: parsed.continuedIn,
+      context: parsed.contextUse,
       isStale: false,
     };
     const fresh = this.refreshStale(summary);
