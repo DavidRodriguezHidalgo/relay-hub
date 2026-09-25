@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TranscriptEntry } from '@relay/shared';
-import { attribute, filesWrittenIn, spanOf } from '../../src/attribution/session-work';
+import { attribute, filesOf, filesWrittenIn, spanOf } from '../../src/attribution/session-work';
 
 const used = (name: string, input: unknown, timestamp = '2026-09-25T10:00:00.000Z'): TranscriptEntry => ({
   uuid: 'u', role: 'assistant', timestamp, isSidechain: false, isMeta: false,
@@ -79,5 +79,34 @@ describe('attribute', () => {
   it('keeps a commit that touches one of several files the session wrote', () => {
     const kept = attribute([commit('a1', ['src/b.ts', 'unrelated.ts'])], ['src/a.ts', 'src/b.ts']);
     expect(kept.map((c) => c.sha)).toEqual(['a1']);
+  });
+});
+
+describe('filesOf', () => {
+  it('adds the files carried by the commits this session made', () => {
+    const files = filesOf(['src/a.ts'], [commit('a1', ['src/a.ts', 'src/b.ts'])]);
+    expect(files).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('recovers work done in a worktree that has since been deleted', () => {
+    // the session wrote one file where it was opened; the rest went to a worktree now gone,
+    // and only the commit still names them
+    const files = filesOf(
+      ['src/mastra/tools/mileage-mutation.ts'],
+      [commit('a1', ['src/mastra/tools/mileage-mutation.ts', 'src/mastra/tools/mileage-stash.ts', 'src/mastra/tools/mileage-questions.ts'])],
+    );
+    expect(files).toEqual([
+      'src/mastra/tools/mileage-mutation.ts',
+      'src/mastra/tools/mileage-questions.ts',
+      'src/mastra/tools/mileage-stash.ts',
+    ]);
+  });
+
+  it('names a file once when both the session and its commit have it', () => {
+    expect(filesOf(['a.ts'], [commit('a1', ['a.ts'])])).toEqual(['a.ts']);
+  });
+
+  it('claims nothing extra when no commit was attributed', () => {
+    expect(filesOf(['a.ts'], [])).toEqual(['a.ts']);
   });
 });

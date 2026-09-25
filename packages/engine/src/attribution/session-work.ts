@@ -70,3 +70,16 @@ export function attribute(commits: CommitWithFiles[], written: string[]): Commit
   const mine = new Set(written);
   return commits.filter((c) => c.files.some((f) => mine.has(f)));
 }
+
+/**
+ * Every file this session is responsible for: what it wrote where the session was opened, plus
+ * everything carried by the commits attributed to it.
+ *
+ * A session often works in a worktree of the same repository rather than in the directory it was
+ * opened in, and that worktree is usually deleted once the branch lands. Those paths cannot be
+ * resolved from disk afterwards — but a commit that has already been attributed names them, and
+ * every file in a commit the session made is the session's work.
+ */
+export function filesOf(written: string[], attributed: CommitWithFiles[]): string[] {
+  return [...new Set([...written, ...attributed.flatMap((c) => c.files)])].sort();
+}

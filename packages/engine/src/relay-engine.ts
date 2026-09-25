@@ -6,7 +6,7 @@ import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
 import { branchWork, commitsInSpan, type BranchWork } from './git/branch-work';
-import { attribute, filesWrittenIn, spanOf, COMMITS_SHOWN, FILES_SHOWN } from './attribution/session-work';
+import { attribute, filesOf, filesWrittenIn, spanOf, COMMITS_SHOWN, FILES_SHOWN } from './attribution/session-work';
 import { workState, type WorkState } from './git/work-state';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
@@ -438,8 +438,8 @@ export class RelayEngine {
       note: written.length === 0 && work.note === null ? 'Nothing here was written by this session.' : work.note,
       commits: mine.slice(0, COMMITS_SHOWN).map(({ sha, subject, at }) => ({ sha, subject, at })),
       moreCommits: Math.max(0, mine.length - COMMITS_SHOWN),
-      files: written.slice(0, FILES_SHOWN),
-      moreFiles: Math.max(0, written.length - FILES_SHOWN),
+      files: filesOf(written, mine).slice(0, FILES_SHOWN),
+      moreFiles: Math.max(0, filesOf(written, mine).length - FILES_SHOWN),
       open,
     };
   }
