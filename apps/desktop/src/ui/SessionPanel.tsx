@@ -139,7 +139,9 @@ export function SessionPanel(p: Props) {
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || caretAfterPick === null) return;
-    box.focus();
+    // this runs inside the keystroke that picked the command; refocusing a box that already has
+    // focus restarts the platform's text input for no gain, so only take focus when it is elsewhere
+    if (document.activeElement !== box) box.focus();
     box.setSelectionRange(caretAfterPick, caretAfterPick);
     setCaretAfterPick(null);
   }, [caretAfterPick, draft]);
