@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { BulkRun, PrWatch, SessionSummary } from '@relay/shared';
+import type { BulkRun, PrWatch, SessionSummary, Todo } from '@relay/shared';
 import type { PrSnapshot } from '../pr/snapshot';
 
 export interface CachedSession {
@@ -29,6 +29,7 @@ export class SessionStore {
       create table if not exists bulk_runs (id text primary key, created_at text not null, run text not null);
       create table if not exists pr_watches (id text primary key, created_at text not null, watch text not null, snapshot text);
       create table if not exists allowed_patterns (session_id text not null, pattern_key text not null, primary key (session_id, pattern_key));
+      create table if not exists todos (id text primary key, created_at text not null, todo text not null);
     `);
   }
 
@@ -56,6 +57,24 @@ export class SessionStore {
     for (const row of this.db.prepare('select file_path from sessions').all() as Pick<Row, 'file_path'>[]) {
       if (!present.has(row.file_path)) del.run(row.file_path);
     }
+  }
+
+  allTodos(): Todo[] {
+    const rows = this.db.prepare('select todo from todos order by created_at').all() as { todo: string }[];
+    return rows.map((r) => JSON.parse(r.todo) as Todo);
+  }
+
+  putTodo(todo: Todo): void {
+    this.db
+      .prepare(
+        `insert into todos (id, created_at, todo) values (?, ?, ?)
+         on conflict(id) do update set todo = excluded.todo`,
+      )
+      .run(todo.id, todo.createdAt, JSON.stringify(todo));
+  }
+
+  removeTodo(id: string): void {
+    this.db.prepare('delete from todos where id = ?').run(id);
   }
 
   getMeta(key: string): string | null {
