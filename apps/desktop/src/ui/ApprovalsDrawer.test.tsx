@@ -6,7 +6,7 @@ import { ApprovalsDrawer } from './ApprovalsDrawer';
 
 const s = (id: string, title: string): SessionSummary => ({
   id, filePath: '/f', cwd: '/c', cwdExists: true, repo: 'repo', branch: 'main', title,
-  lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
+  lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null, context: null,
   isStale: false,
 });
 const ap = (id: string, sessionId: string, summary: string): PendingApproval => ({

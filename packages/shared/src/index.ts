@@ -30,3 +30,6 @@ export type { ModelChoice } from './models';
 export type { QueuedMessage, QueuedState } from './queue';
 export type { SessionStatus, StatusCheck } from './status';
 export type { Accomplished } from './accomplished';
+export type { Todo, TodoDraft, TodoPatch } from './todo';
+export type { Screenshot } from './shots';
+export type { ContextUse } from './context';

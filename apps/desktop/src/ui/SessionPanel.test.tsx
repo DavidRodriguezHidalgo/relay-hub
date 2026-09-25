@@ -8,7 +8,7 @@ import { SessionPanel } from './SessionPanel';
 
 const session: SessionSummary = {
   id: 'a', filePath: '/f', cwd: '/repo', cwdExists: true, repo: 'repo', branch: 'feat/a', title: 'Alpha',
-  lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
+  lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null, context: null,
   isStale: false,
 };
 const entry = (uuid: string, text: string): TranscriptEntry => ({

@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import type { RelayEngine } from '@relay/engine';
-import { IPC, type ApprovalDecision, type SendRequest } from '@relay/shared';
+import { IPC, type ApprovalDecision, type SendRequest, type TodoDraft, type TodoPatch } from '@relay/shared';
 
 /** Only our own windows' top frames may call the engine. */
 function assertTrusted(event: IpcMainInvokeEvent): void {
@@ -40,6 +40,15 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.setModel,
     IPC.sessionStatus,
     IPC.accomplished,
+    IPC.listTodos,
+    IPC.createTodo,
+    IPC.updateTodo,
+    IPC.deleteTodo,
+    IPC.launchTodo,
+    IPC.screenshots,
+    IPC.attachTodo,
+    IPC.detachTodo,
+    IPC.contextUse,
   ];
   const handle = (channel: string, fn: (...args: never[]) => unknown) => {
     ipcMain.handle(channel, (event, ...args) => {
@@ -72,6 +81,15 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.setModel, (sessionId: string, model: string) => engine.setModel(sessionId, model));
   handle(IPC.sessionStatus, (sessionId: string) => engine.sessionStatus(sessionId));
   handle(IPC.accomplished, (sessionId: string) => engine.accomplished(sessionId));
+  handle(IPC.listTodos, () => engine.listTodos());
+  handle(IPC.createTodo, (draft: TodoDraft) => engine.createTodo(draft));
+  handle(IPC.updateTodo, (id: string, patch: TodoPatch) => engine.updateTodo(id, patch));
+  handle(IPC.deleteTodo, (id: string) => engine.deleteTodo(id));
+  handle(IPC.launchTodo, (id: string) => engine.launchTodo(id));
+  handle(IPC.screenshots, (sessionId: string) => engine.screenshots(sessionId));
+  handle(IPC.attachTodo, (id: string, sessionId: string) => engine.attachTodo(id, sessionId));
+  handle(IPC.detachTodo, (id: string) => engine.detachTodo(id));
+  handle(IPC.contextUse, (sessionId: string) => engine.contextUse(sessionId));
   handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );

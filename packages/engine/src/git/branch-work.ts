@@ -80,3 +80,35 @@ export async function branchWork(cwd: string): Promise<BranchWork> {
     note: null,
   };
 }
+
+/**
+ * Commits made while the session was running, each with the files it touched.
+ *
+ * The window alone proves nothing — other people's merges land in it too — so the caller still
+ * has to decide which of these are the session's. This only narrows the field cheaply.
+ */
+export async function commitsInSpan(
+  cwd: string,
+  from: string,
+  to: string,
+): Promise<{ sha: string; subject: string; at: string; files: string[] }[]> {
+  const out = await git(cwd, [
+    'log',
+    '--format=%x01%H%x00%s%x00%cI',
+    '--name-only',
+    `--since=${from}`,
+    `--until=${to}`,
+    'HEAD',
+  ]);
+  if (!out) return [];
+  return out
+    .split('\x01')
+    .filter((block) => block.trim().length > 0)
+    .map((block) => {
+      const [header, ...rest] = block.split('\n');
+      const [sha, subject, at] = (header ?? '').split('\0');
+      if (!sha || !at) return null;
+      return { sha, subject: subject ?? '', at, files: rest.filter((f) => f.trim().length > 0) };
+    })
+    .filter((c): c is { sha: string; subject: string; at: string; files: string[] } => c !== null);
+}

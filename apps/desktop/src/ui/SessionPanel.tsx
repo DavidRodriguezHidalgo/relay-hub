@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Accomplished as AccomplishedWork } from '@relay/shared';
+import type { Accomplished as AccomplishedWork, ContextUse, Screenshot } from '@relay/shared';
 import type {
   ApprovalDecision,
   DeliveryMode,
@@ -25,6 +25,8 @@ import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
 import { WorkingLine } from './WorkingLine';
 import { Accomplished } from './Accomplished';
+import { Screenshots } from './Screenshots';
+import { ContextMeter } from './ContextMeter';
 import { WorkStanding } from './WorkStanding';
 
 interface Props {
@@ -58,6 +60,10 @@ interface Props {
   standing: SessionStatus | null;
   /** What this session produced; null until read. */
   accomplished: AccomplishedWork | null;
+  /** How full this session’s context is; null until read. */
+  contextUse?: ContextUse | null;
+  /** Images this session produced, newest first. */
+  screenshots?: Screenshot[];
   /** Another live session working in the same place, when there is one. */
   collision: Collision | null;
   onNewWorktree: () => void;
@@ -236,7 +242,7 @@ export function SessionPanel(p: Props) {
         <h1>{p.session.title}</h1>
         <p>
           <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
-          <span className={`state state--${state}`}>{state}</span> <code>{p.session.cwd}</code>{' '}
+          <span className={`state state--${state}`}>{state}</span> <ContextMeter use={p.contextUse ?? null} /> <code>{p.session.cwd}</code>{' '}
           {p.session.branch && <code>{p.session.branch}</code>}{' '}
           {p.session.prUrl && (
             <a href={p.session.prUrl} target="_blank" rel="noreferrer">
@@ -304,6 +310,7 @@ export function SessionPanel(p: Props) {
       )}
       <WorkStanding status={p.standing} />
       <Accomplished work={p.accomplished} />
+      <Screenshots shots={p.screenshots ?? []} />
       <InstructionQueue queue={p.queue} />
       {working && (
         <div className="stop">

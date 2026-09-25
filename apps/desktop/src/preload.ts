@@ -40,6 +40,15 @@ const api: RelayApi = {
   updateMode: () => ipcRenderer.invoke(IPC.updateMode),
   checkoutPlan: () => ipcRenderer.invoke(IPC.checkoutPlan),
   applyCheckout: () => ipcRenderer.invoke(IPC.applyCheckout),
+  listTodos: () => ipcRenderer.invoke(IPC.listTodos),
+  createTodo: (draft) => ipcRenderer.invoke(IPC.createTodo, draft),
+  updateTodo: (id, patch) => ipcRenderer.invoke(IPC.updateTodo, id, patch),
+  deleteTodo: (id) => ipcRenderer.invoke(IPC.deleteTodo, id),
+  launchTodo: (id) => ipcRenderer.invoke(IPC.launchTodo, id),
+  screenshots: (sessionId) => ipcRenderer.invoke(IPC.screenshots, sessionId),
+  attachTodo: (id, sessionId) => ipcRenderer.invoke(IPC.attachTodo, id, sessionId),
+  detachTodo: (id) => ipcRenderer.invoke(IPC.detachTodo, id),
+  contextUse: (sessionId) => ipcRenderer.invoke(IPC.contextUse, sessionId),
   // File.path is gone in current Electron; only the preload world can still resolve one
   pathForFile: (file) => webUtils.getPathForFile(file),
 };

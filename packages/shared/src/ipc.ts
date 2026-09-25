@@ -6,6 +6,9 @@ import type { ModelChoice } from './models';
 import type { SessionStatus } from './status';
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
 import type { TranscriptEntry } from './transcript';
+import type { Todo, TodoDraft, TodoPatch } from './todo';
+import type { Screenshot } from './shots';
+import type { ContextUse } from './context';
 
 export const IPC = {
   listSessions: 'relay:listSessions',
@@ -40,6 +43,15 @@ export const IPC = {
   updateMode: 'relay:updateMode',
   checkoutPlan: 'relay:checkoutPlan',
   applyCheckout: 'relay:applyCheckout',
+  listTodos: 'relay:listTodos',
+  createTodo: 'relay:createTodo',
+  updateTodo: 'relay:updateTodo',
+  deleteTodo: 'relay:deleteTodo',
+  launchTodo: 'relay:launchTodo',
+  screenshots: 'relay:screenshots',
+  attachTodo: 'relay:attachTodo',
+  detachTodo: 'relay:detachTodo',
+  contextUse: 'relay:contextUse',
 } as const;
 
 export interface SendRequest {
@@ -87,6 +99,20 @@ export interface RelayApi {
   updateMode(): Promise<UpdateMode>;
   checkoutPlan(): Promise<CheckoutPlan>;
   applyCheckout(): Promise<CheckoutResult>;
+  listTodos(): Promise<Todo[]>;
+  /** Each change answers with the whole list, so the window never has to guess the new order. */
+  createTodo(draft: TodoDraft): Promise<Todo[]>;
+  updateTodo(id: string, patch: TodoPatch): Promise<Todo[]>;
+  deleteTodo(id: string): Promise<Todo[]>;
+  /** Starts a session for this todo and joins the two. */
+  launchTodo(id: string): Promise<{ sessionId: string; todos: Todo[] }>;
+  /** Hands a todo to a session already open; says whether it was sent or queued. */
+  attachTodo(id: string, sessionId: string): Promise<{ mode: DeliveryMode; todos: Todo[] }>;
+  detachTodo(id: string): Promise<Todo[]>;
+  /** How full this session’s context was at its last request; null if it never called the model. */
+  contextUse(sessionId: string): Promise<ContextUse | null>;
+  /** Images this session produced while working, newest first. */
+  screenshots(sessionId: string): Promise<Screenshot[]>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
 }

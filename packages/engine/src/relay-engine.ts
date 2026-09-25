@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, realpath, stat } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
-import { branchWork, type BranchWork } from './git/branch-work';
+import { branchWork, commitsInSpan, type BranchWork } from './git/branch-work';
+import { attribute, filesWrittenIn, spanOf, COMMITS_SHOWN, FILES_SHOWN } from './attribution/session-work';
 import { workState, type WorkState } from './git/work-state';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
@@ -24,6 +25,14 @@ import { AsyncQueue } from './runner/async-queue';
 import type { AgentInput } from './runner/agent-client';
 import { SessionRunner, type TurnEnd } from './runner/session-runner';
 import { SessionStore } from './store/session-store';
+import { TodoList } from './todos/todo-list';
+import { imagesIn, mediaTypeOf } from './visual/screenshots';
+import { contextUseFrom } from './context/context-use';
+
+/** At most this many images are reported for one session, newest first. */
+const SCREENSHOTS_MAX = 8;
+/** Larger than this is left on disk rather than inlined into the window. */
+const SCREENSHOT_INLINE_MAX = 4 * 1024 * 1024;
 
 /** A transcript written more recently than this is assumed to have another writer. */
 const BUSY_WINDOW_MS = 15_000;
@@ -44,6 +53,11 @@ const BULK_DETAIL_MAX = 200;
 const RECENT_BULK_RUNS = 20;
 const RELAY_ONLY_REFUSAL =
   'This turn was started by a session finishing, not by the user. Report the result and ask the user before sending anything else.';
+
+/** What a session is told to do when a todo is handed to it: the title, plus any context written for it. */
+const instructionFor = (todo: Todo) => (todo.notes.trim() ? `${todo.title}
+
+${todo.notes.trim()}` : todo.title);
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
@@ -119,6 +133,7 @@ export class RelayEngine {
   private readBranchWork: (cwd: string) => Promise<BranchWork> = branchWork;
   private external: Record<string, 'busy' | 'idle'> = {};
   private readonly commands: CommandCatalog;
+  private readonly todos: TodoList;
   private externalTimer: NodeJS.Timeout | null = null;
 
   private constructor(
@@ -139,6 +154,7 @@ export class RelayEngine {
     private readonly createTimeoutMs: number,
   ) {
     this.commands = new CommandCatalog(agent.describe?.bind(agent));
+    this.todos = new TodoList(store, () => this.now().toISOString());
     this.approvals.setAllowAll(store.getMeta(ALLOW_ALL_KEY) === 'true');
     this.watcher = new PrWatcher({ gh, store, intervalMs: prPollIntervalMs });
     this.watcher.on('watch', (watch) => this.publish({ type: 'watch', watch, gh: this.watcher.ghStatus }));
@@ -393,6 +409,14 @@ export class RelayEngine {
     const session = this.listSessions().find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
     const work = await this.readBranchWork(session.cwd);
+    // what the session itself wrote, from its own tool calls: the branch is not evidence of authorship
+    const entries = await this.getTranscript(sessionId);
+    const written = filesWrittenIn(entries, session.cwd);
+    const span = spanOf(entries);
+    const mine =
+      span.from && span.to && written.length > 0
+        ? attribute(await commitsInSpan(session.cwd, span.from, span.to), written)
+        : [];
     const open: string[] = [];
 
     const waiting = this.approvals.pending().filter((a) => a.sessionId === sessionId).length;
@@ -409,7 +433,15 @@ export class RelayEngine {
       if (watch.wakeError) open.push(`a PR update could not reach this session: ${watch.wakeError}`);
     }
 
-    return { ...work, open };
+    return {
+      base: work.base,
+      note: written.length === 0 && work.note === null ? 'Nothing here was written by this session.' : work.note,
+      commits: mine.slice(0, COMMITS_SHOWN).map(({ sha, subject, at }) => ({ sha, subject, at })),
+      moreCommits: Math.max(0, mine.length - COMMITS_SHOWN),
+      files: written.slice(0, FILES_SHOWN),
+      moreFiles: Math.max(0, written.length - FILES_SHOWN),
+      open,
+    };
   }
 
   /** The models this session can run on, with the one it is on marked. */
@@ -586,6 +618,122 @@ export class RelayEngine {
     this.wire(runner, { id: sessionId, title: req.prompt.trim().slice(0, NEW_TITLE_MAX), branch: req.branch ?? null });
     this.publish({ type: 'state', sessionId, state: runner.state, error: runner.error });
     return { sessionId, cwd };
+  }
+
+  listTodos(): Todo[] {
+    return this.todos.list();
+  }
+
+  createTodo(draft: TodoDraft): Todo[] {
+    this.todos.create(draft);
+    return this.todos.list();
+  }
+
+  updateTodo(id: string, patch: TodoPatch): Todo[] {
+    this.todos.update(id, patch);
+    return this.todos.list();
+  }
+
+  deleteTodo(id: string): Todo[] {
+    this.todos.remove(id);
+    return this.todos.list();
+  }
+
+  /**
+   * Starts a session for a todo and joins the two.
+   *
+   * The todo's title and notes become the session's first instruction, because that is the
+   * context you already wrote down; retyping it into the session would be the same words twice.
+   */
+  async launchTodo(id: string): Promise<{ sessionId: string; todos: Todo[] }> {
+    const todo = this.todos.get(id);
+    if (!todo) throw new Error(`No todo ${id}.`);
+    if (todo.sessionId) throw new Error(`"${todo.title}" already has a session.`);
+    if (!todo.project) throw new Error(`Choose a project for "${todo.title}" before launching it.`);
+    const prompt = instructionFor(todo);
+    const created = await this.createSession({
+      project: todo.project,
+      branch: todo.branch ?? undefined,
+      prompt,
+      origin: 'user',
+    });
+    this.todos.link(id, created.sessionId);
+    return { sessionId: created.sessionId, todos: this.todos.list() };
+  }
+
+  /**
+   * Hands a todo to a session that is already open, rather than starting a new one.
+   *
+   * A session mid-turn is queued behind its current work instead of being steered into: the
+   * caller is told which happened, so "sent" never quietly means "will start in a while".
+   */
+  async attachTodo(id: string, sessionId: string): Promise<{ mode: DeliveryMode; todos: Todo[] }> {
+    const todo = this.todos.get(id);
+    if (!todo) throw new Error(`No todo ${id}.`);
+    if (todo.sessionId) throw new Error(`"${todo.title}" is already attached to a session.`);
+    if (!this.listSessions().some((s) => s.id === sessionId)) throw new Error('That session is no longer there.');
+    const mode: DeliveryMode = this.runners.get(sessionId)?.state === 'running' ? 'queue' : 'steer';
+    await this.send({ sessionId, prompt: instructionFor(todo), mode, origin: 'user' });
+    this.todos.link(id, sessionId);
+    return { mode, todos: this.todos.list() };
+  }
+
+  /**
+   * How full this session's context was when it last called the model.
+   *
+   * Read straight from the transcript's own usage records, so the token counts are the model's
+   * and not a guess; only the size of the window is assumed.
+   */
+  async contextUse(sessionId: string): Promise<ContextUse | null> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) return null;
+    try {
+      const text = await readFile(session.filePath, 'utf8');
+      const records = text.split('\n').filter(Boolean).map((line) => {
+        try {
+          return JSON.parse(line) as unknown;
+        } catch {
+          return null;
+        }
+      });
+      return contextUseFrom(records);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Lets a todo go of its session so it can be handed elsewhere; the session is left alone. */
+  detachTodo(id: string): Todo[] {
+    this.todos.unlink(id);
+    return this.todos.list();
+  }
+
+  /**
+   * Images this session produced, newest first.
+   *
+   * Relay takes no screenshots of its own: these are files the agent wrote and that are still on
+   * disk. Small ones are inlined so the window can show them without file access.
+   */
+  async screenshots(sessionId: string): Promise<Screenshot[]> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) return [];
+    const entries = await this.getTranscript(sessionId);
+    const shots: Screenshot[] = [];
+    for (const image of imagesIn(entries, session.cwd)) {
+      if (shots.length >= SCREENSHOTS_MAX) break;
+      try {
+        const info = await stat(image.path);
+        if (!info.isFile()) continue;
+        const inlineable = info.size <= SCREENSHOT_INLINE_MAX;
+        shots.push({
+          ...image,
+          dataUrl: inlineable ? `data:${mediaTypeOf(image.name)};base64,${(await readFile(image.path)).toString('base64')}` : null,
+        });
+      } catch {
+        // written earlier in the run and since removed, or never written at all: not evidence
+      }
+    }
+    return shots;
   }
 
   bulkConfirm(runId: string, sessionIds: string[]): void {

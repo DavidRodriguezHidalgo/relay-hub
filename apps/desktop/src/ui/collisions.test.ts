@@ -8,7 +8,7 @@ const idle: Liveness = { states: {}, external: {}, now: NOW };
 
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
   id: 'x', filePath: '/f', cwd: '/code/app', cwdExists: true, repo: 'app', branch: 'main', title: 'T',
-  lastActivity: ago(60_000), messageCount: 1, prNumber: null, prUrl: null, continuedIn: null, isStale: false, ...over,
+  lastActivity: ago(60_000), messageCount: 1, prNumber: null, prUrl: null, continuedIn: null, context: null, isStale: false, ...over,
 });
 
 describe('collisionFor', () => {

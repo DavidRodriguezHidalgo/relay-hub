@@ -12,6 +12,8 @@ import {
   type CheckoutPlan,
   type CheckoutResult,
   type UpdateMode,
+  type Todo,
+  type Screenshot,
 } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
 import { collisionFor } from './collisions';
@@ -24,6 +26,7 @@ import { clampWidth, loadWidths, saveWidths, type ColumnWidths } from './columnW
 import { NewSessionForm } from './NewSessionForm';
 import { OrchestratorChat } from './OrchestratorChat';
 import { SessionList } from './SessionList';
+import { TodoList } from './TodoList';
 import { SessionPanel } from './SessionPanel';
 import { dotState } from './sessionDot';
 import { useFollowBottom } from './useFollowBottom';
@@ -57,6 +60,9 @@ export function App() {
   /** The session as this window drew it, to compare with what the index says now. */
   const [shownSession, setShownSession] = useState<SessionSummary | null>(null);
   const [dismissed, setDismissed] = useState<string[]>(dismissedCollisions);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [projects, setProjects] = useState<{ name: string; root: string; sessions: number }[]>([]);
+  const [shots, setShots] = useState<Screenshot[]>([]);
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -167,6 +173,8 @@ export function App() {
   useEffect(() => {
     void window.relay.listSessions().then(setSessions);
     void window.relay.orchestratorHistory().then(setOrchHistory);
+    void window.relay.listTodos().then(setTodos, () => undefined);
+    void window.relay.listProjects().then(setProjects, () => undefined);
     return window.relay.onSessionsChanged(setSessions);
   }, []);
 
@@ -193,6 +201,7 @@ export function App() {
     setModels([]);
     setStanding(null);
     setAccomplished(null);
+    setShots([]);
     if (!selectedId) return;
     let cancelled = false;
     // what this session can run depends on its directory, so it is asked per session
@@ -211,6 +220,12 @@ export function App() {
     void window.relay.sessionStatus(selectedId).then(
       (s) => {
         if (!cancelled) setStanding(s);
+      },
+      () => undefined,
+    );
+    void window.relay.screenshots(selectedId).then(
+      (list) => {
+        if (!cancelled) setShots(list);
       },
       () => undefined,
     );
@@ -297,6 +312,31 @@ export function App() {
         states={run.states}
         external={run.external}
         onNewSession={() => setCreating(true)}
+        onInterrupt={(id) => {
+          setStopping((ids) => (ids.includes(id) ? ids : [...ids, id]));
+          void window.relay.interrupt(id).catch(() => undefined);
+        }}
+        header={
+          <TodoList
+            todos={todos}
+            sessions={sessions}
+            projects={projects}
+            states={run.states}
+            external={run.external}
+            onCreate={(draft) => window.relay.createTodo(draft).then(setTodos)}
+            onUpdate={(id, patch) => window.relay.updateTodo(id, patch).then(setTodos)}
+            onDelete={(id) => window.relay.deleteTodo(id).then(setTodos)}
+            onLaunch={(id) =>
+              window.relay.launchTodo(id).then((r) => {
+                setTodos(r.todos);
+                setSelectedId(r.sessionId);
+              })
+            }
+            onAttach={(id, sessionId) => window.relay.attachTodo(id, sessionId).then((r) => setTodos(r.todos))}
+            onDetach={(id) => window.relay.detachTodo(id).then(setTodos)}
+            onOpenSession={setSelectedId}
+          />
+        }
         panel={
           creating && (
             <NewSessionForm
@@ -377,6 +417,8 @@ export function App() {
             }}
             standing={standing}
             accomplished={accomplished}
+            screenshots={shots}
+            contextUse={selected.context}
             queue={run.queue[selected.id] ?? []}
             models={models}
             onSetModel={(id) =>

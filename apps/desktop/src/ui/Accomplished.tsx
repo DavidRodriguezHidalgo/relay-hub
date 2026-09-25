@@ -23,10 +23,13 @@ export function Accomplished({ work }: { work: Work | null }) {
           ))}
         </ul>
       )}
+      {work.moreCommits > 0 && (
+        <p className="done__more">and {work.moreCommits} more commit{work.moreCommits === 1 ? '' : 's'}</p>
+      )}
 
       {work.files.length > 0 && (
         <p className="done__files">
-          {work.files.length + work.moreFiles} file{work.files.length + work.moreFiles === 1 ? '' : 's'} touched:{' '}
+          {work.files.length + work.moreFiles} file{work.files.length + work.moreFiles === 1 ? '' : 's'} written by this session:{' '}
           <span className="done__names">{work.files.join(', ')}</span>
           {work.moreFiles > 0 && <span className="done__more"> and {work.moreFiles} more</span>}
         </p>

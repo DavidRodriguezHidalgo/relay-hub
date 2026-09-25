@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import type { Accomplished as Work } from '@relay/shared';
 import { Accomplished } from './Accomplished';
 
-const base: Work = { commits: [], files: [], moreFiles: 0, base: 'main', open: [], note: null };
+const base: Work = { commits: [], files: [], moreFiles: 0, moreCommits: 0, base: 'main', open: [], note: null };
 
 describe('Accomplished', () => {
   it('lists the commits made, newest first as given', () => {
@@ -19,7 +19,7 @@ describe('Accomplished', () => {
 
   it('counts the files touched and names them, saying how many more there were', () => {
     render(<Accomplished work={{ ...base, files: ['src/a.ts', 'src/b.ts'], moreFiles: 3 }} />);
-    expect(screen.getByText(/5 files touched/)).toBeInTheDocument();
+    expect(screen.getByText(/5 files written by this session/)).toBeInTheDocument();
     expect(screen.getByText(/src\/a\.ts, src\/b\.ts/)).toBeInTheDocument();
     expect(screen.getByText(/and 3 more/)).toBeInTheDocument();
   });
@@ -43,5 +43,32 @@ describe('Accomplished', () => {
   it('shows nothing before it has been read', () => {
     const { container } = render(<Accomplished work={null} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('Accomplished attribution', () => {
+  const work = (over: Partial<Work>): Work => ({
+    commits: [], moreCommits: 0, files: [], moreFiles: 0, base: 'main', open: [], note: null, ...over,
+  });
+
+  it('counts the commits it did not list rather than printing them all', () => {
+    render(<Accomplished work={work({ commits: [{ sha: 'a1b2c3d4', subject: 'the one', at: '' }], moreCommits: 7 })} />);
+    expect(screen.getByText(/and 7 more commits/)).toBeInTheDocument();
+  });
+
+  it('says the files are this session’s own, not the branch’s', () => {
+    render(<Accomplished work={work({ files: ['src/a.ts'] })} />);
+    expect(screen.getByText(/written by this session/)).toBeInTheDocument();
+  });
+
+  it('keeps the file list short and counts the rest', () => {
+    render(<Accomplished work={work({ files: ['a.ts', 'b.ts'], moreFiles: 40 })} />);
+    expect(screen.getByText(/42 files written by this session/)).toBeInTheDocument();
+    expect(screen.getByText(/and 40 more/)).toBeInTheDocument();
+  });
+
+  it('says plainly when nothing here was this session’s doing', () => {
+    render(<Accomplished work={work({ note: 'Nothing here was written by this session.' })} />);
+    expect(screen.getByText('Nothing here was written by this session.')).toBeInTheDocument();
   });
 });

@@ -5,7 +5,7 @@ import { stalenessOf } from './staleness';
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
   id: 'a', filePath: '/f', cwd: '/code/app', cwdExists: true, repo: 'app', branch: 'feat/a', title: 'T',
   lastActivity: '2026-09-25T10:00:00.000Z', messageCount: 10, prNumber: null, prUrl: null, continuedIn: null,
-  isStale: false, ...over,
+  context: null, isStale: false, ...over,
 });
 const none = { missingChannels: 0, shown: s({}), current: s({}) };
 

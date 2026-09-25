@@ -5,7 +5,7 @@ import { groupSessions } from './groupSessions';
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
   id: 'x', filePath: '/f', cwd: '/c', cwdExists: true, repo: 'repo', branch: 'main', title: 'T',
   lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
-  isStale: false, ...over,
+  context: null, isStale: false, ...over,
 });
 
 describe('groupSessions', () => {

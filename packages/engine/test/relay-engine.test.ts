@@ -1054,9 +1054,10 @@ describe('RelayEngine', () => {
     await engine!.send({ sessionId: 's-basic', prompt: 'unanswered', mode: 'steer', origin: 'user' });
     await tick();
     const done = await engine!.accomplished('s-basic');
-    expect(done.commits.map((c) => c.subject)).toEqual(['did the thing']);
-    expect(done.files).toEqual(['src/a.ts', 'src/b.ts']);
-    expect(done.moreFiles).toBe(3);
+    // the branch's own commits are not this session's: it wrote nothing, so it claims nothing
+    expect(done.commits).toEqual([]);
+    expect(done.files).toEqual([]);
+    expect(done.note).toMatch(/written by this session/);
     expect(done.open).toEqual(['1 instruction not answered yet']);
     await expect(engine!.accomplished('nope')).rejects.toThrow('Unknown session nope');
   });

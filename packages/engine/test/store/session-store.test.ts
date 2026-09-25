@@ -8,7 +8,7 @@ import { SessionStore } from '../../src/store/session-store';
 const summary = (over: Partial<SessionSummary> = {}): SessionSummary => ({
   id: 's1', filePath: '/p/s1.jsonl', cwd: '/repo', cwdExists: true, repo: 'repo', branch: 'main',
   title: 'T', lastActivity: '2026-09-20T10:00:00.000Z', messageCount: 3, prNumber: null, prUrl: null,
-  continuedIn: null, isStale: false, ...over,
+  continuedIn: null, context: null, isStale: false, ...over,
 });
 
 describe('SessionStore', () => {

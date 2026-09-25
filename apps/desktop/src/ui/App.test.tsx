@@ -7,7 +7,7 @@ import { App } from './App';
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
   id: 'x', filePath: '/f', cwd: '/c', cwdExists: true, repo: 'repo', branch: 'main', title: 'T',
   lastActivity: '2026-09-20T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
-  isStale: false, ...over,
+  context: null, isStale: false, ...over,
 });
 
 describe('App', () => {
@@ -56,6 +56,15 @@ describe('App', () => {
       updateMode: vi.fn().mockResolvedValue('packaged'),
       checkoutPlan: vi.fn().mockResolvedValue({ kind: 'up-to-date' as const, reason: null, branch: 'main', upstream: 'origin/main', commits: [], needsInstall: false }),
       applyCheckout: vi.fn().mockResolvedValue({ pulled: [], installed: false, error: null }),
+      listTodos: vi.fn().mockResolvedValue([]),
+      createTodo: vi.fn().mockResolvedValue([]),
+      updateTodo: vi.fn().mockResolvedValue([]),
+      deleteTodo: vi.fn().mockResolvedValue([]),
+      launchTodo: vi.fn().mockResolvedValue({ sessionId: 'new', todos: [] }),
+      screenshots: vi.fn().mockResolvedValue([]),
+      attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
+      detachTodo: vi.fn().mockResolvedValue([]),
+      contextUse: vi.fn().mockResolvedValue(null),
     };
     Object.assign(window, { relay });
   });
@@ -424,6 +433,15 @@ describe('App collisions', () => {
       updateMode: vi.fn().mockResolvedValue('packaged'),
       checkoutPlan: vi.fn().mockResolvedValue({ kind: 'up-to-date' as const, reason: null, branch: 'main', upstream: 'origin/main', commits: [], needsInstall: false }),
       applyCheckout: vi.fn().mockResolvedValue({ pulled: [], installed: false, error: null }),
+      listTodos: vi.fn().mockResolvedValue([]),
+      createTodo: vi.fn().mockResolvedValue([]),
+      updateTodo: vi.fn().mockResolvedValue([]),
+      deleteTodo: vi.fn().mockResolvedValue([]),
+      launchTodo: vi.fn().mockResolvedValue({ sessionId: 'new', todos: [] }),
+      screenshots: vi.fn().mockResolvedValue([]),
+      attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
+      detachTodo: vi.fn().mockResolvedValue([]),
+      contextUse: vi.fn().mockResolvedValue(null),
     };
     Object.assign(window, { relay });
   });

@@ -250,3 +250,68 @@
   .gh-banner { @apply shrink-0 bg-accent px-3 py-1 text-center text-[12px] font-semibold text-on-accent; }
   .watch { @apply text-[11px] text-muted; }
 }
+
+@layer components {
+  /* Work you mean to do, above the sessions it becomes. */
+  .todos { @apply mb-3 border-b border-line pb-3; }
+  .todos__add { @apply mb-2 w-full; }
+  .todos__error { @apply mb-2; }
+  .todos__list { @apply m-0 flex list-none flex-col gap-1 p-0; }
+  .todo { @apply rounded-md px-1.5 py-1 hover:bg-surface-2; }
+  .todo--done .todo__title { @apply text-muted line-through; }
+  .todo__head { @apply flex items-start gap-2; }
+  .todo__head input[type='checkbox'] { @apply mt-1 shrink-0; }
+  .todo__title { @apply flex-1 border-0 bg-transparent p-0 text-left text-[13px] leading-snug; }
+  .todo__meta { @apply mt-0.5 flex items-center gap-1.5 pl-6 text-[11px] text-muted; }
+  .todo__session { @apply flex items-center gap-1.5 border-0 bg-transparent p-0 text-[11px] text-muted hover:text-fg; }
+  .todo__state { @apply text-accent-fg; }
+  .todo__gone { @apply italic; }
+  .todo__launch { @apply px-1.5 py-0.5 text-[11px]; }
+  .todo__detail { @apply mt-1.5 flex flex-col gap-1.5 pl-6; }
+  .todo__detail label { @apply flex flex-col gap-1 text-[11px] text-muted; }
+  .todo__detail textarea { @apply resize-y text-[12px]; }
+  .todo__remove { @apply self-start px-1.5 py-0.5 text-[11px] text-danger; }
+
+  /* The quiet line that says what the recent window is holding back. */
+  .session-list__older { @apply mt-3 w-full border-0 bg-transparent px-2 py-1 text-left text-[11px] text-muted hover:text-fg; }
+
+  /* Images a session produced while working. */
+  .shots { @apply mt-3 border-t border-line pt-3; }
+  .shots__toggle { @apply flex w-full items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[11px] text-muted hover:text-fg; }
+  .shots__caret { @apply text-[10px] text-accent-fg; }
+  .shots__strip { @apply mt-1.5 flex gap-2 overflow-x-auto pb-1; }
+  .shots__item { @apply m-0 flex w-40 shrink-0 flex-col gap-1; }
+  .shots__item img { @apply w-full rounded-md border border-line; }
+  .shots__toobig { @apply rounded-md border border-line p-2 text-[11px] text-muted; }
+  .shots figcaption { @apply truncate text-[10px] text-muted; }
+}
+
+@layer components {
+  .todos__heading { @apply m-0 mb-1 text-[11px] font-normal tracking-wide text-muted uppercase; }
+  .todos__empty { @apply mt-1 mb-0 text-[11px] leading-snug text-muted; }
+  .todo__caret { @apply mr-1 inline-block w-2 text-[10px] text-accent-fg; }
+  .todo__needs { @apply border-0 bg-transparent p-0 text-[11px] text-accent-fg underline decoration-dotted hover:no-underline; }
+}
+
+@layer components {
+  .todo__send { @apply border-0 bg-transparent p-0 text-[11px] text-muted underline decoration-dotted hover:text-fg hover:no-underline; }
+  .todo__picker { @apply mt-1.5 flex flex-col gap-1.5 pl-6; }
+  .todo__picker label { @apply flex flex-col gap-1 text-[11px] text-muted; }
+  .todo__picker select { @apply text-[12px]; }
+  .todo__note { @apply m-0 text-[11px] leading-snug text-accent-fg; }
+}
+
+@layer components {
+  .context { @apply text-[11px] text-muted; }
+  .context--full { @apply text-danger; }
+}
+
+@layer components {
+  .session-row__row { @apply relative; }
+  .session-row__title { @apply flex items-baseline gap-1.5; }
+  .session-row__name { @apply truncate; }
+  .session-row__context { @apply ml-auto shrink-0 text-[10px] text-muted tabular-nums; }
+  .session-row__context--full { @apply text-danger; }
+  .session-row__state { @apply text-accent-fg; }
+  .session-row__stop { @apply absolute right-2 bottom-1 px-1.5 py-0 text-[10px]; }
+}

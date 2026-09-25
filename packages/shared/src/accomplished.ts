@@ -1,8 +1,10 @@
 /** What a session has actually produced, and what it still has open. */
 export interface Accomplished {
-  /** Commits on this branch that its base does not have, newest first. */
+  /** Commits this session is responsible for, newest first. */
   commits: { sha: string; subject: string; at: string }[];
-  /** Files those commits touched, plus anything uncommitted. */
+  /** Commits beyond the few listed. */
+  moreCommits: number;
+  /** Files this session itself wrote. */
   files: string[];
   /** More files than are listed, when there were too many to show. */
   moreFiles: number;
