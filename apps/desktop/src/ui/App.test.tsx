@@ -29,7 +29,7 @@ describe('App', () => {
       send: vi.fn().mockResolvedValue('msg-1'),
       interrupt: vi.fn().mockResolvedValue(undefined),
       decide: vi.fn().mockResolvedValue(undefined),
-      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} }),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} }),
       onRunnerEvent: vi.fn(() => () => undefined),
       orchestratorSend: vi.fn().mockResolvedValue('o-1'),
       orchestratorInterrupt: vi.fn().mockResolvedValue(undefined),
@@ -181,7 +181,7 @@ describe('App', () => {
       emit!({ type: 'state', sessionId: 'a', state: 'running', error: null });
     });
     await act(async () => {
-      resolveSnapshot({ states: { a: { state: 'idle', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} });
+      resolveSnapshot({ states: { a: { state: 'idle', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} });
     });
     expect(screen.getByLabelText('Session panel')).toHaveTextContent('running');
   });
@@ -382,7 +382,7 @@ describe('App collisions', () => {
       getTranscript: vi.fn().mockResolvedValue([]),
       onSessionsChanged: vi.fn(() => () => undefined),
       send: vi.fn(), interrupt: vi.fn(), decide: vi.fn(),
-      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {} }),
+      runState: vi.fn().mockResolvedValue({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} }),
       onRunnerEvent: vi.fn(() => () => undefined),
       orchestratorSend: vi.fn(), orchestratorInterrupt: vi.fn(), orchestratorHistory: vi.fn().mockResolvedValue([]),
       bulkConfirm: vi.fn(), bulkCancel: vi.fn(), watchCreate: vi.fn(), watchDelete: vi.fn(),

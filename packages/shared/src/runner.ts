@@ -1,3 +1,4 @@
+import type { QueuedMessage } from './queue';
 import type { TranscriptEntry } from './transcript';
 
 /** `sessionId` used by runner events that belong to the orchestrator itself. */
@@ -96,6 +97,7 @@ export type RunnerEvent =
   | { type: 'watch'; watch: PrWatch; gh: GhStatus }
   | { type: 'watch-removed'; watchId: string; gh: GhStatus }
   | { type: 'external'; external: ExternalSessions }
+  | { type: 'queue'; sessionId: string; queue: QueuedMessage[] }
   | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
 
 export interface RunState {
@@ -105,4 +107,6 @@ export interface RunState {
   watches: PrWatch[];
   gh: GhStatus;
   external: ExternalSessions;
+  /** Recent instructions per session, and what became of each. */
+  queue: Record<string, QueuedMessage[]>;
 }

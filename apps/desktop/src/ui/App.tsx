@@ -280,6 +280,7 @@ export function App() {
               const hit = collisionFor(sessions, selected.id, { states: run.states, external: run.external, now: Date.now() });
               if (hit) setDismissed(dismissCollision(hit.key));
             }}
+            queue={run.queue[selected.id] ?? []}
             models={models}
             onSetModel={(id) =>
               void window.relay

@@ -7,6 +7,7 @@ import type {
   ModelChoice,
   PendingApproval,
   PrWatch,
+  QueuedMessage,
   SessionState,
   SessionSummary,
   TranscriptEntry,
@@ -44,6 +45,8 @@ interface Props {
   /** Models this session can run on, with the one in use marked. */
   models: ModelChoice[];
   onSetModel: (id: string) => void;
+  /** What has been sent to this session and what became of it. */
+  queue: QueuedMessage[];
   /** Another live session working in the same place, when there is one. */
   collision: Collision | null;
   onNewWorktree: () => void;
@@ -61,6 +64,35 @@ function namesOf(others: { title: string }[]): string {
   const shown = others.slice(0, 3).map((o) => o.title);
   const rest = others.length - shown.length;
   return rest > 0 ? `${shown.join(', ')} and ${rest} more` : shown.join(', ');
+}
+
+/**
+ * What is still unanswered, and anything that was lost.
+ *
+ * Answered instructions disappear: the transcript above is where they live. One that was
+ * never answered stays, because that is the case worth seeing.
+ */
+function InstructionQueue({ queue }: { queue: QueuedMessage[] }) {
+  const pending = queue.filter((m) => m.state === 'pending');
+  const dropped = queue.filter((m) => m.state === 'dropped');
+  if (pending.length === 0 && dropped.length === 0) return null;
+  return (
+    <div className="queue">
+      {pending.length > 0 && (
+        <p className="queue__heading">
+          {pending.length} instruction{pending.length === 1 ? '' : 's'} waiting to be answered
+        </p>
+      )}
+      <ul className="queue__list">
+        {[...pending, ...dropped].map((m) => (
+          <li key={m.id} className={m.state === 'dropped' ? 'queue__item queue__item--dropped' : 'queue__item'}>
+            <span className="queue__origin">{m.origin}</span> {m.text}
+            {m.state === 'dropped' && <span className="queue__lost"> · never answered</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function SessionPanel(p: Props) {
@@ -245,6 +277,7 @@ export function SessionPanel(p: Props) {
           </div>
         </div>
       )}
+      <InstructionQueue queue={p.queue} />
       {state === 'running' && <WorkingLine />}
       {p.heldElsewhere && (
         <div className="held-elsewhere">

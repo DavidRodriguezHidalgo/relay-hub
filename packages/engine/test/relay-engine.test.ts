@@ -134,7 +134,8 @@ describe('RelayEngine', () => {
     client.assistant('a9', 'hello');
     client.result();
     await tick();
-    expect(events.map((e) => e.type)).toEqual(['entry', 'state', 'entry', 'state']); // the prompt itself, then the reply
+    // the prompt itself, then the reply; the queue is covered on its own below
+    expect(events.map((e) => e.type).filter((t) => t !== 'queue')).toEqual(['entry', 'state', 'entry', 'state']);
     expect(engine!.runState().states['s-basic']).toEqual({ state: 'idle', error: null });
   });
 
@@ -958,5 +959,21 @@ describe('RelayEngine', () => {
     await tick();
     expect(client.starts.at(-1)?.model).toBe('opus[1m]');
     await expect(engine!.setModel('nope', 'x')).rejects.toThrow('Unknown session nope');
+  });
+
+  it('reports what was sent to a session and what became of it', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const seen: RunnerEvent[] = [];
+    engine!.onEvent((e) => seen.push(e));
+
+    await engine!.send({ sessionId: 's-basic', prompt: 'do the thing', mode: 'steer', origin: 'user' });
+    await tick();
+    expect(engine!.runState().queue['s-basic']).toMatchObject([{ text: 'do the thing', origin: 'user', state: 'pending' }]);
+    expect(seen.some((e) => e.type === 'queue' && e.sessionId === 's-basic')).toBe(true);
+
+    client.result();
+    await tick();
+    expect(engine!.runState().queue['s-basic']?.[0]?.state).toBe('done');
   });
 });

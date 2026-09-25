@@ -547,6 +547,7 @@ export class RelayEngine {
       watches: this.watcher.list(),
       gh: this.watcher.ghStatus,
       external: this.external,
+      queue: Object.fromEntries([...this.runners].map(([id, r]) => [id, r.queue])),
     };
   }
 
@@ -598,6 +599,7 @@ export class RelayEngine {
       this.scheduleIdleClose(sessionId, state);
     });
     runner.on('entry', (entry) => this.publish({ type: 'entry', sessionId, entry }));
+    runner.on('queue', (queue) => this.publish({ type: 'queue', sessionId, queue }));
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));
     this.runners.set(sessionId, runner);

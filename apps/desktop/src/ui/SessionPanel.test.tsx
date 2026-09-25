@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ModelChoice } from '@relay/shared';
+import type { ModelChoice, QueuedMessage } from '@relay/shared';
 import type { Collision } from './collisions';
 import type { Invocable, LiveEntry, PendingApproval, SessionSummary, TranscriptEntry } from '@relay/shared';
 import { SessionPanel } from './SessionPanel';
@@ -23,7 +23,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], queue: [] as QueuedMessage[], onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
 };
 
 const commands = [
@@ -485,5 +485,30 @@ describe('SessionPanel collision list', () => {
     renderPanel({ collision: { kind: 'directory', cwd: '/repo', branch: null, others: many, key: 'k' }, onDismissCollision });
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(onDismissCollision).toHaveBeenCalled();
+  });
+});
+
+describe('SessionPanel instruction queue', () => {
+  const msg = (over: Partial<QueuedMessage>): QueuedMessage => ({
+    id: 'm1', text: 'do the thing', origin: 'user', at: '2026-09-25T10:00:00.000Z', state: 'pending', ...over,
+  });
+
+  it('shows what is still waiting to be answered, and who sent it', () => {
+    renderPanel({ queue: [msg({ id: 'a' }), msg({ id: 'b', text: 'and this', origin: 'orchestrator' })] });
+    expect(screen.getByText(/2 instructions waiting/)).toBeInTheDocument();
+    expect(screen.getByText(/do the thing/)).toBeInTheDocument();
+    expect(screen.getByText('orchestrator')).toBeInTheDocument();
+  });
+
+  it('keeps an instruction that was never answered on screen, marked as lost', () => {
+    renderPanel({ queue: [msg({ id: 'a', state: 'done' }), msg({ id: 'b', text: 'lost one', state: 'dropped' })] });
+    expect(screen.getByText(/never answered/)).toBeInTheDocument();
+    expect(screen.getByText(/lost one/)).toBeInTheDocument();
+  });
+
+  it('says nothing once everything has been answered', () => {
+    renderPanel({ queue: [msg({ id: 'a', state: 'done' })] });
+    expect(screen.queryByText(/waiting to be answered/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/never answered/)).not.toBeInTheDocument();
   });
 });

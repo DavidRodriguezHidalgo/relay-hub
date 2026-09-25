@@ -353,3 +353,57 @@ describe('SessionRunner', () => {
     expect(runner.state).toBe("idle");
   });
 });
+
+describe('SessionRunner instruction queue', () => {
+  it('shows an instruction as pending until the turn that answers it settles', async () => {
+    const { client, runner } = setup();
+    const queues: string[][] = [];
+    runner.on('queue', (q) => queues.push(q.map((m) => `${m.text}:${m.state}`)));
+
+    await runner.send('first', { mode: 'steer', origin: 'user' });
+    await runner.send('second', { mode: 'queue', origin: 'orchestrator' });
+    await tick();
+    expect(runner.queue.map((m) => [m.text, m.origin, m.state])).toEqual([
+      ['first', 'user', 'pending'],
+      ['second', 'orchestrator', 'pending'],
+    ]);
+
+    client.result(null, 0, [client.received[0]!.id]);
+    await tick();
+    expect(runner.queue.map((m) => [m.text, m.state])).toEqual([['first', 'done'], ['second', 'pending']]);
+
+    client.result();
+    await tick();
+    expect(runner.queue.every((m) => m.state === 'done')).toBe(true);
+    expect(queues.length).toBeGreaterThan(2);
+  });
+
+  it('marks what was never answered as dropped when the run dies', async () => {
+    const { client, runner } = setup();
+    await runner.send('will be lost', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.die(new Error('the agent went away'));
+    await tick();
+    expect(runner.queue.map((m) => [m.text, m.state])).toEqual([['will be lost', 'dropped']]);
+  });
+
+  it('marks what was never answered as dropped when the session is closed', async () => {
+    const { client, runner } = setup();
+    await runner.send('unanswered', { mode: 'steer', origin: 'user' });
+    await tick();
+    void client;
+    await runner.close();
+    expect(runner.queue.map((m) => m.state)).toEqual(['dropped']);
+  });
+
+  it('keeps the recent instructions, not every one ever sent', async () => {
+    const { client, runner } = setup();
+    for (let i = 0; i < 30; i += 1) {
+      await runner.send(`instruction ${i}`, { mode: 'steer', origin: 'user' });
+      client.result();
+      await tick();
+    }
+    expect(runner.queue).toHaveLength(20);
+    expect(runner.queue.at(-1)?.text).toBe('instruction 29');
+  });
+});

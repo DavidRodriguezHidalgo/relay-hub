@@ -1,6 +1,13 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import type { DeliveryMode, LiveEntry, MessageOrigin, PendingApproval, SessionState } from '@relay/shared';
+import type {
+  DeliveryMode,
+  LiveEntry,
+  MessageOrigin,
+  PendingApproval,
+  QueuedMessage,
+  SessionState,
+} from '@relay/shared';
 import type { ApprovalQueue } from '../approvals/approval-queue';
 import type { AgentClient, AgentInput, AgentProfile, AgentRun } from './agent-client';
 import { AsyncQueue } from './async-queue';
@@ -33,7 +40,13 @@ type RunnerEvents = {
   entry: [LiveEntry];
   'session-id': [string];
   'turn-end': [TurnEnd];
+  queue: [QueuedMessage[]];
 };
+
+/** How many instructions are kept; older ones are of no interest once answered. */
+const QUEUE_KEPT = 20;
+/** Enough of an instruction to recognise it by. */
+const QUEUE_TEXT_MAX = 200;
 
 /** Drives one session: owns the agent run, tracks its state and relays its output. */
 export class SessionRunner extends EventEmitter<RunnerEvents> {
@@ -57,6 +70,8 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   private readonly outstanding = new Set<string>();
   /** Sends in flight when the current interrupt fired; the aborted turn's result settles only these. */
   private aborting: Set<string> | null = null;
+  /** What has been sent and what became of it, newest last. */
+  private readonly sent: QueuedMessage[] = [];
   /** Who started the turn in progress: its entries carry this origin. */
   private turnOrigin: MessageOrigin | null = null;
   /** Set while fail() tears down, so cancelled approvals do not flip the state back to running. */
@@ -130,6 +145,23 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   }
 
   /** Origins of sends no turn has settled yet. */
+  /** The recent instructions and what became of each. */
+  get queue(): QueuedMessage[] {
+    return [...this.sent];
+  }
+
+  /** Marks everything still unanswered, since those instructions were lost. */
+  private dropPending(): void {
+    let changed = false;
+    for (const m of this.sent) {
+      if (m.state === 'pending') {
+        m.state = 'dropped';
+        changed = true;
+      }
+    }
+    if (changed) this.emit('queue', this.queue);
+  }
+
   get outstandingOrigins(): MessageOrigin[] {
     return [...this.outstanding].flatMap((id) => {
       const o = this.originsById.get(id);
@@ -160,6 +192,15 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
       blocks: [{ kind: 'text', text: prompt }],
       origin: opts.origin,
     });
+    this.sent.push({
+      id,
+      text: prompt.length > QUEUE_TEXT_MAX ? prompt.slice(0, QUEUE_TEXT_MAX) + '\u2026' : prompt,
+      origin: opts.origin,
+      at: new Date().toISOString(),
+      state: 'pending',
+    });
+    if (this.sent.length > QUEUE_KEPT) this.sent.splice(0, this.sent.length - QUEUE_KEPT);
+    this.emit('queue', this.queue);
     this.input!.push({ id, text: prompt, priority: opts.mode === 'queue' ? 'next' : 'now', origin: opts.origin });
     this.setState('running');
     return id;
@@ -174,6 +215,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
 
   /** Interrupts the run, ends its input and waits (bounded) for it to wind down. */
   async close(): Promise<void> {
+    this.dropPending();
     this.approvals.cancelSession(this.sessionId, 'session closed');
     this.approvals.off('pending', this.onPending);
     this.approvals.off('resolved', this.onResolved);
@@ -270,6 +312,11 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
 
   private settle(id: string): void {
     if (!this.outstanding.delete(id)) return;
+    const record = this.sent.find((m) => m.id === id);
+    if (record && record.state === 'pending') {
+      record.state = 'done';
+      this.emit('queue', this.queue);
+    }
     const origin = this.originsById.get(id);
     this.originsById.delete(id);
     if (origin && !this.settledOrigins.includes(origin)) this.settledOrigins.push(origin);
@@ -285,7 +332,10 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
   /** Drops the run so the next send starts a fresh one; pending approvals are denied first. */
   private fail(reason: string): void {
     const dropped = this.outstanding.size;
-    for (const id of [...this.outstanding]) this.settle(id);
+    const unanswered = [...this.outstanding];
+    for (const id of unanswered) this.settle(id);
+    for (const m of this.sent) if (unanswered.includes(m.id)) m.state = 'dropped';
+    if (unanswered.length > 0) this.emit('queue', this.queue);
     this.failing = true;
     this.approvals.cancelSession(this.sessionId, reason);
     this.failing = false;

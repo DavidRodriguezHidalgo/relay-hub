@@ -168,6 +168,13 @@
   .collision__what { @apply m-0 text-waiting; }
   .collision__who { @apply mt-1 mb-2 text-[12px] text-muted; }
   .collision__actions { @apply flex flex-wrap gap-1.5; }
+  .queue { @apply mb-2 rounded-lg border border-line bg-surface-2 px-3 py-2; }
+  .queue__heading { @apply m-0 mb-1 text-[12px] font-semibold text-muted; }
+  .queue__list { @apply m-0 list-none p-0; }
+  .queue__item { @apply py-0.5 text-[13px] [overflow-wrap:anywhere]; }
+  .queue__item--dropped { @apply text-danger; }
+  .queue__origin { @apply font-mono text-[11px] text-accent-fg; }
+  .queue__lost { @apply font-semibold; }
   .working { @apply px-1 pb-2; }
   .working__line { @apply m-0 text-accent-fg; }
   .working__mark { @apply inline-block animate-pulse; }
