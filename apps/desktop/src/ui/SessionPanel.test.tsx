@@ -512,3 +512,36 @@ describe('SessionPanel instruction queue', () => {
     expect(screen.queryByText(/never answered/)).not.toBeInTheDocument();
   });
 });
+
+describe('SessionPanel slash routing', () => {
+  const commands = [{ name: 'review', description: 'Review the diff', argumentHint: '[pr]' }];
+
+  it('never forwards a command nobody owns, and says why', async () => {
+    const onSend = vi.fn();
+    const onAside = vi.fn();
+    const onSetModel = vi.fn();
+    renderPanel({ commands, onSend, onAside, onSetModel });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/modle sonnet{Enter}');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onSetModel).not.toHaveBeenCalled();
+    expect(onAside).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('/modle');
+  });
+
+  it('passes a command the session owns through deliberately', async () => {
+    const onSend = vi.fn();
+    renderPanel({ commands, onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('/review 3497{Enter}');
+    expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
+  });
+
+  it('sends ordinary text that merely contains a slash', async () => {
+    const onSend = vi.fn();
+    renderPanel({ commands, onSend });
+    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.keyboard('look at src/a.ts and/or src/b.ts{Enter}');
+    expect(onSend).toHaveBeenCalledWith('look at src/a.ts and/or src/b.ts', 'steer');
+  });
+});

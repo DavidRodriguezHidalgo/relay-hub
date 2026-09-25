@@ -16,6 +16,7 @@ import type {
 import { ApprovalCard } from './ApprovalCard';
 import type { Collision } from './collisions';
 import { matchModels } from './matchModels';
+import { routeSlash } from './slashRouting';
 import { DOT_LABEL, dotState } from './sessionDot';
 import { applyCommand, commandItem, matchCommands, modelItem, SlashMenu, slashQuery, type MenuItem } from './SlashMenu';
 import { imagePathsFrom, withPaths } from './fileDrop';
@@ -178,31 +179,29 @@ export function SessionPanel(p: Props) {
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
-    const model = text.match(/^\/model(?:\s+([\s\S]*))?$/);
-    if (model) {
-      const wanted = (model[1] ?? '').trim();
-      const found = wanted ? matchModels(p.models, wanted)[0] : undefined;
-      if (!wanted) {
+    const route = routeSlash(text, p.commands);
+
+    if (route.kind === 'app' && route.name === 'model') {
+      if (!route.argument) {
         setHint('Pick a model from the list, or name one after /model.');
         return;
       }
+      const found = matchModels(p.models, route.argument)[0];
       if (!found) {
-        setHint(`There is no model matching "${wanted}".`);
+        setHint(`There is no model matching "${route.argument}".`);
         return;
       }
       p.onSetModel(found.id);
-      setHint(null);
-      setDraft('');
-      return;
-    }
-    const aside = text.match(/^\/btw(?:\s+([\s\S]*))?$/);
-    if (aside) {
-      const question = (aside[1] ?? '').trim();
-      if (!question) {
+    } else if (route.kind === 'app' && route.name === 'btw') {
+      if (!route.argument) {
         setHint('Put the side question after /btw, e.g. /btw why did you pick sqlite?');
         return;
       }
-      p.onAside(question);
+      p.onAside(route.argument);
+    } else if (route.kind === 'unknown') {
+      // never forwarded: a command nobody owns once reached a session as plain text
+      setHint('Nothing here answers /' + route.name + '. Relay handles /btw and /model; the rest are this session\u2019s own.');
+      return;
     } else {
       p.onSend(draft, mode);
     }
