@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
+import { branchWork, type BranchWork } from './git/branch-work';
 import { workState, type WorkState } from './git/work-state';
 import { SessionIndex } from './index/session-index';
 import { Orchestrator } from './orchestrator/orchestrator';
@@ -67,6 +68,8 @@ export interface RelayEngineOptions {
   createTimeoutMs?: number;
   /** Reads git facts about a directory; the real one shells out to git. */
   workState?: (cwd: string) => Promise<WorkState>;
+  /** Reads what a branch added over its base; the real one shells out to git. */
+  branchWork?: (cwd: string) => Promise<BranchWork>;
   /** Where releases are published and what version this is; without it, checks report that. */
   updates?: UpdateSource;
 }
@@ -113,6 +116,7 @@ export class RelayEngine {
   private closing = false;
   private updates: UpdateSource | null = null;
   private readState: (cwd: string) => Promise<WorkState> = workState;
+  private readBranchWork: (cwd: string) => Promise<BranchWork> = branchWork;
   private external: Record<string, 'busy' | 'idle'> = {};
   private readonly commands: CommandCatalog;
   private externalTimer: NodeJS.Timeout | null = null;
@@ -236,6 +240,7 @@ export class RelayEngine {
     engine.watcher.start();
     engine.updates = opts.updates ?? null;
     if (opts.workState) engine.readState = opts.workState;
+    if (opts.branchWork) engine.readBranchWork = opts.branchWork;
     engine.watchExternal(opts.externalPollMs ?? 3_000);
     return engine;
   }
@@ -374,6 +379,37 @@ export class RelayEngine {
     } catch (err) {
       return { ...base, note: `Could not ask GitHub: ${err instanceof Error ? err.message : String(err)}` };
     }
+  }
+
+  /**
+   * What a session produced, and what it still has open.
+   *
+   * The commits and files come from git; the open threads are what Relay itself is holding —
+   * approvals waiting on the user, instructions never answered, and a watch that could not
+   * wake its session. Test status is not repeated here: it belongs to the pull request and is
+   * shown by sessionStatus, which reads it from the forge rather than guessing.
+   */
+  async accomplished(sessionId: string): Promise<Accomplished> {
+    const session = this.listSessions().find((s) => s.id === sessionId);
+    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    const work = await this.readBranchWork(session.cwd);
+    const open: string[] = [];
+
+    const waiting = this.approvals.pending().filter((a) => a.sessionId === sessionId).length;
+    if (waiting > 0) open.push(`${waiting} approval${waiting === 1 ? '' : 's'} waiting on you`);
+
+    const unanswered = (this.runners.get(sessionId)?.queue ?? []).filter((m) => m.state === 'pending').length;
+    if (unanswered > 0) open.push(`${unanswered} instruction${unanswered === 1 ? '' : 's'} not answered yet`);
+
+    const lost = (this.runners.get(sessionId)?.queue ?? []).filter((m) => m.state === 'dropped').length;
+    if (lost > 0) open.push(`${lost} instruction${lost === 1 ? '' : 's'} never answered`);
+
+    for (const watch of this.watcher.list()) {
+      if (watch.sessionId !== sessionId) continue;
+      if (watch.wakeError) open.push(`a PR update could not reach this session: ${watch.wakeError}`);
+    }
+
+    return { ...work, open };
   }
 
   /** The models this session can run on, with the one it is on marked. */

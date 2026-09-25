@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { Accomplished as AccomplishedWork } from '@relay/shared';
 import {
   IPC,
   ORCHESTRATOR_KEY,
@@ -40,6 +41,7 @@ export function App() {
   const [commands, setCommands] = useState<Invocable[]>([]);
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [standing, setStanding] = useState<SessionStatus | null>(null);
+  const [accomplished, setAccomplished] = useState<AccomplishedWork | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -143,12 +145,19 @@ export function App() {
     setCommands([]);
     setModels([]);
     setStanding(null);
+    setAccomplished(null);
     if (!selectedId) return;
     let cancelled = false;
     // what this session can run depends on its directory, so it is asked per session
     void window.relay.listCommands(selectedId).then(
       (list) => {
         if (!cancelled) setCommands(list);
+      },
+      () => undefined,
+    );
+    void window.relay.accomplished(selectedId).then(
+      (w) => {
+        if (!cancelled) setAccomplished(w);
       },
       () => undefined,
     );
@@ -307,6 +316,7 @@ export function App() {
               if (hit) setDismissed(dismissCollision(hit.key));
             }}
             standing={standing}
+            accomplished={accomplished}
             queue={run.queue[selected.id] ?? []}
             models={models}
             onSetModel={(id) =>

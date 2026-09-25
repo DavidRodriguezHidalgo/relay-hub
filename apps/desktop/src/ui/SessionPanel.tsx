@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { Accomplished as AccomplishedWork } from '@relay/shared';
 import type {
   ApprovalDecision,
   DeliveryMode,
@@ -23,6 +24,7 @@ import { imagePathsFrom, withPaths } from './fileDrop';
 import { mergeEntries } from './mergeEntries';
 import { TranscriptView } from './TranscriptView';
 import { WorkingLine } from './WorkingLine';
+import { Accomplished } from './Accomplished';
 import { WorkStanding } from './WorkStanding';
 
 interface Props {
@@ -52,6 +54,8 @@ interface Props {
   queue: QueuedMessage[];
   /** What git and the forge say about this work; null until read. */
   standing: SessionStatus | null;
+  /** What this session produced; null until read. */
+  accomplished: AccomplishedWork | null;
   /** Another live session working in the same place, when there is one. */
   collision: Collision | null;
   onNewWorktree: () => void;
@@ -281,6 +285,7 @@ export function SessionPanel(p: Props) {
         </div>
       )}
       <WorkStanding status={p.standing} />
+      <Accomplished work={p.accomplished} />
       <InstructionQueue queue={p.queue} />
       {state === 'running' && <WorkingLine />}
       {p.heldElsewhere && (

@@ -58,6 +58,7 @@ describe('RelayEngine', () => {
       worktrees?: { repoRoot(cwd: string): Promise<string | null>; createWorktree(root: string, branch: string): Promise<string> };
       createTimeoutMs?: number;
       workState?: () => Promise<import('../src/git/work-state').WorkState>;
+      branchWork?: () => Promise<import('../src/git/branch-work').BranchWork>;
       updates?: { repo: string; currentVersion: string; fetch?: (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }> };
     } = {},
   ) {
@@ -1037,5 +1038,39 @@ describe('RelayEngine', () => {
     expect(status.checks).toBeNull();
     expect(status.note).toMatch(/not logged in/);
     await expect(engine!.sessionStatus('nope')).rejects.toThrow('Unknown session nope');
+  });
+
+  it('reports what a session produced and what it still has open', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      branchWork: async () => ({
+        commits: [{ sha: 'a'.repeat(40), subject: 'did the thing', at: '2026-09-25T09:00:00.000Z' }],
+        files: ['src/a.ts', 'src/b.ts'],
+        moreFiles: 3,
+        base: 'main',
+        note: null,
+      }),
+    });
+    await engine!.send({ sessionId: 's-basic', prompt: 'unanswered', mode: 'steer', origin: 'user' });
+    await tick();
+    const done = await engine!.accomplished('s-basic');
+    expect(done.commits.map((c) => c.subject)).toEqual(['did the thing']);
+    expect(done.files).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(done.moreFiles).toBe(3);
+    expect(done.open).toEqual(['1 instruction not answered yet']);
+    await expect(engine!.accomplished('nope')).rejects.toThrow('Unknown session nope');
+  });
+
+  it('counts an approval waiting on the user as an open thread', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, {
+      branchWork: async () => ({ commits: [], files: [], moreFiles: 0, base: 'main', note: null }),
+    });
+    await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
+    await tick();
+    void client.askTool('Bash', { command: 'git push --force' });
+    await tick();
+    const done = await engine!.accomplished('s-basic');
+    expect(done.open).toContain('1 approval waiting on you');
   });
 });

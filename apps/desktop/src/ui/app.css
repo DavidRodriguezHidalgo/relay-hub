@@ -168,6 +168,15 @@
   .collision__what { @apply m-0 text-waiting; }
   .collision__who { @apply mt-1 mb-2 text-[12px] text-muted; }
   .collision__actions { @apply flex flex-wrap gap-1.5; }
+  .done { @apply mb-2 rounded-lg border border-line bg-surface-2 px-3 py-2; }
+  .done__heading { @apply m-0 mb-1 text-[12px] font-semibold text-muted; }
+  .done__commits { @apply m-0 list-none p-0 text-[13px] [overflow-wrap:anywhere]; }
+  .done__files { @apply m-0 mt-1 text-[12px] text-muted [overflow-wrap:anywhere]; }
+  .done__names { @apply font-mono; }
+  .done__more { @apply italic; }
+  .done__open { @apply m-0 mt-1 list-disc pl-5 text-[12px] text-waiting; }
+  .done__none { @apply m-0 text-[13px] text-muted; }
+  .done__note { @apply m-0 mt-1 text-[12px] text-muted; }
   .standing { @apply mb-2 rounded-lg border border-line bg-surface-2 px-3 py-2; }
   .standing__heading { @apply m-0 mb-1 text-[12px] font-semibold text-muted; }
   .standing__commit { @apply m-0 text-[13px] [overflow-wrap:anywhere]; }

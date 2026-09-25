@@ -23,7 +23,7 @@ const approval: PendingApproval = {
 
 const base = {
   session, showSidechain: false, onToggleSidechain: vi.fn(), onDecide: vi.fn(), onSend: vi.fn(), onInterrupt: vi.fn(),
-  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], queue: [] as QueuedMessage[], standing: null, onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
+  devTools: true, watch: null, onWatch: vi.fn(), onUnwatch: vi.fn(), notice: null, commands: [] as Invocable[], heldElsewhere: null as 'busy' | 'idle' | null, onTakeOver: vi.fn(), onAside: vi.fn(), models: [] as ModelChoice[], queue: [] as QueuedMessage[], standing: null, accomplished: null, onSetModel: vi.fn(), collision: null as Collision | null, onNewWorktree: vi.fn(), onDismissCollision: vi.fn(),
 };
 
 const commands = [
