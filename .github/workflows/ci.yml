@@ -1,0 +1,67 @@
+name: CI
+
+# Every push and every pull request: the point is that a broken main is caught here
+# rather than by someone running the suite by hand.
+on:
+  push:
+  pull_request:
+
+concurrency:
+  # a new push supersedes the run still going for the same branch
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck and unit tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Engine tests
+        run: pnpm --filter @relay/engine test
+      - name: Desktop tests
+        run: pnpm --filter @relay/desktop test
+
+  e2e:
+    # Its own job so the fast signal does not wait for an app to be packaged.
+    name: End-to-end
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Cache the Electron binary
+        uses: actions/cache@v4
+        with:
+          # ~230MB that install would otherwise fetch every run
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-${{ runner.os }}-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Package the app and drive it
+        run: pnpm --filter @relay/desktop test:e2e
+      - name: Keep what a failure left behind
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: apps/desktop/test-results
+          if-no-files-found: ignore
+          retention-days: 7
