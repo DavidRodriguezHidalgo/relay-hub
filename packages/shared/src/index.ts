@@ -1,7 +1,7 @@
 export type { Invocable } from './commands';
 export type { SessionSummary } from './session';
 export type { TranscriptBlock, TranscriptEntry } from './transcript';
-export { IPC } from './ipc';
+export { IPC, MAIN_CHANNELS } from './ipc';
 export type { RelayApi } from './ipc';
 export type {
   ApprovalDecision,

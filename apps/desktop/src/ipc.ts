@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import type { RelayEngine } from '@relay/engine';
-import { IPC, type ApprovalDecision, type SendRequest, type TodoDraft, type TodoPatch } from '@relay/shared';
+import { IPC, MAIN_CHANNELS, type ApprovalDecision, type SendRequest, type TodoDraft, type TodoPatch } from '@relay/shared';
 
 /** Only our own windows' top frames may call the engine. */
 function assertTrusted(event: IpcMainInvokeEvent): void {
@@ -75,7 +75,9 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.takeOver, (sessionId: string) => engine.takeOver(sessionId));
   handle(IPC.settings, () => engine.settings());
   handle(IPC.setAllowAllActions, (on: boolean) => engine.setAllowAllActions(on));
-  handle(IPC.channels, () => channels);
+  // everything the process answers, the app's own handlers included, or the window reads a
+  // complete process as an out-of-date one
+  handle(IPC.channels, () => [...channels, ...MAIN_CHANNELS]);
   handle(IPC.aside, (sessionId: string, question: string) => engine.aside(sessionId, question));
   handle(IPC.checkForUpdate, () => engine.checkForUpdate());
   handle(IPC.listModels, (sessionId: string) => engine.listModels(sessionId));
