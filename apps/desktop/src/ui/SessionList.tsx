@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { ExternalSessions, RunState, SessionSummary } from '@relay/shared';
+import { modelLabel, type ExternalSessions, type RunState, type SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
 import { recentSessions } from './recentSessions';
 import { DOT_LABEL, dotState, isActive } from './sessionDot';
@@ -144,6 +144,18 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
                         <span className="session-row__meta">
                           {/* only what is not the resting state: an idle session says nothing here */}
                           {dot !== 'idle' && <span className="session-row__state">{DOT_LABEL[dot]}</span>}
+                          {s.model && (
+                            <span
+                              className="session-row__model"
+                              title={
+                                s.model.source === 'chosen'
+                                  ? `Set for this session: ${s.model.id}`
+                                  : `What its last request ran on: ${s.model.id}`
+                              }
+                            >
+                              {modelLabel(s.model.id)}
+                            </span>
+                          )}
                           <time dateTime={s.lastActivity}>{new Date(s.lastActivity).toLocaleDateString()}</time>
                         </span>
                       </button>

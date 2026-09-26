@@ -217,3 +217,22 @@ describe('SessionList row at a glance', () => {
     expect(screen.queryByRole('button', { name: /^stop /i })).not.toBeInTheDocument();
   });
 });
+
+describe('SessionList showing the model', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('names the model on the quiet line, not competing with the title', () => {
+    render(<SessionList sessions={[s({ id: 'a', title: 'Mileage', model: { id: 'claude-sonnet-4-5', source: 'last-run' } })]} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.getByText('Sonnet 4.5')).toBeInTheDocument();
+  });
+
+  it('says nothing about the model for a session that has never run', () => {
+    render(<SessionList sessions={[s({ id: 'a', model: null })]} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/Opus|Sonnet|Fable/)).not.toBeInTheDocument();
+  });
+
+  it('distinguishes a model chosen for the session from one merely observed', () => {
+    render(<SessionList sessions={[s({ id: 'a', model: { id: 'claude-opus-5', source: 'chosen' } })]} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.getByTitle(/Set for this session/)).toBeInTheDocument();
+  });
+});

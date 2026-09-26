@@ -34,3 +34,5 @@ export type { Todo, TodoDraft, TodoPatch } from './todo';
 export type { Screenshot } from './shots';
 export type { ContextUse } from './context';
 export { explainApiError, hasGuidance } from './api-errors';
+export { modelInEffect, modelLabel } from './model-in-effect';
+export type { ModelInEffect } from './model-in-effect';

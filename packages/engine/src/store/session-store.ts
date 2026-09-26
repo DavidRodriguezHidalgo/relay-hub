@@ -77,6 +77,15 @@ export class SessionStore {
     this.db.prepare('delete from todos where id = ?').run(id);
   }
 
+  /** Every meta value whose key starts with `prefix`, keyed by the rest of the key. */
+  metaByPrefix(prefix: string): Map<string, string> {
+    const rows = this.db.prepare('select key, value from meta where key like ?').all(`${prefix}%`) as {
+      key: string;
+      value: string;
+    }[];
+    return new Map(rows.map((r) => [r.key.slice(prefix.length), r.value]));
+  }
+
   getMeta(key: string): string | null {
     const row = this.db.prepare('select value from meta where key = ?').get(key) as { value: string } | undefined;
     return row?.value ?? null;

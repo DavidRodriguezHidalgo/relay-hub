@@ -29,6 +29,7 @@ import { SessionStore } from './store/session-store';
 import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
+import { modelInEffect } from '@relay/shared';
 
 /** At most this many images are reported for one session, newest first. */
 const SCREENSHOTS_MAX = 8;
@@ -275,7 +276,12 @@ export class RelayEngine {
 
   /** Every session except the orchestrator's own, which must never be listed or targeted. */
   listSessions(): SessionSummary[] {
-    return this.index.list().filter((s) => !this.orchestratorCwds.has(resolve(s.cwd)));
+    // a model chosen for one session lives in the store; what it last ran on came off its transcript
+    const chosen = this.store.metaByPrefix('model.');
+    return this.index
+      .list()
+      .filter((s) => !this.orchestratorCwds.has(resolve(s.cwd)))
+      .map((s) => ({ ...s, model: modelInEffect(chosen.get(s.id) ?? null, s.context?.model ?? null) }));
   }
 
   getTranscript(id: string): Promise<TranscriptEntry[]> {

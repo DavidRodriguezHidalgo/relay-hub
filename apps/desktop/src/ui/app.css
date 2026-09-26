@@ -327,3 +327,10 @@
   .todo__edit { @apply flex-1 text-[13px]; }
   .todo__move { @apply shrink-0 border-0 bg-transparent px-1 py-0 text-[11px] text-muted hover:text-fg; }
 }
+
+@layer components {
+  .session-row__model { @apply truncate text-muted; }
+  .model { @apply text-[11px] text-muted; }
+  .model--unknown { @apply italic; }
+  .model--pick { @apply border-0 bg-transparent p-0 text-[11px] text-muted hover:text-fg; }
+}

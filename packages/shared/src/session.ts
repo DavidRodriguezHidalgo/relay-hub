@@ -1,3 +1,4 @@
+import type { ModelInEffect } from './model-in-effect';
 import type { ContextUse } from './context';
 /** One Claude Code session as shown in the session list. */
 export interface SessionSummary {
@@ -19,5 +20,7 @@ export interface SessionSummary {
   continuedIn: string | null;
   /** How full this session’s context was at its last request; null if it never called the model. */
   context: ContextUse | null;
+  /** The model this session runs on, and how that is known; absent until the engine works it out. */
+  model?: ModelInEffect | null;
   isStale: boolean;
 }

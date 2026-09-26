@@ -27,6 +27,7 @@ import { WorkingLine } from './WorkingLine';
 import { Accomplished } from './Accomplished';
 import { Screenshots } from './Screenshots';
 import { ContextMeter } from './ContextMeter';
+import { ModelPicker } from './ModelPicker';
 import { WorkStanding } from './WorkStanding';
 
 interface Props {
@@ -242,7 +243,8 @@ export function SessionPanel(p: Props) {
         <h1>{p.session.title}</h1>
         <p>
           <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
-          <span className={`state state--${state}`}>{state}</span> <ContextMeter use={p.contextUse ?? null} /> <code>{p.session.cwd}</code>{' '}
+          <span className={`state state--${state}`}>{state}</span> <ContextMeter use={p.contextUse ?? null} />{' '}
+          <ModelPicker model={p.session.model ?? null} models={p.models} onSetModel={p.onSetModel} /> <code>{p.session.cwd}</code>{' '}
           {p.session.branch && <code>{p.session.branch}</code>}{' '}
           {p.session.prUrl && (
             <a href={p.session.prUrl} target="_blank" rel="noreferrer">
