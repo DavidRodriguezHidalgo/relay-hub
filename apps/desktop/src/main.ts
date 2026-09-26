@@ -107,7 +107,21 @@ async function start(): Promise<void> {
   // at the next launch rather than re-initialised into an error of its own
   ipcMain.handle(IPC.setCrashReports, (_event, on: boolean) => setReportingChoice(app.getPath('userData'), on));
   ipcMain.handle(IPC.updateMode, () => (app.isPackaged ? 'packaged' : 'checkout'));
-  ipcMain.handle(IPC.checkoutPlan, () => inspectCheckout(checkoutDir, run));
+  // the commit this process started from: a pull afterwards leaves the window showing old code,
+  // which is indistinguishable from an unmerged change unless we say which it is
+  const shaNow = async () => {
+    try {
+      return (await run('git', ['rev-parse', 'HEAD'], checkoutDir)).stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  };
+  const runningSha = await shaNow();
+  ipcMain.handle(IPC.checkoutPlan, async () => ({
+    ...(await inspectCheckout(checkoutDir, run)),
+    runningSha,
+    headSha: await shaNow(),
+  }));
   ipcMain.handle(IPC.applyCheckout, () => applyCheckout(checkoutDir, run));
   ipcMain.handle(IPC.downloadUpdate, async (_event, url: string, name: string) => {
     const path = await downloadRelease({

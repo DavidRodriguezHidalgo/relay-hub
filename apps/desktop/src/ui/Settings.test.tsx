@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { CheckoutPlan } from '@relay/shared';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Settings } from './Settings';
@@ -186,5 +187,27 @@ describe('Settings says which kind of copy this is', () => {
     render(<Settings {...base} updateMode="packaged" />);
     expect(screen.getByText('installed build')).toBeInTheDocument();
     expect(screen.queryByText(/its own message box/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Settings tells apart pulling, rebuilding and an unmerged change', () => {
+  const plan = (over: Partial<CheckoutPlan>): CheckoutPlan => ({
+    kind: 'up-to-date' as const, reason: null, branch: 'main', upstream: 'origin/main',
+    commits: [], needsInstall: false, runningSha: 'aaaaaaa', headSha: 'aaaaaaa', ...over,
+  });
+
+  it('says to pull when commits are waiting', () => {
+    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({ commits: [{ sha: 'a', subject: 'x' }] })} />);
+    expect(screen.getByText(/1 commit waiting on main/)).toBeInTheDocument();
+  });
+
+  it('says to restart when the checkout moved under the running app', () => {
+    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({ runningSha: 'old1234', headSha: 'new5678' })} />);
+    expect(screen.getByText(/restart it to run new5678/)).toBeInTheDocument();
+  });
+
+  it('says nothing is missing locally, which leaves only an unmerged change', () => {
+    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({})} />);
+    expect(screen.getByText(/has not been merged yet/)).toBeInTheDocument();
   });
 });

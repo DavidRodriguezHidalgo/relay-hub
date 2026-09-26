@@ -57,6 +57,22 @@ export const IPC = {
   moveTodo: 'relay:moveTodo',
 } as const;
 
+/**
+ * Channels the app's own process answers rather than the engine.
+ *
+ * They are registered beside the engine's, but not by it, so a window asking what is answered
+ * has to be told about them too — otherwise it counts them as missing and decides the process
+ * behind it is out of date, which it is not.
+ */
+export const MAIN_CHANNELS: readonly string[] = [
+  IPC.downloadUpdate,
+  IPC.updateMode,
+  IPC.checkoutPlan,
+  IPC.applyCheckout,
+  IPC.crashReports,
+  IPC.setCrashReports,
+];
+
 export interface SendRequest {
   sessionId: string;
   prompt: string;

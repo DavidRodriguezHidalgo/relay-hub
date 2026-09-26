@@ -26,6 +26,10 @@ export interface CheckoutPlan {
   upstream: string | null;
   commits: { sha: string; subject: string }[];
   needsInstall: boolean;
+  /** The commit this running process was started from; null when it cannot be read. */
+  runningSha?: string | null;
+  /** The commit the checkout is on now. Different from runningSha means a pull since startup. */
+  headSha?: string | null;
 }
 
 /** What pulling did. A pull that succeeded stands even if installing afterwards did not. */

@@ -1,5 +1,6 @@
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
 import type { Theme } from './theme';
+import { checkoutStanding } from './checkoutStanding';
 
 interface Props {
   theme: Theme;
@@ -123,6 +124,11 @@ export function Settings(p: Props) {
             </p>
           )}
           {p.update?.newer && p.update.notes && <pre className="settings__notes">{p.update.notes}</pre>}
+          {p.updateMode === 'checkout' && checkoutStanding(p.checkoutPlan) && (
+            <p className={`settings__standing settings__standing--${checkoutStanding(p.checkoutPlan)!.kind}`}>
+              {checkoutStanding(p.checkoutPlan)!.message}
+            </p>
+          )}
           {p.updateMode === 'checkout' && p.checkoutPlan && (
             <div className="settings__update">
               {p.checkoutPlan.kind === 'up-to-date' && (

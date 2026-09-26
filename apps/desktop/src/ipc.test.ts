@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { IPC } from '@relay/shared';
+import { IPC, MAIN_CHANNELS } from '@relay/shared';
 import type { RelayEngine } from '@relay/engine';
 
 const handled: string[] = [];
@@ -25,7 +25,7 @@ const invoked = [...preload.matchAll(/ipcRenderer\.invoke\(IPC\.(\w+)/g)].map((m
 const BROADCAST = new Set<string>([IPC.sessionsChanged, IPC.runnerEvent]);
 
 /** Handled in main.ts rather than by the engine: it needs the filesystem and Finder. */
-const IN_MAIN = new Set<string>([IPC.downloadUpdate, IPC.updateMode, IPC.checkoutPlan, IPC.applyCheckout, IPC.crashReports, IPC.setCrashReports]);
+const IN_MAIN = new Set<string>(MAIN_CHANNELS);
 
 describe('engine IPC', () => {
   const engine = { onSessionsChanged: () => () => undefined, onEvent: () => () => undefined } as unknown as RelayEngine;
@@ -48,5 +48,20 @@ describe('engine IPC', () => {
   it('removes exactly what it registered', () => {
     dispose();
     expect([...removed].sort()).toEqual([...handled].sort());
+  });
+});
+
+
+describe('what the window is told the process answers', () => {
+  it('leaves no channel unaccounted for, so a complete process is never read as out of date', () => {
+    // the window compares every channel it knows against this; anything missing reads as stale
+    const answered = new Set<string>([...handled, ...MAIN_CHANNELS]);
+    const unaccounted = Object.values(IPC).filter((c) => !BROADCAST.has(c) && !answered.has(c));
+    expect(unaccounted).toEqual([]);
+  });
+
+  it('names the app-owned channels rather than leaving them to a hand-kept list', () => {
+    expect([...MAIN_CHANNELS]).toContain(IPC.checkoutPlan);
+    expect([...MAIN_CHANNELS]).toContain(IPC.crashReports);
   });
 });

@@ -339,3 +339,11 @@
   /* which kind of copy this is, beside the version where the rest of that lives */
   .settings__build { @apply ml-2 text-[11px] text-muted; }
 }
+
+@layer components {
+  /* why what you are looking for is not on screen: pull, restart, or it is not merged */
+  .settings__standing { @apply m-0 mt-1 text-[12px] leading-snug; }
+  .settings__standing--behind { @apply text-accent-fg; }
+  .settings__standing--restart { @apply font-semibold text-danger; }
+  .settings__standing--current { @apply text-muted; }
+}
