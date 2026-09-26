@@ -96,10 +96,19 @@ export function Settings(p: Props) {
           <h3>About</h3>
           <p className="settings__row">
             Relay Hub {p.update ? p.update.current : ''}
+            <span className="settings__build">
+              {p.updateMode === 'checkout' ? 'running from a checkout' : 'installed build'}
+            </span>
             <button type="button" disabled={p.checkingUpdate} onClick={p.onCheckForUpdate}>
               {p.checkingUpdate ? 'Checking…' : 'Check for updates'}
             </button>
           </p>
+          {p.updateMode === 'checkout' && (
+            <p className="settings__note">
+              A checkout also gives each session its own message box and its “/” menu. An installed build
+              does not: sessions are driven from the Relay chat there.
+            </p>
+          )}
           {p.update && (
             <p role="status" className="settings__note">
               {updateLine(p.update)}

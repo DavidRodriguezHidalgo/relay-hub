@@ -80,7 +80,7 @@ describe('App', () => {
     render(<App />);
     await userEvent.click(await screen.findByText('Alpha'));
     expect(relay.listCommands).toHaveBeenCalledWith('a');
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/rev');
     const menu = await screen.findByRole('listbox');
     expect(menu.querySelector('.slash-menu__name')?.textContent).toBe('/review [pr]');

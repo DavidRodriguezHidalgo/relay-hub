@@ -385,7 +385,7 @@ export function SessionPanel(p: Props) {
           )}
           <textarea
             ref={boxRef}
-            placeholder="Send to this session (dev)"
+            placeholder="Send to this session"
             value={draft}
             onChange={(e) => {
               const next = e.target.value;
@@ -415,9 +415,6 @@ export function SessionPanel(p: Props) {
               <option value="interrupt">interrupt</option>
             </select>
             <button type="submit" className="btn-primary">Send</button>
-            <button type="button" onClick={p.onInterrupt}>
-              Interrupt
-            </button>
           </div>
         </form>
       )}

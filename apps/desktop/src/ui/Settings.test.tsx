@@ -174,3 +174,17 @@ describe('Settings in a git working copy', () => {
     expect(screen.getByText(/level with origin\/main/)).toBeInTheDocument();
   });
 });
+
+describe('Settings says which kind of copy this is', () => {
+  it('names a checkout, and what a checkout gives you that a build does not', () => {
+    render(<Settings {...base} updateMode="checkout" />);
+    expect(screen.getByText('running from a checkout')).toBeInTheDocument();
+    expect(screen.getByText(/its own message box/)).toBeInTheDocument();
+  });
+
+  it('names an installed build, without the checkout note', () => {
+    render(<Settings {...base} updateMode="packaged" />);
+    expect(screen.getByText('installed build')).toBeInTheDocument();
+    expect(screen.queryByText(/its own message box/)).not.toBeInTheDocument();
+  });
+});

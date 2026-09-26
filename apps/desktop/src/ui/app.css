@@ -334,3 +334,8 @@
   .model--unknown { @apply italic; }
   .model--pick { @apply border-0 bg-transparent p-0 text-[11px] text-muted hover:text-fg; }
 }
+
+@layer components {
+  /* which kind of copy this is, beside the version where the rest of that lives */
+  .settings__build { @apply ml-2 text-[11px] text-muted; }
+}
