@@ -33,3 +33,4 @@ export type { Accomplished } from './accomplished';
 export type { Todo, TodoDraft, TodoPatch } from './todo';
 export type { Screenshot } from './shots';
 export type { ContextUse } from './context';
+export { explainApiError, hasGuidance } from './api-errors';

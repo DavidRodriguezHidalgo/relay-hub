@@ -86,6 +86,13 @@ export class FakeAgentClient implements AgentClient {
     });
   }
 
+  /** Claude Code reporting that the request failed, in place of a reply. */
+  apiError(uuid: string, code: string, text: string) {
+    this.out.push({
+      type: 'assistant', uuid, timestamp: '2026-09-23T00:00:00.000Z', blocks: [{ kind: 'text', text }], sendId: null, sidechain: false, apiError: code,
+    });
+  }
+
   /** Ends the current turn; every send received so far is settled unless `queuedTurns` says otherwise. */
   result(error: string | null = null, queuedTurns = 0, settledSendIds: string[] = this.unsettled, aborted = false) {
     this.unsettled = this.unsettled.filter((id) => !settledSendIds.includes(id));

@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import type { LiveEntry, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import { explainApiError, hasGuidance } from '@relay/shared';
 import { Markdown } from './Markdown';
 
 /** A file entry, or a live one that also knows who caused it. */
@@ -60,15 +61,18 @@ const EntryRow = memo(function EntryRow({
     );
   }
   return (
-    <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}${entry.origin === 'aside' ? ' entry--aside' : ''}`}>
+    <li className={`entry entry--${entry.role}${entry.isSidechain ? ' entry--sidechain' : ''}${entry.origin === 'aside' ? ' entry--aside' : ''}${entry.apiError ? ' entry--error' : ''}`}>
       <header>
-        <span>{entry.role}</span>
+        <span>{entry.apiError ? 'request failed' : entry.role}</span>
         {entry.origin && <span className="origin">{entry.origin === 'aside' ? 'side thread' : entry.origin}</span>}
         <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
       </header>
       {entry.blocks.map((b, i) => (
         <Block key={i} block={b} sessions={sessions} onOpenSession={onOpenSession} />
       ))}
+      {entry.apiError && hasGuidance(entry.apiError) && (
+        <p className="entry__fix">{explainApiError(entry.apiError, '')}</p>
+      )}
     </li>
   );
 });

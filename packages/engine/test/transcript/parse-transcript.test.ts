@@ -73,3 +73,21 @@ describe('readTranscript', () => {
     expect(parseTranscriptLines([line]).title).toBe("Fix the layout in this screenshot");
   });
 });
+
+describe('api error records', () => {
+  it('marks a synthetic failure message with its code, so it is not read as a reply', () => {
+    const line = JSON.stringify({
+      type: 'assistant', uuid: 'e1', timestamp: '2026-09-26T14:18:34.000Z', isSidechain: false,
+      isApiErrorMessage: true, error: 'authentication_failed',
+      message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'Failed to authenticate: OAuth session expired and could not be refreshed' }] },
+    });
+    const parsed = parseTranscriptLines([line]);
+    expect(parsed.entries[0]?.apiError).toBe('authentication_failed');
+    expect(parsed.entries[0]?.blocks[0]).toMatchObject({ kind: 'text', text: expect.stringContaining('Failed to authenticate') });
+  });
+
+  it('leaves an ordinary reply unmarked', () => {
+    const line = JSON.stringify({ type: 'assistant', uuid: 'a1', timestamp: '2026-09-26T14:18:34.000Z', message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] } });
+    expect(parseTranscriptLines([line]).entries[0]?.apiError).toBeUndefined();
+  });
+});

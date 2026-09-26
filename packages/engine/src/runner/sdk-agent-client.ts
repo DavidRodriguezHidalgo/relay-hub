@@ -75,7 +75,9 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
   switch (m.type) {
     case 'system':
       return m.subtype === 'init' ? { type: 'init', sessionId: m.session_id, model: (m as { model?: string }).model } : null;
-    case 'assistant':
+    case 'assistant': {
+      // Claude Code marks a synthetic 'the request failed' frame; the record on disk carries the same fields
+      const failed = m as { isApiErrorMessage?: boolean; error?: string };
       return {
         type: 'assistant',
         uuid: m.uuid,
@@ -83,7 +85,9 @@ function mapMessage(m: SDKMessage): AgentMessage | null {
         blocks: blocksFromContent(m.message.content),
         sendId: (m as { user_message_uuid?: string }).user_message_uuid ?? null,
         sidechain: m.parent_tool_use_id !== null,
+        ...(failed.isApiErrorMessage === true ? { apiError: failed.error ?? 'api_error' } : {}),
       };
+    }
     case 'user': {
       const content = m.message.content;
       if (typeof content === 'string') return null; // our own prompt echoed back

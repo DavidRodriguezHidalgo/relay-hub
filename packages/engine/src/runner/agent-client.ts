@@ -37,6 +37,8 @@ export type AgentMessage =
       sendId: string | null;
       /** A subagent's frame, not the main thread. */
       sidechain: boolean;
+      /** Set when the frame is Claude Code reporting that the request failed, with its error code. */
+      apiError?: string;
     }
   | {
       /** One per turn, not per send: sends close together fold into one turn. */

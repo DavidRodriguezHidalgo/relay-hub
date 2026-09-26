@@ -433,3 +433,31 @@ describe('SessionRunner when a turn is stopped', () => {
     expect(client.received.at(-1)?.text).toBe('second');
   });
 });
+
+describe('SessionRunner when the request itself fails', () => {
+  it('ends the run with advice, drops the process, and the next send starts a fresh one', async () => {
+    const { client, runner, states, entries } = setup();
+    await runner.send('continua', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.apiError('e1', 'authentication_failed', 'Failed to authenticate: OAuth session expired and could not be refreshed');
+    await tick();
+    expect(runner.state).toBe('error');
+    expect(runner.error).toMatch(/\/login/);
+    expect(entries.at(-1)).toMatchObject({ uuid: 'e1', apiError: 'authentication_failed' });
+    expect(states).toEqual(['running', 'error']);
+
+    // after logging in again, the next message must not reuse the dead process
+    await runner.send('hola', { mode: 'steer', origin: 'user' });
+    await tick();
+    expect(client.starts).toHaveLength(2);
+  });
+
+  it('keeps the message for a failure it has no advice for', async () => {
+    const { client, runner } = setup();
+    await runner.send('x', { mode: 'steer', origin: 'user' });
+    await tick();
+    client.apiError('e2', 'overloaded', 'API is overloaded');
+    await tick();
+    expect(runner.error).toBe('API is overloaded');
+  });
+});

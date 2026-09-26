@@ -13,4 +13,9 @@ export interface TranscriptEntry {
   isSidechain: boolean;
   isMeta: boolean;
   blocks: TranscriptBlock[];
+  /**
+   * Set when this is not a reply but Claude Code reporting that the request itself failed, e.g.
+   * `authentication_failed`. The blocks then hold its wording; the code says what happened.
+   */
+  apiError?: string;
 }

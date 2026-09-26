@@ -8,6 +8,7 @@ import type {
   QueuedMessage,
   SessionState,
 } from '@relay/shared';
+import { explainApiError } from '@relay/shared';
 import type { ApprovalQueue } from '../approvals/approval-queue';
 import type { AgentClient, AgentInput, AgentProfile, AgentRun } from './agent-client';
 import { AsyncQueue } from './async-queue';
@@ -267,7 +268,15 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
             isMeta: false,
             blocks: m.blocks,
             origin: this.turnOrigin,
+            ...(m.apiError ? { apiError: m.apiError } : {}),
           });
+          if (m.apiError) {
+            // the request itself failed, e.g. an expired login: the process is no use now, and dropping it
+            // means the next send starts a fresh one that reads whatever credentials are there by then
+            const text = m.blocks.flatMap((b) => (b.kind === 'text' ? [b.text] : [])).join('\n');
+            this.fail(explainApiError(m.apiError, text || m.apiError));
+            return;
+          }
           break;
         case 'result':
           if (m.isError) {

@@ -55,3 +55,24 @@ describe('TranscriptView', () => {
     expect(container.querySelector("pre")!.textContent).toBe(long);
   });
 });
+
+describe('TranscriptView api errors', () => {
+  const failed: TranscriptEntry = {
+    uuid: 'e1', role: 'assistant', timestamp: '2026-09-26T14:18:34.000Z', isSidechain: false, isMeta: false,
+    apiError: 'authentication_failed',
+    blocks: [{ kind: 'text', text: 'Failed to authenticate: OAuth session expired and could not be refreshed' }],
+  };
+
+  it('draws a failed request as an error, not as a reply, and says what to do', () => {
+    const { container } = render(<TranscriptView entries={[failed]} hideSidechain />);
+    expect(container.querySelector('.entry--error')).not.toBeNull();
+    expect(screen.getByText('request failed')).toBeInTheDocument();
+    expect(screen.getByText(/\/login/)).toBeInTheDocument();
+  });
+
+  it('shows only the message when it has no advice for that failure', () => {
+    render(<TranscriptView entries={[{ ...failed, apiError: 'overloaded', blocks: [{ kind: 'text', text: 'Overloaded' }] }]} hideSidechain />);
+    expect(screen.getByText('Overloaded')).toBeInTheDocument();
+    expect(screen.queryByText(/\/login/)).not.toBeInTheDocument();
+  });
+});

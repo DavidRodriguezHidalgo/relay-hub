@@ -46,6 +46,9 @@ type RawLine = {
   sessionId?: string;
   isSidechain?: boolean;
   isMeta?: boolean;
+  /** Claude Code marks a synthetic 'the request failed' message with these. */
+  isApiErrorMessage?: boolean;
+  error?: string;
   message?: { role?: string; content?: string | RawBlock[] };
   aiTitle?: string;
   customTitle?: string;
@@ -178,6 +181,7 @@ export class TranscriptParser {
             isSidechain,
             isMeta,
             blocks: blocksFromContent(content),
+            ...(raw.isApiErrorMessage === true ? { apiError: raw.error ?? 'api_error' } : {}),
           });
         }
         if (!isSidechain) {
