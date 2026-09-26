@@ -17,6 +17,17 @@ export type SlashRoute =
 /** Commands Relay answers itself. Anything else belongs to the session, or to no one. */
 const APP_COMMANDS = ['btw', 'model'] as const;
 
+/**
+ * Whether what follows the slash could be a command name at all.
+ *
+ * A command is one word: no directory separators and no file extension. Everything else that
+ * starts with a slash is a path, and pasting one is far commoner here than mistyping a command
+ * — screenshots and files arrive that way all day. A path must reach the session as text.
+ */
+export function looksLikeCommand(name: string): boolean {
+  return name !== '' && !name.includes('/') && !name.includes('.');
+}
+
 export function routeSlash(text: string, sessionCommands: Invocable[]): SlashRoute {
   const trimmed = text.trimStart();
   if (!trimmed.startsWith('/')) return { kind: 'not-a-command' };
@@ -24,7 +35,7 @@ export function routeSlash(text: string, sessionCommands: Invocable[]): SlashRou
   const match = trimmed.match(/^\/([^\s]*)(?:\s+([\s\S]*))?$/);
   const name = match?.[1] ?? '';
   const argument = (match?.[2] ?? '').trim();
-  if (name === '') return { kind: 'not-a-command' };
+  if (!looksLikeCommand(name)) return { kind: 'not-a-command' };
 
   if ((APP_COMMANDS as readonly string[]).includes(name)) return { kind: 'app', name, argument };
   // a session's own command, by its full name or its plugin-qualified one

@@ -52,3 +52,19 @@ describe('matchCommands', () => {
     expect(matchCommands(all, 'zzz')).toEqual([]);
   });
 });
+
+describe('slashQuery and pasted paths', () => {
+  const at = (text: string) => slashQuery(text, text.length);
+
+  it('does not open the menu for a pasted path', () => {
+    expect(at('/Users/david.rodriguez/Desktop')).toBeNull();
+    expect(at('/tmp/x.json')).toBeNull();
+    expect(at('/screenshot.png')).toBeNull();
+  });
+
+  it('still opens for a command being typed', () => {
+    expect(at('/rev')).toBe('rev');
+    expect(at('/')).toBe('');
+    expect(at('/superpowers:brain')).toBe('superpowers:brain');
+  });
+});

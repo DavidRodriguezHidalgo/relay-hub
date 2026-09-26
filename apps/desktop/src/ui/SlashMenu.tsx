@@ -1,4 +1,5 @@
 import type { Invocable, ModelChoice } from '@relay/shared';
+import { looksLikeCommand } from './slashRouting';
 
 /**
  * What the user is typing as a command name, or null when they are not naming one.
@@ -11,7 +12,9 @@ export function slashQuery(value: string, caret: number): string | null {
   const trimmed = before.trimStart();
   if (!trimmed.startsWith('/')) return null;
   const name = trimmed.slice(1);
-  return /\s/.test(name) ? null : name;
+  if (/\s/.test(name)) return null;
+  // the same rule the router uses: a path must not open the command menu either
+  return name === '' || looksLikeCommand(name) ? name : null;
 }
 
 /** The last segment of a plugin-qualified name, so `brainstorming` finds `superpowers:brainstorming`. */

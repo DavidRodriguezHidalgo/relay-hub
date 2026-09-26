@@ -229,7 +229,9 @@ export function SessionPanel(p: Props) {
       p.onAside(route.argument);
     } else if (route.kind === 'unknown') {
       // never forwarded: a command nobody owns once reached a session as plain text
-      setHint('Nothing here answers /' + route.name + '. Relay handles /btw and /model; the rest are this session\u2019s own.');
+      setHint(
+        `There is no /${route.name} here. Press / to see what this session can run; Relay itself answers /btw and /model.`,
+      );
       return;
     } else {
       p.onSend(draft, mode);
