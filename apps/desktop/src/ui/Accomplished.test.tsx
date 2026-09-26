@@ -30,9 +30,10 @@ describe('Accomplished', () => {
     expect(screen.getByText('2 instructions never answered')).toBeInTheDocument();
   });
 
-  it('says plainly when nothing has been produced yet', () => {
-    render(<Accomplished work={base} />);
-    expect(screen.getByText(/nothing committed or changed/i)).toBeInTheDocument();
+  it('shows nothing at all when there is nothing to report and nothing to explain', () => {
+    // empty space beats a card whose only content is the word "nothing"
+    const { container } = render(<Accomplished work={base} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('prefers the reason when there is one', () => {

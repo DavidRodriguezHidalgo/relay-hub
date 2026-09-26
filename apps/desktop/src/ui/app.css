@@ -315,3 +315,10 @@
   .session-row__state { @apply text-accent-fg; }
   .session-row__stop { @apply absolute right-2 bottom-1 px-1.5 py-0 text-[10px]; }
 }
+
+@layer components {
+  /* Claude Code reporting that the request failed: not a reply, and it says what to do next. */
+  .entry--error { @apply border border-danger bg-surface-2; }
+  .entry--error header span:first-child { @apply font-semibold text-danger; }
+  .entry__fix { @apply mt-2 mb-0 text-[13px] leading-snug text-fg; }
+}

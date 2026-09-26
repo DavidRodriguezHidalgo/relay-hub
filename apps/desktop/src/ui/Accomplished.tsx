@@ -8,11 +8,13 @@ import type { Accomplished as Work } from '@relay/shared';
  */
 export function Accomplished({ work }: { work: Work | null }) {
   if (!work) return null;
+  // a session that has done nothing yet is better served by empty space than by a card saying so
   const nothing = work.commits.length === 0 && work.files.length === 0 && work.open.length === 0;
+  if (nothing && !work.note) return null;
   return (
     <section className="done" aria-label="What this accomplished">
       <h2 className="done__heading">What this accomplished</h2>
-      {nothing && <p className="done__none">{work.note ?? 'Nothing committed or changed yet.'}</p>}
+      {nothing && work.note && <p className="done__none">{work.note}</p>}
 
       {work.commits.length > 0 && (
         <ul className="done__commits">

@@ -1057,7 +1057,7 @@ describe('RelayEngine', () => {
     // the branch's own commits are not this session's: it wrote nothing, so it claims nothing
     expect(done.commits).toEqual([]);
     expect(done.files).toEqual([]);
-    expect(done.note).toMatch(/written by this session/);
+    expect(done.moreCommits).toBe(0);
     expect(done.open).toEqual(['1 instruction not answered yet']);
     await expect(engine!.accomplished('nope')).rejects.toThrow('Unknown session nope');
   });

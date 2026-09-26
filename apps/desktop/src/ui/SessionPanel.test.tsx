@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -596,5 +597,63 @@ describe('SessionPanel stopping a turn', () => {
     };
     render(<SessionPanel {...props} liveEntries={[stopped]} state={undefined} />);
     expect(screen.getByRole('note')).toHaveTextContent('You stopped this turn.');
+  });
+});
+
+describe('SessionPanel summary timing and placement', () => {
+  /** The shared helper forces state to undefined; these cases need to set it. */
+  const renderAt = (props: Partial<ComponentProps<typeof SessionPanel>>) =>
+    render(<SessionPanel {...base} entries={[]} liveEntries={[]} approvals={[]} state={undefined} {...props} />);
+
+  const work = {
+    commits: [{ sha: 'a11dd8b0', subject: 'feat(expenses): create mileage claims', at: '' }],
+    moreCommits: 0, files: ['mileage.ts'], moreFiles: 0, base: 'main', open: [], note: null,
+  };
+  const standing = {
+    branch: 'feat/mileage', lastCommit: null, uncommitted: 0, unpushed: 0,
+    upstream: null, pr: null, checks: null, note: null,
+  };
+
+  it('hides the summary while a turn is running', () => {
+    renderAt({ state: { state: 'running', error: null }, accomplished: work, standing });
+    expect(screen.queryByLabelText('What this accomplished')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Where this stands')).not.toBeInTheDocument();
+  });
+
+  it('hides it while a turn waits on an approval, which is still mid-turn', () => {
+    renderAt({ state: { state: 'waiting-approval', error: null }, accomplished: work, standing });
+    expect(screen.queryByLabelText('What this accomplished')).not.toBeInTheDocument();
+  });
+
+  it('shows the working line and Stop in that space instead', () => {
+    renderAt({ state: { state: 'running', error: null }, accomplished: work, standing });
+    expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
+  });
+
+  it('shows the summary once the turn has ended', () => {
+    renderAt({ state: { state: 'idle', error: null }, accomplished: work, standing });
+    expect(screen.getByLabelText('What this accomplished')).toBeInTheDocument();
+  });
+
+  it('shows it after a turn the user stopped, which has also ended', () => {
+    renderAt({ state: { state: 'idle', error: null }, stopping: false, accomplished: work, standing });
+    expect(screen.getByLabelText('What this accomplished')).toBeInTheDocument();
+  });
+
+  it('shows nothing at all for a session that has done nothing yet', () => {
+    renderAt({
+      state: { state: 'idle', error: null },
+      accomplished: { commits: [], moreCommits: 0, files: [], moreFiles: 0, base: 'main', open: [], note: null },
+    });
+    expect(screen.queryByLabelText('What this accomplished')).not.toBeInTheDocument();
+  });
+
+  it('places the summary above the conversation, so it scrolls away instead of sitting on it', () => {
+    const { container } = renderAt({ state: { state: 'idle', error: null }, accomplished: work, standing });
+    const nodes = [...container.querySelectorAll('.done, .transcript, .dev-send')];
+    const done = nodes.findIndex((n) => n.classList.contains('done'));
+    const transcript = nodes.findIndex((n) => n.classList.contains('transcript'));
+    expect(done).toBeGreaterThanOrEqual(0);
+    expect(transcript).toBeGreaterThan(done);
   });
 });

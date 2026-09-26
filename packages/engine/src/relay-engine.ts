@@ -435,7 +435,7 @@ export class RelayEngine {
 
     return {
       base: work.base,
-      note: written.length === 0 && work.note === null ? 'Nothing here was written by this session.' : work.note,
+      note: work.note,
       commits: mine.slice(0, COMMITS_SHOWN).map(({ sha, subject, at }) => ({ sha, subject, at })),
       moreCommits: Math.max(0, mine.length - COMMITS_SHOWN),
       files: filesOf(written, mine).slice(0, FILES_SHOWN),

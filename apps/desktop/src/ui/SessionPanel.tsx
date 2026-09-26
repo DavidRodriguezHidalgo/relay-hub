@@ -276,6 +276,21 @@ export function SessionPanel(p: Props) {
       {p.approvals.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />
       ))}
+      {/*
+        The summary sits above the conversation on purpose. Below it, between the last message
+        and the pinned input, it never scrolled away: following a running turn kept it parked at
+        the bottom of the view, on top of the thing being read. Here it scrolls off with the rest.
+
+        It is also only drawn once the turn has ended. Mid-turn it describes work that is still
+        changing underneath it, and the space below carries the working line and Stop instead.
+      */}
+      {!working && (
+        <>
+          <WorkStanding status={p.standing} />
+          <Accomplished work={p.accomplished} />
+          <Screenshots shots={p.screenshots ?? []} />
+        </>
+      )}
       <TranscriptView entries={merged} hideSidechain={!p.showSidechain} />
       {!p.devTools && p.notice && (
         <p role="alert" className="error">
@@ -308,9 +323,6 @@ export function SessionPanel(p: Props) {
           </div>
         </div>
       )}
-      <WorkStanding status={p.standing} />
-      <Accomplished work={p.accomplished} />
-      <Screenshots shots={p.screenshots ?? []} />
       <InstructionQueue queue={p.queue} />
       {working && (
         <div className="stop">
