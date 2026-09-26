@@ -38,7 +38,7 @@ function renderPanel(props: Partial<typeof base> = {}) {
     <SessionPanel {...base} {...props} entries={[]} liveEntries={[]} state={undefined} approvals={[]} />,
   );
 }
-const box = () => screen.getByPlaceholderText('Send to this session (dev)');
+const box = () => screen.getByPlaceholderText('Send to this session');
 /** Only the menu's own options: the delivery-mode select has options too. */
 const options = () => within(screen.getByRole('listbox')).getAllByRole('option');
 
@@ -167,7 +167,7 @@ describe('SessionPanel', () => {
     );
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Session a is open in another Claude process (pid 4034)');
-    expect(alert.closest('form')).toBe(screen.getByPlaceholderText('Send to this session (dev)').closest('form'));
+    expect(alert.closest('form')).toBe(screen.getByPlaceholderText('Send to this session').closest('form'));
   });
 
   it('shows state, merges live entries by uuid and tags their origin', () => {
@@ -222,12 +222,10 @@ describe('SessionPanel', () => {
         approvals={[]}
       />,
     );
-    await userEvent.type(screen.getByPlaceholderText('Send to this session (dev)'), 'add tests');
+    await userEvent.type(screen.getByPlaceholderText('Send to this session'), 'add tests');
     await userEvent.selectOptions(screen.getByLabelText('Delivery'), 'queue');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(onSend).toHaveBeenCalledWith('add tests', 'queue');
-    await userEvent.click(screen.getByRole('button', { name: 'Interrupt' }));
-    expect(onInterrupt).toHaveBeenCalledTimes(1);
   });
 
   it('shows the error reason and hides the dev box when devTools is off', () => {
@@ -242,7 +240,7 @@ describe('SessionPanel', () => {
       />,
     );
     expect(screen.getByText('session not found')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Send to this session (dev)')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Send to this session')).not.toBeInTheDocument();
   });
 
   it('offers Watch PR, and shows the watch with its last check and error once active', async () => {
@@ -286,7 +284,7 @@ describe('SessionPanel', () => {
   it('sends on Enter and starts a new line on Shift+Enter', async () => {
     const onSend = vi.fn();
     renderPanel({ onSend });
-    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    const box = screen.getByPlaceholderText('Send to this session');
     await userEvent.click(box);
     await userEvent.keyboard('first{Shift>}{Enter}{/Shift}second');
     expect(onSend).not.toHaveBeenCalled();
@@ -299,7 +297,7 @@ describe('SessionPanel', () => {
   it('will not send an empty box on Enter', async () => {
     const onSend = vi.fn();
     renderPanel({ onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('   {Enter}');
     expect(onSend).not.toHaveBeenCalled();
   });
@@ -307,7 +305,7 @@ describe('SessionPanel', () => {
   it('Enter takes the highlighted command while the menu is open, rather than sending', async () => {
     const onSend = vi.fn();
     renderPanel({ onSend, commands });
-    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    const box = screen.getByPlaceholderText('Send to this session');
     await userEvent.click(box);
     await userEvent.keyboard('/rev{Enter}');
     expect(onSend).not.toHaveBeenCalled();
@@ -342,7 +340,7 @@ describe('SessionPanel', () => {
     Object.assign(window, { relay: { pathForFile: (f: File) => `/shots/${f.name}` } });
     try {
       renderPanel();
-      const box = screen.getByPlaceholderText('Send to this session (dev)');
+      const box = screen.getByPlaceholderText('Send to this session');
       fireEvent.drop(box, { dataTransfer: { files: [new File(['x'], 'shot.png', { type: 'image/png' })], types: ['Files'] } });
       expect(box).toHaveValue('/shots/shot.png\n');
     } finally {
@@ -356,7 +354,7 @@ describe('SessionPanel side questions', () => {
     const onSend = vi.fn();
     const onAside = vi.fn();
     renderPanel({ onSend, onAside });
-    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    const box = screen.getByPlaceholderText('Send to this session');
     await userEvent.click(box);
     await userEvent.keyboard('/btw why sqlite?{Enter}');
     expect(onAside).toHaveBeenCalledWith('why sqlite?');
@@ -367,7 +365,7 @@ describe('SessionPanel side questions', () => {
   it('asks for the question when /btw is sent on its own', async () => {
     const onAside = vi.fn();
     renderPanel({ onAside });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/btw{Enter}');
     expect(onAside).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(/question/i);
@@ -391,7 +389,7 @@ describe('SessionPanel model picker', () => {
 
   it('offers the models when /model is typed, marking the one in use', async () => {
     renderPanel({ models });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/model ');
     const menu = await screen.findByRole('listbox');
     expect(menu).toHaveTextContent('Opus');
@@ -403,7 +401,7 @@ describe('SessionPanel model picker', () => {
     const onSetModel = vi.fn();
     const onSend = vi.fn();
     renderPanel({ models, onSetModel, onSend });
-    const box = screen.getByPlaceholderText('Send to this session (dev)');
+    const box = screen.getByPlaceholderText('Send to this session');
     await userEvent.click(box);
     await userEvent.keyboard('/model son');
     await userEvent.keyboard('{Enter}');
@@ -416,7 +414,7 @@ describe('SessionPanel model picker', () => {
     const onSetModel = vi.fn();
     const onSend = vi.fn();
     renderPanel({ models, onSetModel, onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/model sonnet{Enter}');
     expect(onSetModel).toHaveBeenCalledWith('sonnet');
     expect(onSend).not.toHaveBeenCalled();
@@ -426,7 +424,7 @@ describe('SessionPanel model picker', () => {
     const onSetModel = vi.fn();
     const onSend = vi.fn();
     renderPanel({ models, onSetModel, onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/model gpt{Enter}');
     expect(onSetModel).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
@@ -436,7 +434,7 @@ describe('SessionPanel model picker', () => {
   it('still passes a command the session owns straight through', async () => {
     const onSend = vi.fn();
     renderPanel({ models, onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/review 3497{Enter}');
     expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
   });
@@ -522,7 +520,7 @@ describe('SessionPanel slash routing', () => {
     const onAside = vi.fn();
     const onSetModel = vi.fn();
     renderPanel({ commands, onSend, onAside, onSetModel });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/modle sonnet{Enter}');
     expect(onSend).not.toHaveBeenCalled();
     expect(onSetModel).not.toHaveBeenCalled();
@@ -533,7 +531,7 @@ describe('SessionPanel slash routing', () => {
   it('passes a command the session owns through deliberately', async () => {
     const onSend = vi.fn();
     renderPanel({ commands, onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('/review 3497{Enter}');
     expect(onSend).toHaveBeenCalledWith('/review 3497', 'steer');
   });
@@ -541,7 +539,7 @@ describe('SessionPanel slash routing', () => {
   it('sends ordinary text that merely contains a slash', async () => {
     const onSend = vi.fn();
     renderPanel({ commands, onSend });
-    await userEvent.click(screen.getByPlaceholderText('Send to this session (dev)'));
+    await userEvent.click(screen.getByPlaceholderText('Send to this session'));
     await userEvent.keyboard('look at src/a.ts and/or src/b.ts{Enter}');
     expect(onSend).toHaveBeenCalledWith('look at src/a.ts and/or src/b.ts', 'steer');
   });
@@ -655,5 +653,32 @@ describe('SessionPanel summary timing and placement', () => {
     const transcript = nodes.findIndex((n) => n.classList.contains('transcript'));
     expect(done).toBeGreaterThanOrEqual(0);
     expect(transcript).toBeGreaterThan(done);
+  });
+});
+
+describe('SessionPanel message box, without the noise', () => {
+  const renderAt = (props: Partial<ComponentProps<typeof SessionPanel>>) =>
+    render(<SessionPanel {...base} entries={[]} liveEntries={[]} approvals={[]} state={undefined} {...props} />);
+
+  it('says what the box is for, without marking the build in it', () => {
+    renderAt({});
+    expect(screen.getByPlaceholderText('Send to this session')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/\(dev\)/)).not.toBeInTheDocument();
+  });
+
+  it('offers one way to stop a turn, not a button that does nothing while idle', () => {
+    renderAt({ state: { state: 'idle', error: null } });
+    expect(screen.queryByRole('button', { name: 'Interrupt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^stop$/i })).not.toBeInTheDocument();
+  });
+
+  it('offers Stop while a turn is running', () => {
+    renderAt({ state: { state: 'running', error: null } });
+    expect(screen.getByRole('button', { name: /^stop$/i })).toBeInTheDocument();
+  });
+
+  it('keeps the delivery choice, which decides how the message reaches a busy session', () => {
+    renderAt({});
+    expect(screen.getByLabelText('Delivery')).toBeInTheDocument();
   });
 });
