@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
 import { registerEngineIpc } from './ipc';
+import { loadWhenServing } from './dev-server-load';
 
 // MAIN_WINDOW_VITE_DEV_SERVER_URL and MAIN_WINDOW_VITE_NAME are declared by forge.env.d.ts.
 
@@ -60,7 +61,10 @@ function createWindow(): void {
   });
   keepNavigationInside(win);
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void win.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    // Forge starts Electron before Vite is listening; a load that fails once must not stay blank
+    void loadWhenServing(win, MAIN_WINDOW_VITE_DEV_SERVER_URL).catch((err: unknown) =>
+      dialog.showErrorBox('Relay Hub could not reach its development server', err instanceof Error ? err.message : String(err)),
+    );
   } else {
     void win.loadFile(join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
