@@ -123,6 +123,16 @@ agent had begun writing stays as it was written, a shell command already started
 to its end, and a commit already made stays made. Stopping ends the turn, not the work the turn
 had already set in motion — so check `git status` after stopping something that was editing.
 
+## Working on Relay
+
+Changes reach `main` through a pull request, never a direct push. Branch for what you are
+doing, keep the change to one coherent thing, and let CI finish before merging — a red run gets
+fixed, not merged and tidied afterwards.
+
+CI runs on every push and pull request: typecheck and the unit tests in one job, the end-to-end
+tests that package the app and drive a real Electron in another. Both must pass before `main`
+will take the change.
+
 ## Licence
 
 [MIT](LICENSE). Use it, change it, ship it; keep the copyright notice.
