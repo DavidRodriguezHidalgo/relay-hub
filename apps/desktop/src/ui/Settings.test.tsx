@@ -6,7 +6,7 @@ import { Settings } from './Settings';
 const base = {
   theme: 'dark' as const,
   onTheme: vi.fn(),
-  allowAllActions: false,
+  allowAllActions: false, crashReports: false, onCrashReports: vi.fn(),
   onAllowAllActions: vi.fn(),
   onClose: vi.fn(),
   error: null,

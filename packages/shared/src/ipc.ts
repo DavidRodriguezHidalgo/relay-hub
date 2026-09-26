@@ -40,6 +40,8 @@ export const IPC = {
   sessionStatus: 'relay:sessionStatus',
   accomplished: 'relay:accomplished',
   downloadUpdate: 'relay:downloadUpdate',
+  crashReports: 'relay:crashReports',
+  setCrashReports: 'relay:setCrashReports',
   updateMode: 'relay:updateMode',
   checkoutPlan: 'relay:checkoutPlan',
   applyCheckout: 'relay:applyCheckout',
@@ -96,6 +98,9 @@ export interface RelayApi {
   accomplished(sessionId: string): Promise<Accomplished>;
   /** Fetches the published build and reveals it; resolves with where it landed. */
   downloadUpdate(url: string, name: string): Promise<string>;
+  /** Whether crash reports may be sent; false until the question has been answered with a yes. */
+  crashReports(): Promise<boolean>;
+  setCrashReports(on: boolean): Promise<void>;
   /** Whether this copy updates by replacing a build or by pulling a working copy. */
   updateMode(): Promise<UpdateMode>;
   checkoutPlan(): Promise<CheckoutPlan>;

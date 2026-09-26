@@ -6,6 +6,8 @@ interface Props {
   onTheme: (theme: Theme) => void;
   allowAllActions: boolean;
   onAllowAllActions: (on: boolean) => void;
+  crashReports: boolean;
+  onCrashReports: (on: boolean) => void;
   /** Why the last change did not take, when it did not. */
   error: string | null;
   onClose: () => void;
@@ -76,6 +78,18 @@ export function Settings(p: Props) {
             folder, without stopping for you. It does not change a session you run yourself in a terminal, does not
             override a session’s own settings, and take-over and bulk runs are still confirmed. It applies to every
             session Relay drives.
+          </p>
+        </section>
+        <section className="settings__section">
+          <h3>Crash reports</h3>
+          <label className="settings__row">
+            <input type="checkbox" checked={p.crashReports} onChange={(e) => p.onCrashReports(e.target.checked)} />
+            Send crash reports
+          </label>
+          <p className="settings__note">
+            A report says what failed and where in Relay it happened. File paths, branch names and session titles are
+            removed first, and nothing from your conversations is included. This takes effect the next time Relay
+            starts, and a copy run from a checkout never reports at all.
           </p>
         </section>
         <section className="settings__section">

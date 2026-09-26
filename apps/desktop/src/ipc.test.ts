@@ -25,7 +25,7 @@ const invoked = [...preload.matchAll(/ipcRenderer\.invoke\(IPC\.(\w+)/g)].map((m
 const BROADCAST = new Set<string>([IPC.sessionsChanged, IPC.runnerEvent]);
 
 /** Handled in main.ts rather than by the engine: it needs the filesystem and Finder. */
-const IN_MAIN = new Set<string>([IPC.downloadUpdate, IPC.updateMode, IPC.checkoutPlan, IPC.applyCheckout]);
+const IN_MAIN = new Set<string>([IPC.downloadUpdate, IPC.updateMode, IPC.checkoutPlan, IPC.applyCheckout, IPC.crashReports, IPC.setCrashReports]);
 
 describe('engine IPC', () => {
   const engine = { onSessionsChanged: () => () => undefined, onEvent: () => () => undefined } as unknown as RelayEngine;

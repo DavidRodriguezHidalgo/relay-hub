@@ -125,6 +125,7 @@ export function App() {
   /** Null until the user picks one, so the app keeps following the system before then. */
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
+  const [crashReports, setCrashReports] = useState(false);
 
   useEffect(() => {
     applyTheme(theme);
@@ -133,7 +134,19 @@ export function App() {
 
   useEffect(() => {
     void window.relay.settings().then((s) => setAllowAllActions(s.allowAllActions));
+    void window.relay.crashReports().then(setCrashReports, () => undefined);
   }, []);
+
+  /** The main process owns the choice, so it is set there first and only then shown as on. */
+  const changeCrashReports = async (on: boolean) => {
+    try {
+      await window.relay.setCrashReports(on);
+      setCrashReports(on);
+      setSettingsError(null);
+    } catch (e: unknown) {
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    }
+  };
   const resize = (side: keyof ColumnWidths, px: number) =>
     setWidths((w) => {
       const next = { ...w, [side]: clampWidth(side, px) };
@@ -282,6 +295,8 @@ export function App() {
           onTheme={setTheme}
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
+          crashReports={crashReports}
+          onCrashReports={(on) => void changeCrashReports(on)}
           error={settingsError}
           update={update}
           checkingUpdate={checkingUpdate}

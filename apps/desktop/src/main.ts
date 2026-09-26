@@ -11,10 +11,25 @@ import { join } from 'node:path';
 import { RelayEngine } from '@relay/engine';
 import { registerEngineIpc } from './ipc';
 import { loadWhenServing } from './dev-server-load';
+import { startCrashReporting, reportingChoice, setReportingChoice } from './telemetry';
 
 // MAIN_WINDOW_VITE_DEV_SERVER_URL and MAIN_WINDOW_VITE_NAME are declared by forge.env.d.ts.
 
 let engine: RelayEngine | null = null;
+
+/**
+ * Crash reporting starts before anything else, because a failure during startup is exactly the
+ * one nobody can report by hand — the window never appears to report it from.
+ */
+function beginReporting(): void {
+  startCrashReporting({
+    userDataDir: app.getPath('userData'),
+    home: homedir(),
+    release: `relay-hub@${app.getVersion()}`,
+    packaged: app.isPackaged,
+  });
+}
+beginReporting();
 
 /** Links leave the app through the system browser; the renderer never navigates away. */
 function keepNavigationInside(win: BrowserWindow): void {
@@ -87,6 +102,10 @@ async function start(): Promise<void> {
     const { stdout } = await runCommand(cmd, args, { cwd, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
     return { stdout };
   };
+  ipcMain.handle(IPC.crashReports, () => reportingChoice(app.getPath('userData')) === 'yes');
+  // only the choice is written: the SDK cannot be started once the app is ready, so it is read
+  // at the next launch rather than re-initialised into an error of its own
+  ipcMain.handle(IPC.setCrashReports, (_event, on: boolean) => setReportingChoice(app.getPath('userData'), on));
   ipcMain.handle(IPC.updateMode, () => (app.isPackaged ? 'packaged' : 'checkout'));
   ipcMain.handle(IPC.checkoutPlan, () => inspectCheckout(checkoutDir, run));
   ipcMain.handle(IPC.applyCheckout, () => applyCheckout(checkoutDir, run));

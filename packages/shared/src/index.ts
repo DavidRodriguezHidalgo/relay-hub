@@ -36,3 +36,5 @@ export type { ContextUse } from './context';
 export { explainApiError, hasGuidance } from './api-errors';
 export { modelInEffect, modelLabel } from './model-in-effect';
 export type { ModelInEffect } from './model-in-effect';
+export { scrubText, scrubEvent } from './scrub';
+export type { ScrubbableEvent } from './scrub';
