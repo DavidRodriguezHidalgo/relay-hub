@@ -108,3 +108,62 @@ describe('TodoList', () => {
     expect(todos.get('missing')).toBeNull();
   });
 });
+
+describe('TodoList ordering', () => {
+  const titles = (t: TodoList) => t.list().map((x) => x.title);
+
+  it('moves an item up, and the change sticks', () => {
+    const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
+    todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    todos.create({ title: 'c' });
+    todos.move(b.id, 'up');
+    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('moves an item down', () => {
+    const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
+    const a = todos.create({ title: 'a' });
+    todos.create({ title: 'b' });
+    todos.create({ title: 'c' });
+    todos.move(a.id, 'down');
+    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('leaves the ends alone rather than wrapping around', () => {
+    const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z']);
+    const a = todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    todos.move(a.id, 'up');
+    expect(titles(todos)).toEqual(['a', 'b']);
+    todos.move(b.id, 'down');
+    expect(titles(todos)).toEqual(['a', 'b']);
+  });
+
+  it('orders within what is still open, leaving what is done below it', () => {
+    const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
+    const a = todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    const c = todos.create({ title: 'c' });
+    todos.update(c.id, { done: true });
+    todos.move(b.id, 'up');
+    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+    expect(todos.list().at(-1)).toMatchObject({ id: c.id, done: true });
+    void a;
+  });
+
+  it('keeps a new item at the end of the ones already ordered', () => {
+    const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
+    todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    todos.move(b.id, 'up');
+    todos.create({ title: 'c' });
+    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('refuses to move a todo that is not there', () => {
+    const { todos } = listAt();
+    expect(() => todos.move('nope', 'up')).toThrow(/nope/);
+  });
+});

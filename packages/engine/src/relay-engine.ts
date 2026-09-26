@@ -14,6 +14,7 @@ import { createWorktree, repoRoot } from './git/worktrees';
 import { ExecGhClient, repoFromPrUrl, type GhClient, type PrRef } from './pr/gh-client';
 import { PrWatcher } from './pr/pr-watcher';
 import { createRelayTools, type PrListing } from './orchestrator/relay-tools';
+import { createTodoTools } from './orchestrator/todo-tools';
 import type { AgentClient } from './runner/agent-client';
 import { SdkAgentClient } from './runner/sdk-agent-client';
 import { SessionBusyError } from './runner/session-busy-error';
@@ -182,7 +183,17 @@ export class RelayEngine {
       client: agent,
       approvals,
       store,
-      tools: createRelayTools({
+      tools: [
+        ...createTodoTools({
+          listTodos: () => this.listTodos(),
+          createTodo: (draft) => this.createTodo(draft),
+          updateTodo: (id, patch) => this.updateTodo(id, patch),
+          deleteTodo: (id) => this.deleteTodo(id),
+          launchTodo: (id) => this.launchTodo(id),
+          attachTodo: (id, sessionId) => this.attachTodo(id, sessionId),
+          sessionTitle: (id) => this.listSessions().find((s) => s.id === id)?.title ?? null,
+        }),
+      ...createRelayTools({
         listSessions: () => this.listSessions(),
         runState: () => this.runState(),
         getTranscript: (id) => this.getTranscript(id),
@@ -210,7 +221,8 @@ export class RelayEngine {
           this.watchDelete(w.id);
         },
         interrupt: (id) => this.interrupt(id),
-      }),
+        }),
+      ],
     });
     this.orchestrator.on('state', (state, error) =>
       this.publish({ type: 'state', sessionId: ORCHESTRATOR_KEY, state, error }),
@@ -624,19 +636,32 @@ export class RelayEngine {
     return this.todos.list();
   }
 
+  /** One list, one event: whoever changed it, every window and the chat see the same thing. */
+  private publishTodos(): Todo[] {
+    const todos = this.todos.list();
+    this.publish({ type: 'todos', todos });
+    return todos;
+  }
+
   createTodo(draft: TodoDraft): Todo[] {
     this.todos.create(draft);
-    return this.todos.list();
+    return this.publishTodos();
   }
 
   updateTodo(id: string, patch: TodoPatch): Todo[] {
     this.todos.update(id, patch);
-    return this.todos.list();
+    return this.publishTodos();
+  }
+
+  /** Moves a todo a place up or down among the others in its half of the list. */
+  moveTodo(id: string, direction: 'up' | 'down'): Todo[] {
+    this.todos.move(id, direction);
+    return this.publishTodos();
   }
 
   deleteTodo(id: string): Todo[] {
     this.todos.remove(id);
-    return this.todos.list();
+    return this.publishTodos();
   }
 
   /**
@@ -658,7 +683,7 @@ export class RelayEngine {
       origin: 'user',
     });
     this.todos.link(id, created.sessionId);
-    return { sessionId: created.sessionId, todos: this.todos.list() };
+    return { sessionId: created.sessionId, todos: this.publishTodos() };
   }
 
   /**
@@ -675,7 +700,7 @@ export class RelayEngine {
     const mode: DeliveryMode = this.runners.get(sessionId)?.state === 'running' ? 'queue' : 'steer';
     await this.send({ sessionId, prompt: instructionFor(todo), mode, origin: 'user' });
     this.todos.link(id, sessionId);
-    return { mode, todos: this.todos.list() };
+    return { mode, todos: this.publishTodos() };
   }
 
   /**
@@ -705,7 +730,7 @@ export class RelayEngine {
   /** Lets a todo go of its session so it can be handed elsewhere; the session is left alone. */
   detachTodo(id: string): Todo[] {
     this.todos.unlink(id);
-    return this.todos.list();
+    return this.publishTodos();
   }
 
   /**

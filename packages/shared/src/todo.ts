@@ -17,6 +17,11 @@ export interface Todo {
   /** The session this became, once launched; null while it is still only an intention. */
   sessionId: string | null;
   done: boolean;
+  /**
+   * Where it sits in the list once it has been moved. Absent until then, and an absent one
+   * falls back to when it was added, so a list nobody has reordered reads as it always did.
+   */
+  position?: number;
   createdAt: string;
   launchedAt: string | null;
 }

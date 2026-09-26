@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BulkRun, ExternalSessions, GhStatus, LiveEntry, PendingApproval, PrWatch, QueuedMessage, RunState, RunnerEvent } from '@relay/shared';
+import type { BulkRun, ExternalSessions, GhStatus, LiveEntry, PendingApproval, PrWatch, QueuedMessage, RunState, RunnerEvent, Todo } from '@relay/shared';
 
 export interface RunView {
   states: RunState['states'];
@@ -10,14 +10,17 @@ export interface RunView {
   gh: GhStatus;
   external: ExternalSessions;
   queue: Record<string, QueuedMessage[]>;
+  /** The todo list, kept here so the panel and the chat can never disagree about it. */
+  todos: Todo[];
 }
 
 /** Mirrors the engine's run state in the renderer: initial snapshot, then events. */
 export function useRunState(): RunView {
-  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} });
+  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {}, todos: [] });
   useEffect(() => {
     // events that arrive before the snapshot are replayed on top of it, so the snapshot never undoes them
     let early: RunnerEvent[] | null = [];
+    void window.relay.listTodos().then((todos) => setView((v) => (v.todos.length === 0 ? { ...v, todos } : v)), () => undefined);
     void window.relay.runState().then((s) => {
       const replay = early ?? [];
       early = null;
@@ -49,6 +52,8 @@ function apply(v: RunView, event: RunnerEvent): RunView {
                 [event.sessionId]: [...(v.liveEntries[event.sessionId] ?? []), event.entry].slice(-LIVE_MAX),
               },
             };
+          case 'todos':
+            return { ...v, todos: event.todos };
           case 'approval':
             return { ...v, approvals: [...v.approvals, event.approval] };
           case 'approval-resolved':

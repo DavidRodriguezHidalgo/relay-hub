@@ -12,7 +12,6 @@ import {
   type CheckoutPlan,
   type CheckoutResult,
   type UpdateMode,
-  type Todo,
   type Screenshot,
 } from '@relay/shared';
 import { ApprovalsDrawer } from './ApprovalsDrawer';
@@ -60,7 +59,6 @@ export function App() {
   /** The session as this window drew it, to compare with what the index says now. */
   const [shownSession, setShownSession] = useState<SessionSummary | null>(null);
   const [dismissed, setDismissed] = useState<string[]>(dismissedCollisions);
-  const [todos, setTodos] = useState<Todo[]>([]);
   const [projects, setProjects] = useState<{ name: string; root: string; sessions: number }[]>([]);
   const [shots, setShots] = useState<Screenshot[]>([]);
   const [update, setUpdate] = useState<UpdateCheck | null>(null);
@@ -173,7 +171,6 @@ export function App() {
   useEffect(() => {
     void window.relay.listSessions().then(setSessions);
     void window.relay.orchestratorHistory().then(setOrchHistory);
-    void window.relay.listTodos().then(setTodos, () => undefined);
     void window.relay.listProjects().then(setProjects, () => undefined);
     return window.relay.onSessionsChanged(setSessions);
   }, []);
@@ -318,22 +315,18 @@ export function App() {
         }}
         header={
           <TodoList
-            todos={todos}
+            todos={run.todos}
             sessions={sessions}
             projects={projects}
             states={run.states}
             external={run.external}
-            onCreate={(draft) => window.relay.createTodo(draft).then(setTodos)}
-            onUpdate={(id, patch) => window.relay.updateTodo(id, patch).then(setTodos)}
-            onDelete={(id) => window.relay.deleteTodo(id).then(setTodos)}
-            onLaunch={(id) =>
-              window.relay.launchTodo(id).then((r) => {
-                setTodos(r.todos);
-                setSelectedId(r.sessionId);
-              })
-            }
-            onAttach={(id, sessionId) => window.relay.attachTodo(id, sessionId).then((r) => setTodos(r.todos))}
-            onDetach={(id) => window.relay.detachTodo(id).then(setTodos)}
+            onCreate={(draft) => window.relay.createTodo(draft)}
+            onUpdate={(id, patch) => window.relay.updateTodo(id, patch)}
+            onDelete={(id) => window.relay.deleteTodo(id)}
+            onLaunch={(id) => window.relay.launchTodo(id).then((r) => setSelectedId(r.sessionId))}
+            onAttach={(id, sessionId) => window.relay.attachTodo(id, sessionId)}
+            onDetach={(id) => window.relay.detachTodo(id)}
+            onMove={(id, direction) => window.relay.moveTodo(id, direction)}
             onOpenSession={setSelectedId}
           />
         }

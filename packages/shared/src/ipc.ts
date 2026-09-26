@@ -52,6 +52,7 @@ export const IPC = {
   attachTodo: 'relay:attachTodo',
   detachTodo: 'relay:detachTodo',
   contextUse: 'relay:contextUse',
+  moveTodo: 'relay:moveTodo',
 } as const;
 
 export interface SendRequest {
@@ -104,6 +105,8 @@ export interface RelayApi {
   createTodo(draft: TodoDraft): Promise<Todo[]>;
   updateTodo(id: string, patch: TodoPatch): Promise<Todo[]>;
   deleteTodo(id: string): Promise<Todo[]>;
+  /** Moves a todo a place up or down among the others in its half of the list. */
+  moveTodo(id: string, direction: 'up' | 'down'): Promise<Todo[]>;
   /** Starts a session for this todo and joins the two. */
   launchTodo(id: string): Promise<{ sessionId: string; todos: Todo[] }>;
   /** Hands a todo to a session already open; says whether it was sent or queued. */

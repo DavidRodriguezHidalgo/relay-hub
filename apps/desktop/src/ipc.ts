@@ -49,6 +49,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.attachTodo,
     IPC.detachTodo,
     IPC.contextUse,
+    IPC.moveTodo,
   ];
   const handle = (channel: string, fn: (...args: never[]) => unknown) => {
     ipcMain.handle(channel, (event, ...args) => {
@@ -85,6 +86,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.createTodo, (draft: TodoDraft) => engine.createTodo(draft));
   handle(IPC.updateTodo, (id: string, patch: TodoPatch) => engine.updateTodo(id, patch));
   handle(IPC.deleteTodo, (id: string) => engine.deleteTodo(id));
+  handle(IPC.moveTodo, (id: string, direction: 'up' | 'down') => engine.moveTodo(id, direction));
   handle(IPC.launchTodo, (id: string) => engine.launchTodo(id));
   handle(IPC.screenshots, (sessionId: string) => engine.screenshots(sessionId));
   handle(IPC.attachTodo, (id: string, sessionId: string) => engine.attachTodo(id, sessionId));

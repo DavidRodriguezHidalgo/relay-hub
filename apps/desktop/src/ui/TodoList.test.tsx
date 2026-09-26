@@ -28,6 +28,7 @@ function setup(over: Partial<Parameters<typeof TodoList>[0]> = {}) {
     onLaunch: vi.fn().mockResolvedValue(undefined),
     onAttach: vi.fn().mockResolvedValue({ mode: 'steer' }),
     onDetach: vi.fn().mockResolvedValue(undefined),
+    onMove: vi.fn().mockResolvedValue(undefined),
     onOpenSession: vi.fn(),
     ...over,
   };
@@ -210,5 +211,132 @@ describe('TodoList handing work to a session already open', () => {
     setup({ sessions: [] });
     await user.click(screen.getByRole('button', { name: /send to a session/i }));
     expect(screen.getByText(/no sessions? open/i)).toBeInTheDocument();
+  });
+});
+
+describe('TodoList editing an item', () => {
+  const startEditing = async (user: ReturnType<typeof userEvent.setup>, title = /activity log/i) => {
+    await user.click(screen.getByRole('button', { name: title }));
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    return screen.getByLabelText('Title');
+  };
+
+  it('opens the title for editing with the words already there', async () => {
+    const user = userEvent.setup();
+    setup();
+    expect(await startEditing(user)).toHaveValue('Activity log on vacancies');
+  });
+
+  it('saves the new title on Enter', async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    const box = await startEditing(user);
+    await user.clear(box);
+    await user.type(box, 'Add error monitoring{Enter}');
+    expect(props.onUpdate).toHaveBeenCalledWith('t1', { title: 'Add error monitoring' });
+  });
+
+  it('keeps what was typed when focus moves elsewhere, rather than losing it', async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    const box = await startEditing(user);
+    await user.clear(box);
+    await user.type(box, 'Half typed thought');
+    await user.tab();
+    await waitFor(() => expect(props.onUpdate).toHaveBeenCalledWith('t1', { title: 'Half typed thought' }));
+  });
+
+  it('gives the original back on Escape, saving nothing', async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    const box = await startEditing(user);
+    await user.clear(box);
+    await user.type(box, 'never mind{Escape}');
+    expect(props.onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /activity log/i })).toBeInTheDocument();
+  });
+
+  it('refuses an empty title and stays open rather than leaving a blank row', async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    const box = await startEditing(user);
+    await user.clear(box);
+    await user.type(box, '   {Enter}');
+    expect(props.onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Title')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/needs a title/i);
+  });
+
+  it('keeps the keystrokes inside the box, so nothing else in the panel reacts', async () => {
+    const user = userEvent.setup();
+    const onKey = vi.fn();
+    window.addEventListener('keydown', onKey);
+    setup();
+    const box = await startEditing(user);
+    await user.type(box, '{Escape}');
+    window.removeEventListener('keydown', onKey);
+    const escapes = onKey.mock.calls.filter(([e]) => (e as KeyboardEvent).key === 'Escape');
+    expect(escapes).toHaveLength(0);
+  });
+
+  it('lets an item attached to a session be renamed, and keeps the link', async () => {
+    const user = userEvent.setup();
+    const props = setup({ todos: [todo({ sessionId: 's1' })], sessions: [session({ id: 's1' })] });
+    await user.click(screen.getByRole('button', { name: /activity log/i }));
+    await user.click(screen.getByRole('button', { name: /rename/i }));
+    const box = screen.getByLabelText('Title');
+    await user.clear(box);
+    await user.type(box, 'Renamed while running{Enter}');
+    expect(props.onUpdate).toHaveBeenCalledWith('t1', { title: 'Renamed while running' });
+    expect(screen.getByRole('button', { name: /feat\/vacancies/ })).toBeInTheDocument();
+  });
+
+  it('saves a note without waiting for focus to leave', async () => {
+    const user = userEvent.setup();
+    const props = setup();
+    await user.click(screen.getByRole('button', { name: /activity log/i }));
+    const notes = screen.getByLabelText('Context');
+    await user.type(notes, 'free tier only');
+    await user.click(screen.getByRole('button', { name: /save note/i }));
+    expect(props.onUpdate).toHaveBeenCalledWith('t1', { notes: 'free tier only' });
+  });
+
+  it('gives a note back unchanged on Escape', async () => {
+    const user = userEvent.setup();
+    const props = setup({ todos: [todo({ notes: 'the original note' })] });
+    await user.click(screen.getByRole('button', { name: /activity log/i }));
+    const notes = screen.getByLabelText('Context');
+    await user.type(notes, ' and more{Escape}');
+    expect(props.onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Context')).toHaveValue('the original note');
+  });
+});
+
+describe('TodoList reordering', () => {
+  const two = [todo({ id: 't1', title: 'first' }), todo({ id: 't2', title: 'second' })];
+
+  it('moves an item up', async () => {
+    const user = userEvent.setup();
+    const props = setup({ todos: two });
+    await user.click(screen.getByRole('button', { name: 'Move second up' }));
+    expect(props.onMove).toHaveBeenCalledWith('t2', 'up');
+  });
+
+  it('moves an item down', async () => {
+    const user = userEvent.setup();
+    const props = setup({ todos: two });
+    await user.click(screen.getByRole('button', { name: 'Move first down' }));
+    expect(props.onMove).toHaveBeenCalledWith('t1', 'down');
+  });
+
+  it('offers no move off either end', () => {
+    setup({ todos: two });
+    expect(screen.queryByRole('button', { name: 'Move first up' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move second down' })).not.toBeInTheDocument();
+  });
+
+  it('offers nothing to reorder when there is only one item', () => {
+    setup({ todos: [todo({ title: 'alone' })] });
+    expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
   });
 });

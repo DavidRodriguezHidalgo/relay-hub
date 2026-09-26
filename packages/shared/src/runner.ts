@@ -1,4 +1,5 @@
 import type { QueuedMessage } from './queue';
+import type { Todo } from './todo';
 import type { TranscriptEntry } from './transcript';
 
 /** `sessionId` used by runner events that belong to the orchestrator itself. */
@@ -100,7 +101,9 @@ export type RunnerEvent =
   | { type: 'watch-removed'; watchId: string; gh: GhStatus }
   | { type: 'external'; external: ExternalSessions }
   | { type: 'queue'; sessionId: string; queue: QueuedMessage[] }
-  | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent };
+  | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent }
+  /** The whole list, whenever it changes, whoever changed it: the panel and the chat share one copy. */
+  | { type: 'todos'; todos: Todo[] };
 
 export interface RunState {
   states: Record<string, { state: SessionState; error: string | null }>;

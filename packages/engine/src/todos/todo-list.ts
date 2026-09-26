@@ -8,6 +8,10 @@ export interface TodoRecords {
   removeTodo(id: string): void;
 }
 
+/** Where a todo sits: the place it was given, else when it was added. */
+const placeOf = (t: Todo) => t.position ?? Number.MAX_SAFE_INTEGER;
+const inOrder = (a: Todo, b: Todo) => placeOf(a) - placeOf(b) || a.createdAt.localeCompare(b.createdAt);
+
 /**
  * The work you intend to do, in the order you meant to do it.
  *
@@ -21,11 +25,28 @@ export class TodoList {
     private readonly newId: () => string = () => randomUUID(),
   ) {}
 
-  /** Still open first, then what is done; each in the order the work was added. */
+  /** Still open first, then what is done; each in the order chosen, or the order added. */
   list(): Todo[] {
-    const byAge = (a: Todo, b: Todo) => a.createdAt.localeCompare(b.createdAt);
     const all = this.records.allTodos();
-    return [...all.filter((t) => !t.done).sort(byAge), ...all.filter((t) => t.done).sort(byAge)];
+    return [...all.filter((t) => !t.done).sort(inOrder), ...all.filter((t) => t.done).sort(inOrder)];
+  }
+
+  /**
+   * Moves one todo a place up or down among the others in its half of the list.
+   *
+   * Moving renumbers that half outright rather than nudging one value, so the order it leaves
+   * behind is the order that was on screen — no drift, and no two items claiming one place.
+   */
+  move(id: string, direction: 'up' | 'down'): Todo[] {
+    const todo = this.require(id);
+    const group = this.list().filter((t) => t.done === todo.done);
+    const from = group.findIndex((t) => t.id === id);
+    const to = direction === 'up' ? from - 1 : from + 1;
+    if (to < 0 || to >= group.length) return this.list();
+    const moved = [...group];
+    moved.splice(to, 0, ...moved.splice(from, 1));
+    moved.forEach((t, position) => this.records.putTodo({ ...t, position }));
+    return this.list();
   }
 
   get(id: string): Todo | null {

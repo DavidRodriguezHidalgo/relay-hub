@@ -60,6 +60,7 @@ describe('App', () => {
       createTodo: vi.fn().mockResolvedValue([]),
       updateTodo: vi.fn().mockResolvedValue([]),
       deleteTodo: vi.fn().mockResolvedValue([]),
+      moveTodo: vi.fn().mockResolvedValue([]),
       launchTodo: vi.fn().mockResolvedValue({ sessionId: 'new', todos: [] }),
       screenshots: vi.fn().mockResolvedValue([]),
       attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
@@ -402,6 +403,52 @@ describe('App', () => {
     render(<App />);
     expect(await screen.findByRole('alert')).toHaveTextContent(/Restart the app/);
   });
+  const todo = (over: Record<string, unknown> = {}) => ({
+    id: 't1', title: 'Add error monitoring', notes: '', project: null, branch: null,
+    sessionId: null, done: false, createdAt: '2026-09-25T12:54:01.593Z', launchedAt: null, ...over,
+  });
+
+  it('shows what the store already holds when the window opens', async () => {
+    relay.listTodos.mockResolvedValue([todo()]);
+    render(<App />);
+    expect(await screen.findByText('Add error monitoring')).toBeInTheDocument();
+  });
+
+  it('reflects a todo the chat added, without the panel asking again', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => { emit = l; return () => undefined; });
+    relay.listTodos.mockResolvedValue([]);
+    render(<App />);
+    await screen.findByText('Alpha');
+    expect(screen.queryByText('Set up CI in github')).not.toBeInTheDocument();
+    await act(async () => { emit!({ type: 'todos', todos: [todo({ id: 't2', title: 'Set up CI in github' })] }); });
+    expect(screen.getByText('Set up CI in github')).toBeInTheDocument();
+  });
+
+  it('reflects a todo the chat completed or removed', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => { emit = l; return () => undefined; });
+    relay.listTodos.mockResolvedValue([todo()]);
+    render(<App />);
+    await screen.findByText('Add error monitoring');
+    await act(async () => { emit!({ type: 'todos', todos: [] }); });
+    expect(screen.queryByText('Add error monitoring')).not.toBeInTheDocument();
+  });
+
+  it('does not put the answer on screen itself: the engine event is what updates it', async () => {
+    let emit: ((e: RunnerEvent) => void) | null = null;
+    relay.onRunnerEvent.mockImplementation((l: (e: RunnerEvent) => void) => { emit = l; return () => undefined; });
+    relay.listTodos.mockResolvedValue([]);
+    relay.createTodo.mockResolvedValue([todo({ title: 'typed in the panel' })]);
+    render(<App />);
+    await screen.findByText('Alpha');
+    await userEvent.type(screen.getByLabelText('What needs doing'), 'typed in the panel{Enter}');
+    expect(relay.createTodo).toHaveBeenCalledWith({ title: 'typed in the panel' });
+    // the panel shows it when the engine says so, which is the same moment the chat would learn of it
+    expect(screen.queryByText('typed in the panel')).not.toBeInTheDocument();
+    await act(async () => { emit!({ type: 'todos', todos: [todo({ title: 'typed in the panel' })] }); });
+    expect(screen.getByText('typed in the panel')).toBeInTheDocument();
+  });
 });
 
 describe('App collisions', () => {
@@ -437,6 +484,7 @@ describe('App collisions', () => {
       createTodo: vi.fn().mockResolvedValue([]),
       updateTodo: vi.fn().mockResolvedValue([]),
       deleteTodo: vi.fn().mockResolvedValue([]),
+      moveTodo: vi.fn().mockResolvedValue([]),
       launchTodo: vi.fn().mockResolvedValue({ sessionId: 'new', todos: [] }),
       screenshots: vi.fn().mockResolvedValue([]),
       attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
@@ -456,3 +504,4 @@ describe('App collisions', () => {
     expect(warning).toHaveTextContent('/code/app');
   });
 });
+

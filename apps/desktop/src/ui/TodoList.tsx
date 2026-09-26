@@ -21,6 +21,8 @@ interface Props {
   /** Hands the item to a session that is already open. */
   onAttach: (id: string, sessionId: string) => Promise<unknown>;
   onDetach: (id: string) => Promise<unknown>;
+  /** Moves an item a place up or down among the others in its half of the list. */
+  onMove: (id: string, direction: 'up' | 'down') => Promise<unknown>;
   onOpenSession: (sessionId: string) => void;
 }
 
@@ -45,11 +47,17 @@ export function deliveryNote(dot: string): { text: string; can: boolean } {
  * A row shows the session it launched rather than a slot: the branch it is working on and what
  * that session is doing right now, both read from the session itself so the two cannot disagree.
  */
-export function TodoList({ todos, sessions, projects, states, external, onCreate, onUpdate, onDelete, onLaunch, onAttach, onDetach, onOpenSession }: Props) {
+export function TodoList({ todos, sessions, projects, states, external, onCreate, onUpdate, onDelete, onLaunch, onAttach, onDetach, onMove, onOpenSession }: Props) {
   const [title, setTitle] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The item whose title is open for editing, and the words as they stand. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [titleError, setTitleError] = useState<string | null>(null);
+  /** Notes being written, by item: kept here so Escape has an original to put back. */
+  const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   /** The todo whose "send to a session" picker is open, and what has been picked for it. */
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState('');
@@ -74,6 +82,31 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
     setBusyId(id);
     await report(onLaunch(id));
     setBusyId(null);
+  };
+
+  const beginEdit = (t: Todo) => {
+    setEditingId(t.id);
+    setDraftTitle(t.title);
+    setTitleError(null);
+  };
+
+  /** Keeps what was typed. An empty title is refused and the box stays open, never a blank row. */
+  const saveTitle = async (t: Todo) => {
+    const title = draftTitle.trim();
+    if (!title) {
+      setTitleError('A todo needs a title.');
+      return;
+    }
+    setEditingId(null);
+    setTitleError(null);
+    if (title !== t.title) await report(onUpdate(t.id, { title }));
+  };
+
+  const noteOf = (t: Todo) => draftNotes[t.id] ?? t.notes;
+  const saveNote = async (t: Todo) => {
+    const notes = noteOf(t);
+    if (notes === t.notes) return;
+    await report(onUpdate(t.id, { notes }));
   };
 
   return (
@@ -106,6 +139,9 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
             const session = t.sessionId ? (sessions.find((s) => s.id === t.sessionId) ?? null) : null;
             const dot = session ? dotState(session.id, states, external) : null;
             const expanded = openId === t.id;
+            const group = todos.filter((x) => x.done === t.done);
+            const at = group.findIndex((x) => x.id === t.id);
+            const place = { canMoveUp: at > 0, canMoveDown: at < group.length - 1 };
             return (
               <li key={t.id} className={t.done ? 'todo todo--done' : 'todo'}>
                 <div className="todo__head">
@@ -115,18 +151,68 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
                     checked={t.done}
                     onChange={(e) => void report(onUpdate(t.id, { done: e.target.checked }))}
                   />
-                  <button
-                    type="button"
-                    className="todo__title"
-                    aria-expanded={expanded}
-                    onClick={() => setOpenId(expanded ? null : t.id)}
-                  >
-                    <span className="todo__caret" aria-hidden="true">
-                      {expanded ? '▾' : '▸'}
-                    </span>
-                    {t.title}
-                  </button>
+                  {editingId === t.id ? (
+                    <input
+                      className="todo__edit"
+                      aria-label="Title"
+                      autoFocus
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      /* the panel has key handling of its own; an edit in progress keeps its keys */
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void saveTitle(t);
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setEditingId(null);
+                          setTitleError(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (editingId === t.id) void saveTitle(t);
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="todo__title"
+                      aria-expanded={expanded}
+                      onClick={() => setOpenId(expanded ? null : t.id)}
+                    >
+                      <span className="todo__caret" aria-hidden="true">
+                        {expanded ? '▾' : '▸'}
+                      </span>
+                      {t.title}
+                    </button>
+                  )}
+                  {place.canMoveUp && (
+                    <button
+                      type="button"
+                      className="todo__move"
+                      aria-label={`Move ${t.title} up`}
+                      onClick={() => void report(onMove(t.id, 'up'))}
+                    >
+                      ↑
+                    </button>
+                  )}
+                  {place.canMoveDown && (
+                    <button
+                      type="button"
+                      className="todo__move"
+                      aria-label={`Move ${t.title} down`}
+                      onClick={() => void report(onMove(t.id, 'down'))}
+                    >
+                      ↓
+                    </button>
+                  )}
                 </div>
+                {editingId === t.id && titleError && (
+                  <p role="alert" className="error todos__error">
+                    {titleError}
+                  </p>
+                )}
                 <div className="todo__meta">
                   {session && dot ? (
                     <button type="button" className="todo__session" onClick={() => onOpenSession(session.id)}>
@@ -213,18 +299,33 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
                 )}
                 {expanded && (
                   <div className="todo__detail">
+                    <button type="button" className="todo__needs" onClick={() => beginEdit(t)}>
+                      Rename
+                    </button>
                     <label>
                       Context
                       <textarea
                         aria-label="Context"
                         rows={3}
-                        defaultValue={t.notes}
+                        value={noteOf(t)}
                         placeholder="What it is for, what done looks like, links"
-                        onBlur={(e) => {
-                          if (e.target.value !== t.notes) void report(onUpdate(t.id, { notes: e.target.value }));
+                        onChange={(e) => setDraftNotes((d) => ({ ...d, [t.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setDraftNotes((d) => ({ ...d, [t.id]: t.notes }));
+                          }
                         }}
+                        /* leaving the box keeps what was written; the button is for saying so outright */
+                        onBlur={() => void saveNote(t)}
                       />
                     </label>
+                    {noteOf(t) !== t.notes && (
+                      <button type="button" className="todo__needs" onClick={() => void saveNote(t)}>
+                        Save note
+                      </button>
+                    )}
                     {!t.sessionId && (
                       <>
                         <label>

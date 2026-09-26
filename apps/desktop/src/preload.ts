@@ -44,6 +44,7 @@ const api: RelayApi = {
   createTodo: (draft) => ipcRenderer.invoke(IPC.createTodo, draft),
   updateTodo: (id, patch) => ipcRenderer.invoke(IPC.updateTodo, id, patch),
   deleteTodo: (id) => ipcRenderer.invoke(IPC.deleteTodo, id),
+  moveTodo: (id, direction) => ipcRenderer.invoke(IPC.moveTodo, id, direction),
   launchTodo: (id) => ipcRenderer.invoke(IPC.launchTodo, id),
   screenshots: (sessionId) => ipcRenderer.invoke(IPC.screenshots, sessionId),
   attachTodo: (id, sessionId) => ipcRenderer.invoke(IPC.attachTodo, id, sessionId),
