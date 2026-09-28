@@ -32,6 +32,8 @@ export const IPC = {
   takeOver: 'relay:takeOver',
   settings: 'relay:settings',
   setAllowAllActions: 'relay:setAllowAllActions',
+  setNewSessionModel: 'relay:setNewSessionModel',
+  availableModels: 'relay:availableModels',
   channels: 'relay:channels',
   aside: 'relay:aside',
   checkForUpdate: 'relay:checkForUpdate',
@@ -101,8 +103,17 @@ export interface RelayApi {
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
   takeOver(sessionId: string): Promise<number[]>;
-  settings(): Promise<{ allowAllActions: boolean }>;
+  settings(): Promise<{
+    allowAllActions: boolean;
+    newSessionModel: string | null;
+    claudeDefaultModel: string | null;
+    claudeSettingsPath: string;
+  }>;
   setAllowAllActions(on: boolean): Promise<void>;
+  /** What Relay asks for when it starts a session; null hands the choice back to Claude Code. */
+  setNewSessionModel(model: string | null): Promise<void>;
+  /** The models a new session could run on. */
+  availableModels(): Promise<ModelChoice[]>;
   /** The channels the running main process answers; a window compares it with what it expects. */
   channels(): Promise<string[]>;
   /** A side question answered from a copy of the session; resolves with the answer. */

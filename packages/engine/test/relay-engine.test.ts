@@ -746,6 +746,66 @@ describe('RelayEngine', () => {
     ]);
   });
 
+  it('asks for no model by default, so a new session comes up on whatever Claude Code has saved', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    expect(engine!.settings().newSessionModel).toBeNull();
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/a', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBeUndefined();
+  });
+
+  it('asks for the model chosen in settings, so a new session no longer inherits that saved default', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    engine!.setNewSessionModel('claude-sonnet-4-5');
+    expect(engine!.settings().newSessionModel).toBe('claude-sonnet-4-5');
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/b', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBe('claude-sonnet-4-5');
+  });
+
+  it('hands the choice back to Claude Code when the setting is cleared', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    engine!.setNewSessionModel('claude-sonnet-4-5');
+    engine!.setNewSessionModel(null);
+    expect(engine!.settings().newSessionModel).toBeNull();
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/c', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBeUndefined();
+  });
+
+  it('says where the saved default lives, so it can be changed rather than guessed at', async () => {
+    await startWithBasic(new FakeAgentClient());
+    const s = engine!.settings();
+    expect(s.claudeSettingsPath).toMatch(/\.claude\/settings\.json$/);
+  });
+
   it('refuses an ambiguous or unknown project name', async () => {
     const wt = fakeWorktrees({});
     await startWithBasic(new FakeAgentClient(), undefined, { more: true, worktrees: wt });
@@ -943,9 +1003,9 @@ describe('RelayEngine', () => {
   it('remembers that everything was allowed, and stops asking about it', async () => {
     const client = new FakeAgentClient();
     await startWithBasic(client);
-    expect(engine!.settings()).toEqual({ allowAllActions: false });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: false });
     engine!.setAllowAllActions(true);
-    expect(engine!.settings()).toEqual({ allowAllActions: true });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: true });
     await engine!.close();
 
     // a later run of the app, reading the same stored state
@@ -957,7 +1017,7 @@ describe('RelayEngine', () => {
       orchestratorDir: join(root, 'orch'),
       registry: { foreignHolders: async () => [] },
     });
-    expect(engine!.settings()).toEqual({ allowAllActions: true });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: true });
   });
   it('answers a side question from a fork of the session, leaving the session and its turn alone', async () => {
     const client = new FakeAgentClient();

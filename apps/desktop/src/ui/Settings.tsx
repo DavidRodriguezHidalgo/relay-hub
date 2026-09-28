@@ -1,4 +1,5 @@
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
+import { modelLabel, type ModelChoice } from '@relay/shared';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
 
@@ -9,6 +10,14 @@ interface Props {
   onAllowAllActions: (on: boolean) => void;
   crashReports: boolean;
   onCrashReports: (on: boolean) => void;
+  /** What Relay asks for when it starts a session; null leaves the choice to Claude Code. */
+  newSessionModel: string | null;
+  onNewSessionModel: (model: string | null) => void;
+  /** What Claude Code would pick on its own, and where that is saved. */
+  claudeDefaultModel: string | null;
+  claudeSettingsPath: string;
+  /** Models a new session could run on; empty until they have been asked for. */
+  models: ModelChoice[];
   /** Why the last change did not take, when it did not. */
   error: string | null;
   onClose: () => void;
@@ -79,6 +88,31 @@ export function Settings(p: Props) {
             folder, without stopping for you. It does not change a session you run yourself in a terminal, does not
             override a session’s own settings, and take-over and bulk runs are still confirmed. It applies to every
             session Relay drives.
+          </p>
+        </section>
+        <section className="settings__section">
+          <h3>New sessions</h3>
+          <label className="settings__row">
+            Model
+            <select
+              aria-label="Model for new sessions"
+              value={p.newSessionModel ?? ''}
+              onChange={(e) => p.onNewSessionModel(e.target.value || null)}
+            >
+              <option value="">
+                Claude Code's default{p.claudeDefaultModel ? ` — ${modelLabel(p.claudeDefaultModel)}` : ''}
+              </option>
+              {p.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="settings__note">
+            {p.claudeDefaultModel
+              ? `Relay asks for no model unless you choose one here, so a new session comes up on whatever Claude Code has saved — currently ${modelLabel(p.claudeDefaultModel)}, set by a /model command and kept in ${p.claudeSettingsPath}. Choosing here overrides that for sessions Relay starts, without touching that file.`
+              : `Claude Code has no saved default, so a new session comes up on whatever it picks. Choosing here makes Relay ask for one instead. Its setting lives in ${p.claudeSettingsPath}.`}
           </p>
         </section>
         <section className="settings__section">

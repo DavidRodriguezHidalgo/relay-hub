@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
@@ -30,6 +32,7 @@ import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
 import { describeFailure } from './failures/classify';
+import { claudeDefaultModel, claudeSettingsPath } from './models/default-model';
 import { modelInEffect } from '@relay/shared';
 
 /** At most this many images are reported for one session, newest first. */
@@ -57,6 +60,9 @@ const modelKey = (sessionId: string) => `model.${sessionId}`;
  */
 const FAILURE_PREFIX = 'failure.';
 const failureKey = (sessionId: string) => `${FAILURE_PREFIX}${sessionId}`;
+
+/** Meta key for the model Relay asks for when it starts a session; absent means it asks for none. */
+const NEW_SESSION_MODEL_KEY = 'settings.newSessionModel';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -128,6 +134,15 @@ export interface SendOptions {
 /** Settings the user controls, kept by Relay rather than by any one session. */
 export interface RelaySettings {
   allowAllActions: boolean;
+  /**
+   * What Relay asks for when it starts a session. Null means it asks for nothing and Claude Code
+   * decides, which is what it has always done.
+   */
+  newSessionModel: string | null;
+  /** What Claude Code would pick on its own, read from its settings; null when it has no saved default. */
+  claudeDefaultModel: string | null;
+  /** Where that saved default lives, so the app can say where to change it. */
+  claudeSettingsPath: string;
 }
 
 export class RelayEngine {
@@ -504,13 +519,31 @@ export class RelayEngine {
 
   /** What the user has turned on for themselves; kept across restarts. */
   settings(): RelaySettings {
-    return { allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true' };
+    return {
+      allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true',
+      newSessionModel: this.store.getMeta(NEW_SESSION_MODEL_KEY),
+      claudeDefaultModel: claudeDefaultModel(homedir(), (path) => readFileSync(path, 'utf8')),
+      claudeSettingsPath: claudeSettingsPath(homedir()),
+    };
   }
 
   /**
    * Lets sessions Relay drives act without asking. It covers Relay's own approvals only:
    * a session's own settings still apply, and take-over and bulk runs are still confirmed.
    */
+  /** Null puts it back to letting Claude Code decide. */
+  setNewSessionModel(model: string | null): void {
+    this.store.setMeta(NEW_SESSION_MODEL_KEY, model);
+  }
+
+  /** The models a session could run on, asked of the orchestrator's own directory. */
+  async availableModels(): Promise<ModelChoice[]> {
+    const cwd = [...this.orchestratorCwds][0] ?? process.cwd();
+    const { models } = await this.commands.list(cwd);
+    const chosen = this.store.getMeta(NEW_SESSION_MODEL_KEY);
+    return models.map((m) => ({ ...m, current: chosen === null ? false : m.id === chosen }));
+  }
+
   setAllowAllActions(on: boolean): void {
     this.store.setMeta(ALLOW_ALL_KEY, on ? 'true' : null);
     this.approvals.setAllowAll(on);
@@ -620,6 +653,8 @@ export class RelayEngine {
       client: this.agent,
       approvals: this.approvals,
       profile: { kind: 'session' },
+      // asked for only when it has been chosen here; otherwise Claude Code's own default stands
+      model: this.store.getMeta(NEW_SESSION_MODEL_KEY) ?? undefined,
     });
     let sessionId: string;
     try {

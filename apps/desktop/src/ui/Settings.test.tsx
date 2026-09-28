@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event';
 import { Settings } from './Settings';
 
 const base = {
+  newSessionModel: null,
+  onNewSessionModel: vi.fn(),
+  claudeDefaultModel: null,
+  claudeSettingsPath: '/home/.claude/settings.json',
+  models: [],
   theme: 'dark' as const,
   onTheme: vi.fn(),
   allowAllActions: false, crashReports: false, onCrashReports: vi.fn(),
@@ -209,5 +214,58 @@ describe('Settings tells apart pulling, rebuilding and an unmerged change', () =
   it('says nothing is missing locally, which leaves only an unmerged change', () => {
     render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({})} />);
     expect(screen.getByText(/has not been merged yet/)).toBeInTheDocument();
+  });
+});
+
+describe('Settings and the model new sessions start on', () => {
+  it('names the saved default and where it lives, rather than leaving it a mystery', () => {
+    render(
+      <Settings
+        {...base}
+        claudeDefaultModel="claude-fable-5-1[1m]"
+        claudeSettingsPath="/Users/someone/.claude/settings.json"
+      />,
+    );
+    expect(screen.getByText(/Relay asks for no model unless you choose one here/)).toBeInTheDocument();
+    expect(screen.getByText(/\/Users\/someone\/\.claude\/settings\.json/)).toBeInTheDocument();
+  });
+
+  it('offers Claude Code’s default as the first choice, naming what that is', () => {
+    render(<Settings {...base} claudeDefaultModel="claude-fable-5-1[1m]" />);
+    const picker = screen.getByLabelText('Model for new sessions');
+    expect(picker).toHaveValue('');
+    expect(picker).toHaveTextContent(/Claude Code's default/);
+  });
+
+  it('lets a model be chosen for new sessions', async () => {
+    const onNewSessionModel = vi.fn();
+    render(
+      <Settings
+        {...base}
+        onNewSessionModel={onNewSessionModel}
+        models={[{ id: 'claude-sonnet-4-5', name: 'Sonnet', description: 'fast', current: false }]}
+      />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Model for new sessions'), 'claude-sonnet-4-5');
+    expect(onNewSessionModel).toHaveBeenCalledWith('claude-sonnet-4-5');
+  });
+
+  it('hands the choice back with the empty option, rather than leaving no way out', async () => {
+    const onNewSessionModel = vi.fn();
+    render(
+      <Settings
+        {...base}
+        newSessionModel="claude-sonnet-4-5"
+        onNewSessionModel={onNewSessionModel}
+        models={[{ id: 'claude-sonnet-4-5', name: 'Sonnet', description: 'fast', current: true }]}
+      />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Model for new sessions'), '');
+    expect(onNewSessionModel).toHaveBeenCalledWith(null);
+  });
+
+  it('says plainly when Claude Code has no saved default', () => {
+    render(<Settings {...base} claudeDefaultModel={null} />);
+    expect(screen.getByText(/Claude Code has no saved default/)).toBeInTheDocument();
   });
 });

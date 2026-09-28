@@ -126,6 +126,9 @@ export function App() {
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
   const [crashReports, setCrashReports] = useState(false);
+  const [newSessionModel, setNewSessionModel] = useState<string | null>(null);
+  const [claudeDefault, setClaudeDefault] = useState<{ model: string | null; path: string }>({ model: null, path: '' });
+  const [modelChoices, setModelChoices] = useState<ModelChoice[]>([]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -133,7 +136,12 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    void window.relay.settings().then((s) => setAllowAllActions(s.allowAllActions));
+    void window.relay.settings().then((s) => {
+      setAllowAllActions(s.allowAllActions);
+      setNewSessionModel(s.newSessionModel);
+      setClaudeDefault({ model: s.claudeDefaultModel, path: s.claudeSettingsPath });
+    });
+    void window.relay.availableModels().then(setModelChoices, () => undefined);
     void window.relay.crashReports().then(setCrashReports, () => undefined);
   }, []);
 
@@ -295,6 +303,16 @@ export function App() {
           onTheme={setTheme}
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
+          newSessionModel={newSessionModel}
+          onNewSessionModel={(model) => {
+            void window.relay
+              .setNewSessionModel(model)
+              .then(() => setNewSessionModel(model))
+              .catch((e: unknown) => setSettingsError(e instanceof Error ? e.message : String(e)));
+          }}
+          claudeDefaultModel={claudeDefault.model}
+          claudeSettingsPath={claudeDefault.path}
+          models={modelChoices}
           crashReports={crashReports}
           onCrashReports={(on) => void changeCrashReports(on)}
           error={settingsError}
