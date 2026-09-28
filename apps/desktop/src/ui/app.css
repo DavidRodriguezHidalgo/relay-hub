@@ -261,7 +261,7 @@
   .todo--done .todo__title { @apply text-muted line-through; }
   .todo__head { @apply flex items-start gap-2; }
   .todo__head input[type='checkbox'] { @apply mt-1 shrink-0; }
-  .todo__title { @apply flex-1 border-0 bg-transparent p-0 text-left text-[13px] leading-snug; }
+  .todo__title { @apply flex-1 border-0 bg-transparent p-0 text-left text-[13px] leading-snug [overflow-wrap:anywhere]; }
   .todo__meta { @apply mt-0.5 flex items-center gap-1.5 pl-6 text-[11px] text-muted; }
   .todo__session { @apply flex items-center gap-1.5 border-0 bg-transparent p-0 text-[11px] text-muted hover:text-fg; }
   .todo__state { @apply text-accent-fg; }
@@ -273,7 +273,8 @@
   .todo__remove { @apply self-start px-1.5 py-0.5 text-[11px] text-danger; }
 
   /* The quiet line that says what the recent window is holding back. */
-  .session-list__older { @apply mt-3 w-full border-0 bg-transparent px-2 py-1 text-left text-[11px] text-muted hover:text-fg; }
+  /* what a list is holding back, and the way back: one rule for both lists */
+  .list-more { @apply mt-2 w-full border-0 bg-transparent px-0 py-1 text-left text-[11px] text-muted hover:text-fg; }
 
   /* Images a session produced while working. */
   .shots { @apply mt-3 border-t border-line pt-3; }
@@ -347,3 +348,4 @@
   .settings__standing--restart { @apply font-semibold text-danger; }
   .settings__standing--current { @apply text-muted; }
 }
+

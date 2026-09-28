@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { modelLabel, type ExternalSessions, type RunState, type SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
 import { recentSessions } from './recentSessions';
+import { readStored, useStoredFlag, writeStored } from './viewPrefs';
 import { DOT_LABEL, dotState, isActive } from './sessionDot';
 
 const COLLAPSED_KEY = 'relay.collapsedRepos';
@@ -9,24 +10,6 @@ const SHOW_ALL_KEY = 'relay.showAllSessions';
 
 /** Past this, a session is close enough to full that the row should say so. */
 const NEARLY_FULL = 85;
-
-/** Per-viewer convenience: a failure to read or write storage just means nothing is remembered. */
-function readStored<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? fallback : (JSON.parse(raw) as T);
-  } catch {
-    return fallback;
-  }
-}
-
-function writeStored(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // storage unavailable: the choice lasts for this window only
-  }
-}
 
 interface Props {
   sessions: SessionSummary[];
@@ -50,7 +33,7 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
   const [query, setQuery] = useState('');
   const [showStale, setShowStale] = useState(false);
   const [collapsed, setCollapsed] = useState(() => new Set(readStored<string[]>(COLLAPSED_KEY, [])));
-  const [showAll, setShowAll] = useState(() => readStored<boolean>(SHOW_ALL_KEY, false));
+  const [showAll, chooseShowAll] = useStoredFlag(SHOW_ALL_KEY, false);
   const { shown, hidden } = recentSessions(sessions, {
     now: now ?? Date.now(),
     states,
@@ -59,10 +42,15 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
     searching: query.trim() !== '',
     showAll,
   });
-  const chooseShowAll = (on: boolean) => {
-    setShowAll(on);
-    writeStored(SHOW_ALL_KEY, on);
-  };
+  // what turning it off again would hide: the way back is only worth offering if it does something
+  const wouldHide = recentSessions(sessions, {
+    now: now ?? Date.now(),
+    states,
+    external,
+    selectedId,
+    searching: query.trim() !== '',
+    showAll: false,
+  }).hidden;
   const groups = groupSessions(shown, { query, showStale });
   const toggle = (repo: string) =>
     setCollapsed((prev) => {
@@ -179,12 +167,12 @@ export function SessionList({ sessions, selectedId, onSelect, states, external, 
         );
       })}
       {hidden > 0 && (
-        <button type="button" className="session-list__older" onClick={() => chooseShowAll(true)}>
+        <button type="button" className="list-more" onClick={() => chooseShowAll(true)}>
           {hidden} older {hidden === 1 ? 'session' : 'sessions'} hidden · Show all
         </button>
       )}
-      {showAll && (
-        <button type="button" className="session-list__older" onClick={() => chooseShowAll(false)}>
+      {showAll && wouldHide > 0 && (
+        <button type="button" className="list-more" onClick={() => chooseShowAll(false)}>
           Showing all {sessions.length} · Show recent only
         </button>
       )}

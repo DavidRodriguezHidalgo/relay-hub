@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ExternalSessions, RunState, SessionSummary, Todo, TodoDraft, TodoPatch } from '@relay/shared';
 import { DOT_LABEL, dotState } from './sessionDot';
+import { visibleTodos } from './visibleTodos';
+import { useStoredFlag } from './viewPrefs';
 
 interface Project {
   name: string;
@@ -41,6 +43,8 @@ export function deliveryNote(dot: string): { text: string; can: boolean } {
   return { text: 'Idle — it starts on this straight away.', can: true };
 }
 
+const SHOW_ALL_TODOS = 'relay.showAllTodos';
+
 /**
  * The work you mean to do, and what became of it.
  *
@@ -52,6 +56,7 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
   const [openId, setOpenId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, chooseShowAll] = useStoredFlag(SHOW_ALL_TODOS, false);
   /** The item whose title is open for editing, and the words as they stand. */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -61,6 +66,10 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
   /** The todo whose "send to a session" picker is open, and what has been picked for it. */
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState('');
+  const narrowing = { sessions, states, external, pinned: [openId, editingId, busyId, sendingId] };
+  const { shown, hidden } = visibleTodos(todos, { ...narrowing, showAll });
+  // what turning it off again would hide: the way back is only worth offering if it does something
+  const wouldHide = visibleTodos(todos, { ...narrowing, showAll: false }).hidden;
 
   const report = async (work: Promise<unknown>) => {
     setError(null);
@@ -135,11 +144,13 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
       )}
       {todos.length > 0 && (
         <ul className="todos__list">
-          {todos.map((t) => {
+          {shown.map((t) => {
             const session = t.sessionId ? (sessions.find((s) => s.id === t.sessionId) ?? null) : null;
             const dot = session ? dotState(session.id, states, external) : null;
             const expanded = openId === t.id;
-            const group = todos.filter((x) => x.done === t.done);
+            // against what is on screen, not the whole list: a move whose result is hidden is a
+            // control that removes the row you were using
+            const group = (showAll ? todos : shown).filter((x) => x.done === t.done);
             const at = group.findIndex((x) => x.id === t.id);
             const place = { canMoveUp: at > 0, canMoveDown: at < group.length - 1 };
             return (
@@ -372,6 +383,16 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
             );
           })}
         </ul>
+      )}
+      {hidden > 0 && (
+        <button type="button" className="list-more" onClick={() => chooseShowAll(true)}>
+          {hidden} more · Show all
+        </button>
+      )}
+      {showAll && wouldHide > 0 && (
+        <button type="button" className="list-more" onClick={() => chooseShowAll(false)}>
+          Showing all {todos.length} · Show fewer
+        </button>
       )}
     </section>
   );
