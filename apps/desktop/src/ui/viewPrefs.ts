@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 /**
  * Small per-viewer choices, remembered between runs.
  *
@@ -19,4 +21,21 @@ export function writeStored(key: string, value: unknown): void {
   } catch {
     // storage unavailable: the choice lasts for this window only
   }
+}
+
+/**
+ * A yes-or-no view choice that outlives the window.
+ *
+ * Both lists in the left panel keep one of these, and kept them identically; this is the one
+ * copy of reading it at mount and writing it back when it changes.
+ */
+export function useStoredFlag(key: string, fallback: boolean): [boolean, (on: boolean) => void] {
+  const [value, setValue] = useState(() => readStored<boolean>(key, fallback));
+  return [
+    value,
+    (on: boolean) => {
+      setValue(on);
+      writeStored(key, on);
+    },
+  ];
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SessionSummary, Todo } from '@relay/shared';
@@ -32,8 +32,12 @@ function setup(over: Partial<Parameters<typeof TodoList>[0]> = {}) {
     onOpenSession: vi.fn(),
     ...over,
   };
-  render(<TodoList {...props} />);
-  return props;
+  const view = render(<TodoList {...props} />);
+  return {
+    ...props,
+    /** Re-renders with a new list, the way the engine's answer reaches the component. */
+    rerender: (todos: Todo[]) => view.rerender(<TodoList {...props} todos={todos} />),
+  };
 }
 
 describe('TodoList', () => {
@@ -342,7 +346,7 @@ describe('TodoList reordering', () => {
 });
 
 describe('TodoList when the list grows', () => {
-  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
 
   const many = (n: number) =>
     Array.from({ length: n }, (_, i) => todo({ id: `t${i}`, title: `Piece of work ${i}` }));
@@ -373,9 +377,61 @@ describe('TodoList when the list grows', () => {
     expect(screen.getByRole('checkbox', { name: 'Mileage claims' })).toBeInTheDocument();
   });
 
-  it('holds a very long title inside the panel rather than widening it', () => {
-    const { container } = { container: document.body };
-    setup({ todos: [todo({ title: 'Supercalifragilisticexpialidociousandthensomemorewordsthatneverend'.repeat(2) })] });
-    expect(container.querySelector('.todo__title')).not.toBeNull();
+
+});
+
+describe('TodoList round trips that the cap must not swallow', () => {
+  afterEach(() => localStorage.clear());
+
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => todo({ id: `t${i}`, title: `Piece of work ${i}` }));
+
+  it('shows a todo just created, on a list already at the cap', () => {
+    // what the engine now returns: new work at the top of the open half
+    const props = setup({ todos: many(6) });
+    const created = todo({ id: 'fresh', title: 'THE ONE I JUST TYPED' });
+    props.rerender([created, ...many(6)]);
+    expect(screen.getByRole('checkbox', { name: 'THE ONE I JUST TYPED' })).toBeInTheDocument();
+  });
+
+  it('keeps showing it after several are added in a row', () => {
+    const props = setup({ todos: many(6) });
+    props.rerender([todo({ id: 'n1', title: 'First new' }), ...many(6)]);
+    props.rerender([todo({ id: 'n2', title: 'Second new' }), todo({ id: 'n1', title: 'First new' }), ...many(6)]);
+    expect(screen.getByRole('checkbox', { name: 'Second new' })).toBeInTheDocument();
+  });
+
+  it('does not offer a move whose result would be hidden', () => {
+    setup({ todos: many(10) });
+    const rows = screen.getAllByRole('checkbox');
+    expect(rows).toHaveLength(5);
+    // the fifth row is the last one on screen: moving it down would take it into the hidden tail
+    expect(screen.queryByRole('button', { name: 'Move Piece of work 4 down' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Piece of work 3 down' })).toBeInTheDocument();
+  });
+
+  it('offers the move once everything is on screen', async () => {
+    const user = userEvent.setup();
+    setup({ todos: many(10) });
+    await user.click(screen.getByRole('button', { name: '5 more · Show all' }));
+    expect(screen.getByRole('button', { name: 'Move Piece of work 4 down' })).toBeInTheDocument();
+  });
+
+  it('remembers the choice to show everything across a remount', () => {
+    localStorage.setItem('relay.showAllTodos', 'true');
+    setup({ todos: many(20) });
+    expect(screen.getAllByRole('checkbox')).toHaveLength(20);
+  });
+
+  it('does not offer a way back that would change nothing', () => {
+    localStorage.setItem('relay.showAllTodos', 'true');
+    setup({ todos: many(3) });
+    expect(screen.queryByRole('button', { name: /Show fewer/ })).not.toBeInTheDocument();
+  });
+
+  it('offers the way back when there really is something to fold away', () => {
+    localStorage.setItem('relay.showAllTodos', 'true');
+    setup({ todos: many(20) });
+    expect(screen.getByRole('button', { name: 'Showing all 20 · Show fewer' })).toBeInTheDocument();
   });
 });

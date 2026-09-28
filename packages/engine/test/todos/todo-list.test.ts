@@ -93,13 +93,14 @@ describe('TodoList', () => {
     expect(todos.list().map((t) => t.title)).toEqual(['second', 'first']);
   });
 
-  it('keeps the order work was added in', () => {
+  it('puts new work at the top, where it can be seen', () => {
     const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
     todos.create({ title: 'a' });
     todos.create({ title: 'b' });
     todos.create({ title: 'c' });
-    expect(todos.list().map((t) => t.title)).toEqual(['a', 'b', 'c']);
+    expect(todos.list().map((t) => t.title)).toEqual(['c', 'b', 'a']);
   });
+
 
   it('finds one by id', () => {
     const { todos } = listAt();
@@ -114,21 +115,23 @@ describe('TodoList ordering', () => {
 
   it('moves an item up, and the change sticks', () => {
     const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
+    // newest first, so the list reads c, b, a before anything is moved
     todos.create({ title: 'a' });
     const b = todos.create({ title: 'b' });
     todos.create({ title: 'c' });
     todos.move(b.id, 'up');
-    expect(titles(todos)).toEqual(['b', 'a', 'c']);
-    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+    expect(titles(todos)).toEqual(['b', 'c', 'a']);
+    expect(titles(todos)).toEqual(['b', 'c', 'a']);
   });
 
   it('moves an item down', () => {
     const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
     const a = todos.create({ title: 'a' });
     todos.create({ title: 'b' });
-    todos.create({ title: 'c' });
-    todos.move(a.id, 'down');
-    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+    const c = todos.create({ title: 'c' });
+    todos.move(c.id, 'down');
+    expect(titles(todos)).toEqual(['b', 'c', 'a']);
+    expect(todos.get(a.id)?.title).toBe('a');
   });
 
   it('leaves the ends alone rather than wrapping around', () => {
@@ -153,13 +156,42 @@ describe('TodoList ordering', () => {
     void a;
   });
 
-  it('keeps a new item at the end of the ones already ordered', () => {
+  it('puts a new item above the ones already ordered, not below them', () => {
     const { todos } = listAt(['2026-09-25T10:00:00.000Z', '2026-09-25T10:00:01.000Z', '2026-09-25T10:00:02.000Z']);
     todos.create({ title: 'a' });
     const b = todos.create({ title: 'b' });
     todos.move(b.id, 'up');
     todos.create({ title: 'c' });
-    expect(titles(todos)).toEqual(['b', 'a', 'c']);
+    expect(titles(todos)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('leaves the rest in the order they were already in', () => {
+    const { todos } = listAt(['t0', 't1', 't2', 't3']);
+    const a = todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    todos.move(a.id, 'up');
+    expect(titles(todos)).toEqual(['a', 'b']);
+    todos.create({ title: 'c' });
+    expect(titles(todos)).toEqual(['c', 'a', 'b']);
+    expect(todos.get(b.id)?.title).toBe('b');
+  });
+
+  it('does not disturb what is already done', () => {
+    const { todos } = listAt(['t0', 't1', 't2']);
+    const a = todos.create({ title: 'a' });
+    todos.update(a.id, { done: true });
+    todos.create({ title: 'b' });
+    expect(titles(todos)).toEqual(['b', 'a']);
+  });
+
+  it('does not renumber the done half when new work arrives', () => {
+    const { todos } = listAt(['t0', 't1', 't2', 't3']);
+    const a = todos.create({ title: 'a' });
+    const b = todos.create({ title: 'b' });
+    todos.update(a.id, { done: true });
+    todos.update(b.id, { done: true });
+    todos.create({ title: 'fresh' });
+    expect(titles(todos)).toEqual(['fresh', 'b', 'a']);
   });
 
   it('refuses to move a todo that is not there', () => {

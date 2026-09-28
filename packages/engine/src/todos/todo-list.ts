@@ -53,9 +53,18 @@ export class TodoList {
     return this.records.allTodos().find((t) => t.id === id) ?? null;
   }
 
+  /**
+   * Adds work at the top of what is still open.
+   *
+   * The box you type into sits above the list, and a list long enough to be cut short would
+   * otherwise swallow what you just typed: it would land at the bottom, out of sight, and the
+   * only sign of it would be a counter ticking up. The newest decision is also the one most
+   * worth seeing.
+   */
   create(draft: TodoDraft): Todo {
     const title = draft.title.trim();
     if (!title) throw new Error('A todo needs a title.');
+    const openBefore = this.list().filter((t) => !t.done);
     const todo: Todo = {
       id: this.newId(),
       title,
@@ -64,10 +73,13 @@ export class TodoList {
       branch: draft.branch ?? null,
       sessionId: null,
       done: false,
+      position: 0,
       createdAt: this.clock(),
       launchedAt: null,
     };
     this.records.putTodo(todo);
+    // renumbering the rest keeps them in the order they were already in, one place further down
+    openBefore.forEach((t, i) => this.records.putTodo({ ...t, position: i + 1 }));
     return todo;
   }
 

@@ -46,9 +46,16 @@ describe('visibleTodos', () => {
     expect(out.shown.map((t) => t.id)).not.toContain('quiet');
   });
 
-  it('keeps the row being edited, so it cannot vanish mid-edit', () => {
-    const out = split(many(20), { openId: 't15' });
-    expect(out.shown.map((t) => t.id)).toContain('t15');
+  it('keeps every row the person is in the middle of using', () => {
+    for (const pinned of [['t15'], [null, 't15'], ['t15', undefined]]) {
+      expect(visibleTodos(many(20), { sessions: [], showAll: false, pinned }).shown.map((t) => t.id)).toContain('t15');
+    }
+  });
+
+  it('keeps a todo whose session is running in another Claude process', () => {
+    const list = [...many(10), todo({ id: 'elsewhere', sessionId: 's9' })];
+    const out = visibleTodos(list, { sessions: [session('s9')], external: { s9: 'busy' }, showAll: false });
+    expect(out.shown.map((t) => t.id)).toContain('elsewhere');
   });
 
   it('shows everything once asked, and then holds nothing back', () => {

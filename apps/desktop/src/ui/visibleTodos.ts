@@ -14,8 +14,12 @@ export interface TodoVisibility {
   states?: RunState['states'];
   external?: ExternalSessions;
   sessions: SessionSummary[];
-  /** The row opened for editing, kept whatever its place, so it cannot vanish mid-edit. */
-  openId?: string | null;
+  /**
+   * Rows the person is in the middle of using — expanded, renamed, launching, being sent
+   * somewhere. Kept wherever they sit, because a row cannot be allowed to unmount under a hand:
+   * React fires no blur on unmount, so a half-typed rename would be lost without a word.
+   */
+  pinned?: readonly (string | null | undefined)[];
   showAll: boolean;
 }
 
@@ -28,8 +32,9 @@ export interface TodoSplit {
 /**
  * Narrows the list to what is worth seeing, keeping the order it was given.
  *
- * Position alone is not enough: a todo whose session is working, or waiting for an approval, is
- * the one you would most want to find, so it stays on the list wherever it sits.
+ * Position alone is not enough. A todo whose session is working, waiting for an approval, or
+ * running in another Claude process is the one you would most want to find, so it stays on the
+ * list wherever it sits — as does any row the person is currently using.
  */
 export function visibleTodos(todos: Todo[], opts: TodoVisibility): TodoSplit {
   if (opts.showAll) return { shown: todos, hidden: 0 };
@@ -38,9 +43,10 @@ export function visibleTodos(todos: Todo[], opts: TodoVisibility): TodoSplit {
     const session = opts.sessions.find((s) => s.id === todo.sessionId);
     return session ? isActive(dotState(session.id, opts.states, opts.external)) : false;
   };
+  const pinned = new Set((opts.pinned ?? []).filter((id): id is string => typeof id === 'string'));
   const keep = new Set<string>();
   for (const todo of todos) {
-    if (keep.size < TODOS_SHOWN || live(todo) || todo.id === opts.openId) keep.add(todo.id);
+    if (keep.size < TODOS_SHOWN || live(todo) || pinned.has(todo.id)) keep.add(todo.id);
   }
   const shown = todos.filter((t) => keep.has(t.id));
   return { shown, hidden: todos.length - shown.length };
