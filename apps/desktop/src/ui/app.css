@@ -347,3 +347,10 @@
   .settings__standing--restart { @apply font-semibold text-danger; }
   .settings__standing--current { @apply text-muted; }
 }
+
+@layer components {
+  /* what the list is holding back, said the way the session list says it */
+  .todos__more { @apply mt-1 w-full border-0 bg-transparent px-0 py-1 text-left text-[11px] text-muted hover:text-fg; }
+  /* a title with no spaces must not push the panel wider */
+  .todo__title { @apply [overflow-wrap:anywhere]; }
+}

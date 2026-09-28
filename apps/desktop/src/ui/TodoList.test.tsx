@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SessionSummary, Todo } from '@relay/shared';
@@ -338,5 +338,44 @@ describe('TodoList reordering', () => {
   it('offers nothing to reorder when there is only one item', () => {
     setup({ todos: [todo({ title: 'alone' })] });
     expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
+  });
+});
+
+describe('TodoList when the list grows', () => {
+  beforeEach(() => localStorage.clear());
+
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => todo({ id: `t${i}`, title: `Piece of work ${i}` }));
+
+  it('shows a short list whole, with nothing held back', () => {
+    setup({ todos: many(3) });
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /more · Show all/ })).not.toBeInTheDocument();
+  });
+
+  it('stops a long list from pushing the sessions away, and says how many it is holding', () => {
+    setup({ todos: many(20) });
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: '15 more · Show all' })).toBeInTheDocument();
+  });
+
+  it('shows them all when asked, and offers the way back', async () => {
+    const user = userEvent.setup();
+    setup({ todos: many(20) });
+    await user.click(screen.getByRole('button', { name: '15 more · Show all' }));
+    expect(screen.getAllByRole('checkbox')).toHaveLength(20);
+    expect(screen.getByRole('button', { name: 'Showing all 20 · Show fewer' })).toBeInTheDocument();
+  });
+
+  it('never hides one whose session is working, wherever it sits', () => {
+    const list = [...many(10), todo({ id: 'live', title: 'Mileage claims', sessionId: 's1' })];
+    setup({ todos: list, sessions: [session({ id: 's1' })], states: { s1: { state: 'running', error: null } } });
+    expect(screen.getByRole('checkbox', { name: 'Mileage claims' })).toBeInTheDocument();
+  });
+
+  it('holds a very long title inside the panel rather than widening it', () => {
+    const { container } = { container: document.body };
+    setup({ todos: [todo({ title: 'Supercalifragilisticexpialidociousandthensomemorewordsthatneverend'.repeat(2) })] });
+    expect(container.querySelector('.todo__title')).not.toBeNull();
   });
 });

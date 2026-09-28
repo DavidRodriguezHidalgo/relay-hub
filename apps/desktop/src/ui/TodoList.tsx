@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ExternalSessions, RunState, SessionSummary, Todo, TodoDraft, TodoPatch } from '@relay/shared';
 import { DOT_LABEL, dotState } from './sessionDot';
+import { visibleTodos } from './visibleTodos';
+import { readStored, writeStored } from './viewPrefs';
 
 interface Project {
   name: string;
@@ -47,11 +49,19 @@ export function deliveryNote(dot: string): { text: string; can: boolean } {
  * A row shows the session it launched rather than a slot: the branch it is working on and what
  * that session is doing right now, both read from the session itself so the two cannot disagree.
  */
+const SHOW_ALL_TODOS = 'relay.showAllTodos';
+
 export function TodoList({ todos, sessions, projects, states, external, onCreate, onUpdate, onDelete, onLaunch, onAttach, onDetach, onMove, onOpenSession }: Props) {
   const [title, setTitle] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(() => readStored<boolean>(SHOW_ALL_TODOS, false));
+  const chooseShowAll = (on: boolean) => {
+    setShowAll(on);
+    writeStored(SHOW_ALL_TODOS, on);
+  };
+  const { shown, hidden } = visibleTodos(todos, { sessions, states, external, openId, showAll });
   /** The item whose title is open for editing, and the words as they stand. */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
@@ -135,7 +145,7 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
       )}
       {todos.length > 0 && (
         <ul className="todos__list">
-          {todos.map((t) => {
+          {shown.map((t) => {
             const session = t.sessionId ? (sessions.find((s) => s.id === t.sessionId) ?? null) : null;
             const dot = session ? dotState(session.id, states, external) : null;
             const expanded = openId === t.id;
@@ -372,6 +382,16 @@ export function TodoList({ todos, sessions, projects, states, external, onCreate
             );
           })}
         </ul>
+      )}
+      {hidden > 0 && (
+        <button type="button" className="todos__more" onClick={() => chooseShowAll(true)}>
+          {hidden} more · Show all
+        </button>
+      )}
+      {showAll && todos.length > 0 && (
+        <button type="button" className="todos__more" onClick={() => chooseShowAll(false)}>
+          Showing all {todos.length} · Show fewer
+        </button>
       )}
     </section>
   );

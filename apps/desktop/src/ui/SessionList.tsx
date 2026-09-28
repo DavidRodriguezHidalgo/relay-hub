@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { modelLabel, type ExternalSessions, type RunState, type SessionSummary } from '@relay/shared';
 import { groupSessions } from './groupSessions';
 import { recentSessions } from './recentSessions';
+import { readStored, writeStored } from './viewPrefs';
 import { DOT_LABEL, dotState, isActive } from './sessionDot';
 
 const COLLAPSED_KEY = 'relay.collapsedRepos';
@@ -10,23 +11,6 @@ const SHOW_ALL_KEY = 'relay.showAllSessions';
 /** Past this, a session is close enough to full that the row should say so. */
 const NEARLY_FULL = 85;
 
-/** Per-viewer convenience: a failure to read or write storage just means nothing is remembered. */
-function readStored<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? fallback : (JSON.parse(raw) as T);
-  } catch {
-    return fallback;
-  }
-}
-
-function writeStored(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // storage unavailable: the choice lasts for this window only
-  }
-}
 
 interface Props {
   sessions: SessionSummary[];
