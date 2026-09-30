@@ -548,9 +548,15 @@ describe('TelegramBridge', () => {
     }
     release();
     await until(() => api.sent.length >= 100, 5_000);
-    // the one in flight when the queue filled is the first out, not a casualty of the overflow
-    expect(api.sent[0]!.text).toContain('m0');
-    expect(api.sent.map((s) => s.text).join('\n')).not.toContain('m129x');
+    const bodies = api.sent.map((s) => s.text.split('\n\n')[1]);
+    // 130 queued behind a cap of 100: the one in flight survives, and the 30 dropped are the
+    // oldest of those still waiting — never the one being delivered
+    expect(bodies[0]).toBe('m0');
+    expect(bodies).toHaveLength(100);
+    expect(bodies).not.toContain('m1');
+    expect(bodies).not.toContain('m30');
+    expect(bodies).toContain('m31');
+    expect(bodies[bodies.length - 1]).toBe('m129');
   });
 
   it('stops promptly, unsubscribes, and reports stopped', async () => {
