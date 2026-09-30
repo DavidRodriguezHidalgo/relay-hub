@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -29,6 +29,7 @@ import { SessionStore } from './store/session-store';
 import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
+import { describeFailure } from './failures/classify';
 import { modelInEffect } from '@relay/shared';
 
 /** At most this many images are reported for one session, newest first. */
@@ -46,6 +47,16 @@ const ALLOW_ALL_KEY = 'settings.allowAllActions';
 
 /** Meta key holding the model a session was switched to. */
 const modelKey = (sessionId: string) => `model.${sessionId}`;
+
+/**
+ * Meta key for a session's last failure.
+ *
+ * Run state lives only as long as its runner, and an idle runner is closed after ten minutes, so a
+ * failed session used to read back as idle within the hour — and as idle again after a restart. A
+ * failure is kept because the question "what is broken" outlives the process that hit it.
+ */
+const FAILURE_PREFIX = 'failure.';
+const failureKey = (sessionId: string) => `${FAILURE_PREFIX}${sessionId}`;
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -197,6 +208,7 @@ export class RelayEngine {
       ...createRelayTools({
         listSessions: () => this.listSessions(),
         runState: () => this.runState(),
+        failures: () => this.failures(),
         getTranscript: (id) => this.getTranscript(id),
         send: async (req) => {
           this.refuseRelayOnly();
@@ -790,6 +802,31 @@ export class RelayEngine {
     this.approvals.decide(approvalId, decision);
   }
 
+  /**
+   * The last failure of each session that has one, whether or not its runner is still alive.
+   *
+   * A session held by another Claude process is deliberately not in here. It has not failed — it
+   * is simply not Relay's to drive — and calling that an error would put a red mark on every
+   * session the user has open in a terminal. `runState().external` is where that is answered.
+   */
+  failures(): Record<string, SessionFailure> {
+    const out: Record<string, SessionFailure> = {};
+    // one query for the lot, like listSessions does for models; this is read on every tool call
+    const stored = this.store.metaByPrefix(FAILURE_PREFIX);
+    if (stored.size === 0) return out;
+    const known = new Set(this.listSessions().map((s) => s.id));
+    for (const [id, value] of stored) {
+      // a record whose session has gone is left in place but never reported, since nothing can act on it
+      if (!known.has(id)) continue;
+      try {
+        out[id] = JSON.parse(value) as SessionFailure;
+      } catch {
+        // an unreadable record is no record; better silent than a fabricated failure
+      }
+    }
+    return out;
+  }
+
   runState(): RunState {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
@@ -869,6 +906,20 @@ export class RelayEngine {
           notice: 'You stopped this turn.',
         },
       });
+    });
+    runner.on('turn-end', (end) => {
+      // quitting is not a failure: closing interrupts running turns, and an SDK iterator that
+      // rejects on the way out would otherwise persist an error for a session that was fine
+      if (this.closing) return;
+      // a stopped turn is not a fault: only a real error is kept, and a good turn clears the last one
+      if (end.error) {
+        this.store.setMeta(
+          failureKey(sessionId),
+          JSON.stringify(describeFailure(end.error, this.now().toISOString(), end.apiError)),
+        );
+      } else if (!end.aborted) {
+        this.store.setMeta(failureKey(sessionId), null);
+      }
     });
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));

@@ -34,6 +34,8 @@ export interface TurnEnd {
   error: string | null;
   /** The turn was interrupted before it completed. */
   aborted: boolean;
+  /** The code Claude Code attached when the request itself failed, so the cause is not guessed from wording. */
+  apiError?: string;
 }
 
 type RunnerEvents = {
@@ -274,7 +276,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
             // the request itself failed, e.g. an expired login: the process is no use now, and dropping it
             // means the next send starts a fresh one that reads whatever credentials are there by then
             const text = m.blocks.flatMap((b) => (b.kind === 'text' ? [b.text] : [])).join('\n');
-            this.fail(explainApiError(m.apiError, text || m.apiError));
+            this.fail(explainApiError(m.apiError, text || m.apiError), m.apiError);
             return;
           }
           break;
@@ -335,15 +337,15 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     if (origin && !this.settledOrigins.includes(origin)) this.settledOrigins.push(origin);
   }
 
-  private emitTurnEnd(error: string | null, aborted = false): void {
-    const end: TurnEnd = { origins: this.settledOrigins, lastText: this.lastText, error, aborted };
+  private emitTurnEnd(error: string | null, aborted = false, apiError?: string): void {
+    const end: TurnEnd = { origins: this.settledOrigins, lastText: this.lastText, error, aborted, ...(apiError ? { apiError } : {}) };
     this.settledOrigins = [];
     this.lastText = null;
     this.emit('turn-end', end);
   }
 
   /** Drops the run so the next send starts a fresh one; pending approvals are denied first. */
-  private fail(reason: string): void {
+  private fail(reason: string, apiError?: string): void {
     const dropped = this.outstanding.size;
     const unanswered = [...this.outstanding];
     for (const id of unanswered) this.settle(id);
@@ -360,7 +362,7 @@ export class SessionRunner extends EventEmitter<RunnerEvents> {
     this.pendingIds.clear();
     this._error = dropped > 1 ? `${reason} (${dropped - 1} queued message${dropped > 2 ? 's' : ''} dropped)` : reason;
     this.setState('error');
-    this.emitTurnEnd(this._error);
+    this.emitTurnEnd(this._error, false, apiError);
   }
 
   private setState(state: SessionState): void {
