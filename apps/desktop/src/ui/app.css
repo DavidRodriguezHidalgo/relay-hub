@@ -85,9 +85,11 @@
 
   .orchestrator { @apply flex min-h-0 min-w-0 flex-col overflow-hidden px-5 pt-3; }
   /* a column, so the dev box sits at the bottom even when the transcript is short */
-  .session-panel { @apply flex min-w-0 flex-col overflow-x-hidden overflow-y-auto border-l border-line bg-surface pl-6 pr-4 pt-3; }
+  .session-panel { @apply flex min-w-0 flex-col overflow-x-hidden overflow-y-auto border-l border-line bg-surface pl-6 pr-4; }
   .session-panel > * { @apply shrink-0; }
   .placeholder { @apply text-muted; }
+  /* the panel's top padding moved into the pinned header, so the empty state carries its own */
+  .session-panel > .placeholder { @apply pt-3; }
 
   .transcript { @apply m-0 list-none p-0; }
   .entry { @apply mb-3 min-w-0 rounded-lg px-3 py-2 text-[15px] leading-[1.55] [overflow-wrap:anywhere]; }
@@ -129,8 +131,20 @@
   .block-result--error summary { @apply text-danger; }
   .origin { @apply text-accent-fg italic; }
 
-  .session-panel__header h1 { @apply m-0 mb-1 text-[16px] font-semibold; }
-  .session-panel__header p { @apply m-0 mb-2 flex flex-wrap items-center gap-1.5 text-[12px]; }
+  /*
+    Pinned to the top of the panel. Opaque and full-bleed — the negative margins cancel the panel's
+    own padding, as .dev-send does at the other end — so the conversation passes cleanly underneath
+    rather than showing through or peeking down the sides.
+
+    z-5 is deliberately below .slash-menu's z-10: the menu opens upward from the send box and in a
+    short panel can reach this far, and it must come out on top rather than be hidden by the header.
+  */
+  .session-panel__bar { @apply sticky top-0 z-[5] -mr-4 -ml-6 flex items-center gap-2 border-b border-line bg-surface pt-3 pr-4 pb-2 pl-6; }
+  /* one line whatever the width: the title gives way, the status never wraps */
+  .session-panel__bar h1 { @apply m-0 min-w-0 flex-1 truncate text-[15px] font-semibold; }
+  .session-panel__bar > :not(h1) { @apply shrink-0; }
+  .session-panel__detail { @apply pt-2; }
+  .session-panel__detail p { @apply m-0 mb-2 flex flex-wrap items-center gap-1.5 text-[12px]; }
 
   .state { @apply rounded-full border px-2 py-px text-[11px] font-medium; }
   .state--idle, .state--proposed, .state--queued, .state--skipped, .state--cancelled { @apply border-line text-muted; }

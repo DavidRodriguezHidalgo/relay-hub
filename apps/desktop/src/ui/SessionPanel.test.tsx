@@ -682,3 +682,32 @@ describe('SessionPanel message box, without the noise', () => {
     expect(screen.getByLabelText('Delivery')).toBeInTheDocument();
   });
 });
+
+describe('SessionPanel: the header pinned to the top of the panel', () => {
+  const pinned = (c: HTMLElement) => c.querySelector('.session-panel__bar')!;
+
+  it('keeps only what identifies the session, so the pinned strip stays one line', () => {
+    const { container } = renderPanel();
+    const bar = pinned(container);
+    expect(within(bar as HTMLElement).getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
+    expect(bar).toHaveTextContent('idle');
+    // setup details would make it tall, and they are not what you need while reading
+    expect(bar).not.toHaveTextContent('/repo');
+    expect(within(bar as HTMLElement).queryByRole('button', { name: 'Watch PR' })).toBeNull();
+    expect(within(bar as HTMLElement).queryByLabelText(/Show subagent turns/)).toBeNull();
+  });
+
+  it('still shows the setup details, below the pinned strip where they can scroll away', () => {
+    const { container } = renderPanel();
+    expect(screen.getByRole('button', { name: 'Watch PR' })).toBeInTheDocument();
+    expect(screen.getByText('/repo')).toBeInTheDocument();
+    expect(container.querySelector('.session-panel__detail')).toContainElement(screen.getByText('/repo'));
+  });
+
+  it('is the first thing in the panel, so pinning it to the top cannot displace anything', () => {
+    const { container } = renderPanel();
+    expect(container.firstElementChild).toBe(pinned(container));
+    // the send box is pinned to the bottom of the same scroller and must stay the last word there
+    expect(container.querySelector('.dev-send')).toBe(container.lastElementChild);
+  });
+});
