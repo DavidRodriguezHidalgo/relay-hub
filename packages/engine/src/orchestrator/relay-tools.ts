@@ -66,23 +66,30 @@ const clipOrNull = (text: string | null) => (text === null ? null : clip(text, S
  */
 const RECOVERED_AFTER_MS = 60_000;
 
-/** The failure this session is still in, if any. */
-function failureOf(s: SessionSummary, failures: Record<string, SessionFailure>): SessionFailure | null {
+/**
+ * The failure this session is still in, if any.
+ *
+ * A session that is running again is not reported as failed, however its last turn ended: the
+ * record is kept so that stopping the retry does not erase it, but while the retry is in flight
+ * the honest answer is that nothing has failed yet.
+ */
+function failureOf(s: SessionSummary, run: RunState, failures: Record<string, SessionFailure>): SessionFailure | null {
   const f = failures[s.id];
   if (!f) return null;
+  if (run.states[s.id]?.state === 'running') return null;
   const moved = Date.parse(s.lastActivity) - Date.parse(f.at) > RECOVERED_AFTER_MS;
   return moved ? null : f;
 }
 
-/** Compact enough to repeat once per listed session: the kind carries most of the meaning. */
+/** Small enough to repeat once per listed session; describeFailure has already capped the message. */
 const brief = (f: SessionFailure) => ({
   kind: f.kind,
-  message: clip(f.message, SUMMARY_MAX),
+  message: f.message,
   ...(f.resetsAt ? { resetsAt: f.resetsAt } : {}),
 });
 
 function row(s: SessionSummary, run: RunState, failures: Record<string, SessionFailure>) {
-  const failure = failureOf(s, failures);
+  const failure = failureOf(s, run, failures);
   return {
     id: s.id,
     repo: s.repo,
@@ -170,12 +177,17 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
               ...(e.blocks.length > BLOCKS_MAX ? [{ more: e.blocks.length - BLOCKS_MAX }] : []),
             ],
           }));
+        const failure = failureOf(session, run, failures);
+        // the live error is usually the very text the record already carries, so it is only added
+        // when it says something the failure does not
+        const error = clipOrNull(run.states[id]?.error ?? null);
         return ok({
           session: {
             ...row(session, run, failures),
             cwd: session.cwd,
-            error: clipOrNull(run.states[id]?.error ?? null),
-            ...(failures[id] ? { means: FAILURE_MEANING[failures[id].kind] } : {}),
+            ...(error && error !== failure?.message ? { error } : {}),
+            // taken from the same failure the row reports, so a dropped one cannot leave its meaning behind
+            ...(failure ? { means: FAILURE_MEANING[failure.kind] } : {}),
           },
           approvals: run.approvals
             .filter((a) => a.sessionId === id)
@@ -347,19 +359,22 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
         const sessions = deps.listSessions();
         const named = (id: string) => sessions.find((s) => s.id === id);
 
-        const failing = sessions
-          .map((s) => ({ s, f: failureOf(s, failures) }))
+        const broken = sessions
+          // a session open in another Claude process is not this question's business: it cannot be
+          // acted on from here until the user takes it over, and its row already says so
+          .filter((s) => !s.isStale && !run.external[s.id])
+          .map((s) => ({ s, f: failureOf(s, run, failures) }))
           .filter((r): r is { s: SessionSummary; f: SessionFailure } => r.f !== null)
           .sort((a, b) => b.f.at.localeCompare(a.f.at))
-          .slice(0, ATTENTION_MAX)
-          .map(({ s, f }) => ({
-            id: s.id,
-            title: s.title,
-            repo: s.repo,
-            ...brief(f),
-            at: f.at,
-            means: FAILURE_MEANING[f.kind],
-          }));
+          .slice(0, ATTENTION_MAX);
+
+        const failing = broken.map(({ s, f }) => ({
+          id: s.id,
+          title: s.title,
+          repo: s.repo,
+          ...brief(f),
+          at: f.at,
+        }));
 
         const waiting = run.approvals.slice(0, ATTENTION_MAX).map((a) => ({
           approvalId: a.id,
@@ -369,9 +384,15 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
           reason: a.reason,
         }));
 
+        // one line per kind present, not per row: ten sessions on the same limit said it ten times
+        const means = Object.fromEntries(
+          [...new Set(broken.map(({ f }) => f.kind))].map((kind) => [kind, FAILURE_MEANING[kind]]),
+        );
+
         return ok({
           failing,
           waiting,
+          ...(failing.length > 0 ? { means } : {}),
           ...(failing.length === 0 && waiting.length === 0 ? { note: 'Nothing is failing or waiting.' } : {}),
         });
       } catch (err) {

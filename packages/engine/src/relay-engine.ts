@@ -55,7 +55,8 @@ const modelKey = (sessionId: string) => `model.${sessionId}`;
  * failed session used to read back as idle within the hour — and as idle again after a restart. A
  * failure is kept because the question "what is broken" outlives the process that hit it.
  */
-const failureKey = (sessionId: string) => `failure.${sessionId}`;
+const FAILURE_PREFIX = 'failure.';
+const failureKey = (sessionId: string) => `${FAILURE_PREFIX}${sessionId}`;
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -810,11 +811,15 @@ export class RelayEngine {
    */
   failures(): Record<string, SessionFailure> {
     const out: Record<string, SessionFailure> = {};
-    for (const s of this.listSessions()) {
-      const stored = this.store.getMeta(failureKey(s.id));
-      if (!stored) continue;
+    // one query for the lot, like listSessions does for models; this is read on every tool call
+    const stored = this.store.metaByPrefix(FAILURE_PREFIX);
+    if (stored.size === 0) return out;
+    const known = new Set(this.listSessions().map((s) => s.id));
+    for (const [id, value] of stored) {
+      // a record whose session has gone is left in place but never reported, since nothing can act on it
+      if (!known.has(id)) continue;
       try {
-        out[s.id] = JSON.parse(stored) as SessionFailure;
+        out[id] = JSON.parse(value) as SessionFailure;
       } catch {
         // an unreadable record is no record; better silent than a fabricated failure
       }
@@ -903,6 +908,9 @@ export class RelayEngine {
       });
     });
     runner.on('turn-end', (end) => {
+      // quitting is not a failure: closing interrupts running turns, and an SDK iterator that
+      // rejects on the way out would otherwise persist an error for a session that was fine
+      if (this.closing) return;
       // a stopped turn is not a fault: only a real error is kept, and a good turn clears the last one
       if (end.error) {
         this.store.setMeta(

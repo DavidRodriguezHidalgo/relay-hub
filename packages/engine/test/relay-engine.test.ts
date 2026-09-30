@@ -279,6 +279,59 @@ describe('RelayEngine', () => {
     expect(engine!.failures()['s-basic']).toBeUndefined();
   });
 
+  it('stopping a retry leaves the earlier failure standing, since nothing has gone right yet', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result('error_during_execution: boom');
+    await tick();
+    expect(engine!.failures()['s-basic']?.kind).toBe('crash');
+
+    await engine!.send({ sessionId: 's-basic', prompt: 'try again', mode: 'steer', origin: 'user' });
+    await tick();
+    await engine!.interrupt('s-basic');
+    await tick();
+    // only a turn that finished cleanly clears the record; a turn the user stopped proves nothing
+    expect(engine!.failures()['s-basic']?.kind).toBe('crash');
+  });
+
+  it('carries a failure across a restart, but never records one caused by quitting', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const opts = {
+      projectsDir: join(root, 'projects'),
+      dbPath: join(root, 'relay.db'),
+      orchestratorDir: join(root, 'orch'),
+      git: { inspect: async () => ({ branch: 'feat/a', repo: 'r' }) },
+      registry: { foreignHolders: async () => [] },
+    };
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result('error_during_execution: boom');
+    await tick();
+    await engine!.close();
+
+    const restarted = await RelayEngine.start({ ...opts, agent: new FakeAgentClient() });
+    engine = restarted;
+    expect(restarted.failures()['s-basic']?.message).toBe('error_during_execution: boom');
+
+    // a turn still running when the app quits: closing interrupts it, and that is not a failure
+    const quitting = new FakeAgentClient();
+    await restarted.close();
+    const third = await RelayEngine.start({ ...opts, agent: quitting });
+    engine = third;
+    await third.send({ sessionId: 's-basic', prompt: 'b', mode: 'steer', origin: 'user' });
+    await tick();
+    const closing = third.close();
+    quitting.result('error_during_execution: This operation was aborted');
+    await closing;
+
+    const afterQuit = await RelayEngine.start({ ...opts, agent: new FakeAgentClient() });
+    engine = afterQuit;
+    expect(afterQuit.failures()['s-basic']?.message).toBe('error_during_execution: boom');
+  });
+
   it('close interrupts running sessions', async () => {
     const client = new FakeAgentClient();
     await startWithBasic(client);

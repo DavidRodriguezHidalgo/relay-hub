@@ -218,6 +218,11 @@ describe('relay tools and the orchestrator’s context', () => {
 });
 
 describe('relay tools: what is broken', () => {
+  const idle = () => ({
+    states: {}, approvals: [], bulkRuns: [], watches: [],
+    gh: { state: 'ok' as const }, external: {}, queue: {},
+  });
+
   const failed = {
     a: { kind: 'usage-limit' as const, message: 'Usage limit reached; resets at 18:00', at: '2026-09-22T00:00:10.000Z', resetsAt: '18:00' },
   };
@@ -236,13 +241,13 @@ describe('relay tools: what is broken', () => {
 
   it('forgets a failure the session has visibly worked past', async () => {
     const stale = { b: { kind: 'crash' as const, message: 'boom', at: '2026-09-20T00:00:00.000Z' } };
-    const rows = JSON.parse((await call(deps({ failures: () => stale }), 'list_sessions', {})).text).sessions;
+    const rows = JSON.parse((await call(deps({ failures: () => stale, runState: idle }), 'list_sessions', {})).text).sessions;
     // b last worked on the 21st, a day after it failed
     expect(rows.find((r: { id: string }) => r.id === 'b')).not.toHaveProperty('failure');
   });
 
   it('get_session explains what the failure means', async () => {
-    const out = JSON.parse((await call(deps({ failures: () => failed }), 'get_session', { id: 'a' })).text);
+    const out = JSON.parse((await call(deps({ failures: () => failed, runState: idle }), 'get_session', { id: 'a' })).text);
     expect(out.session.failure.kind).toBe('usage-limit');
     expect(out.session.means).toBe('Out of usage for now; it will work again by itself.');
   });
@@ -261,9 +266,10 @@ describe('relay tools: what is broken', () => {
       {
         id: 'a', title: 'Mileage claims', repo: 'repo', kind: 'usage-limit',
         message: 'Usage limit reached; resets at 18:00', resetsAt: '18:00',
-        at: '2026-09-22T00:00:10.000Z', means: 'Out of usage for now; it will work again by itself.',
+        at: '2026-09-22T00:00:10.000Z',
       },
     ]);
+    expect(out.means).toEqual({ 'usage-limit': 'Out of usage for now; it will work again by itself.' });
     expect(out.waiting).toEqual([
       { approvalId: 'ap-1', sessionId: 'b', title: 'OCR ideas', summary: 'Run git push --force', reason: 'destructive-git' },
     ]);
@@ -277,13 +283,81 @@ describe('relay tools: what is broken', () => {
 });
 
 describe('relay tools: a session held in a terminal', () => {
-  const held = () => ({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' as const }, external: { a: 'busy' as const }, queue: {} });
+  const failed = {
+    a: { kind: 'crash' as const, message: 'boom', at: '2026-09-22T00:00:10.000Z' },
+  };
+  const held = () => ({
+    states: {}, approvals: [], bulkRuns: [], watches: [],
+    gh: { state: 'ok' as const }, external: { a: 'busy' as const }, queue: {},
+  });
 
-  it('is flagged but not called an error, and is not listed as broken', async () => {
-    const d = deps({ runState: held });
-    const rows = JSON.parse((await call(d, 'list_sessions', {})).text).sessions;
+  it('is flagged but not called an error when nothing has failed', async () => {
+    const rows = JSON.parse((await call(deps({ runState: held }), 'list_sessions', {})).text).sessions;
     expect(rows[0]).toMatchObject({ id: 'a', state: 'idle', heldElsewhere: true });
     expect(rows[1]).not.toHaveProperty('heldElsewhere');
+  });
+
+  it('is left out of what is broken even when it has a failure, since it cannot be acted on from here', async () => {
+    const d = deps({ runState: held, failures: () => failed });
+    const out = JSON.parse((await call(d, 'needs_attention', {})).text);
+    expect(out.failing).toEqual([]);
+    // the row still tells the truth about it; only the one-call summary leaves it out
+    const rows = JSON.parse((await call(d, 'list_sessions', {})).text).sessions;
+    expect(rows[0]).toMatchObject({ id: 'a', heldElsewhere: true, failure: { kind: 'crash' } });
+  });
+});
+
+describe('relay tools: a session that is running again', () => {
+  const failed = { a: { kind: 'crash' as const, message: 'boom', at: '2026-09-22T00:00:10.000Z' } };
+  const running = () => ({
+    states: { a: { state: 'running' as const, error: null } }, approvals: [], bulkRuns: [], watches: [],
+    gh: { state: 'ok' as const }, external: {}, queue: {},
+  });
+
+  it('is not reported as broken while its retry is in flight', async () => {
+    const d = deps({ runState: running, failures: () => failed });
+    const rows = JSON.parse((await call(d, 'list_sessions', {})).text).sessions;
+    expect(rows[0]).toMatchObject({ id: 'a', state: 'running' });
+    expect(rows[0]).not.toHaveProperty('failure');
     expect(JSON.parse((await call(d, 'needs_attention', {})).text).failing).toEqual([]);
+  });
+});
+
+describe('relay tools: the size of what comes back', () => {
+  const idle2 = () => ({
+    states: {}, approvals: [], bulkRuns: [], watches: [],
+    gh: { state: 'ok' as const }, external: {}, queue: {},
+  });
+
+  const twoLimits = {
+    a: { kind: 'usage-limit' as const, message: 'Usage limit reached', at: '2026-09-22T00:00:10.000Z' },
+    b: { kind: 'usage-limit' as const, message: 'Usage limit reached', at: '2026-09-21T00:00:05.000Z' },
+  };
+
+  it('explains each kind once rather than once per session', async () => {
+    const out = JSON.parse((await call(deps({ failures: () => twoLimits, runState: idle2 }), 'needs_attention', {})).text);
+    expect(out.failing).toHaveLength(2);
+    expect(out.failing.every((f: Record<string, unknown>) => !('means' in f))).toBe(true);
+    expect(out.means).toEqual({ 'usage-limit': 'Out of usage for now; it will work again by itself.' });
+  });
+
+  it('does not repeat the failure text as a separate error in get_session', async () => {
+    const d = deps({
+      failures: () => ({ a: { kind: 'crash' as const, message: 'boom', at: '2026-09-22T00:00:10.000Z' } }),
+      runState: () => ({
+        states: { a: { state: 'error' as const, error: 'boom' } }, approvals: [], bulkRuns: [], watches: [],
+        gh: { state: 'ok' as const }, external: {}, queue: {},
+      }),
+    });
+    const out = JSON.parse((await call(d, 'get_session', { id: 'a' })).text);
+    expect(out.session.failure).toEqual({ kind: 'crash', message: 'boom' });
+    expect(out.session).not.toHaveProperty('error');
+  });
+
+  it('leaves no meaning behind when the failure itself was dropped as stale', async () => {
+    const stale = { b: { kind: 'crash' as const, message: 'boom', at: '2026-09-20T00:00:00.000Z' } };
+    const out = JSON.parse((await call(deps({ failures: () => stale, runState: idle2 }), 'get_session', { id: 'b' })).text);
+    expect(out.session).not.toHaveProperty('failure');
+    expect(out.session).not.toHaveProperty('means');
   });
 });
