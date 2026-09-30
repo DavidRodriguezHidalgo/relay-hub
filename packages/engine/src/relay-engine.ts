@@ -29,7 +29,9 @@ import { SessionStore } from './store/session-store';
 import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
-import { modelInEffect } from '@relay/shared';
+import { modelInEffect, type TelegramBridgeStatus } from '@relay/shared';
+import { TelegramBridge } from './telegram/telegram-bridge';
+import { HttpTelegramApi, type TelegramApi } from './telegram/telegram-api';
 
 /** At most this many images are reported for one session, newest first. */
 const SCREENSHOTS_MAX = 8;
@@ -136,6 +138,8 @@ export class RelayEngine {
   private external: Record<string, 'busy' | 'idle'> = {};
   private readonly commands: CommandCatalog;
   private readonly todos: TodoList;
+  /** Null unless the app has handed over a bot token; nothing about Telegram runs before that. */
+  private telegram: TelegramBridge | null = null;
   private externalTimer: NodeJS.Timeout | null = null;
 
   private constructor(
@@ -229,6 +233,7 @@ export class RelayEngine {
       this.publish({ type: 'state', sessionId: ORCHESTRATOR_KEY, state, error }),
     );
     this.orchestrator.on('entry', (entry) => this.publish({ type: 'entry', sessionId: ORCHESTRATOR_KEY, entry }));
+    this.orchestrator.on('turn-end', (end) => this.publishTurnEnd(ORCHESTRATOR_KEY, end));
     approvals.on('pending', (approval) => this.publish({ type: 'approval', approval }));
     approvals.on('resolved', (approvalId, decision) =>
       this.publish({ type: 'approval-resolved', approvalId, decision }),
@@ -504,8 +509,53 @@ export class RelayEngine {
     this.approvals.setAllowAll(on);
   }
 
-  orchestratorSend(prompt: string): Promise<string> {
-    return this.orchestrator.send(prompt);
+  /** `origin` says where the instruction came from, so a reply can find its way back there. */
+  orchestratorSend(prompt: string, origin: MessageOrigin = 'user'): Promise<string> {
+    return this.orchestrator.send(prompt, { origin });
+  }
+
+  /**
+   * Starts the Telegram bridge with a token the app holds; stops any bridge already running.
+   *
+   * The engine keeps no token of its own: it is handed one, or it is not, and without a call
+   * to this nothing about Telegram ever runs.
+   */
+  startTelegram(opts: { token: string; chatId: number | null; api?: TelegramApi }): TelegramBridgeStatus {
+    this.stopTelegram();
+    const bridge = new TelegramBridge({
+      api: opts.api ?? new HttpTelegramApi(opts.token),
+      relay: {
+        orchestratorSend: (prompt, origin) => this.orchestratorSend(prompt, origin),
+        runState: () => this.runState(),
+        listSessions: () => this.listSessions().map((s) => ({ id: s.id, title: s.title, branch: s.branch })),
+        decide: (id, decision) => this.decide(id, decision),
+        onEvent: (listener) => this.onEvent(listener),
+      },
+      store: this.store,
+      chatId: opts.chatId,
+      now: this.now,
+    });
+    bridge.on('status', (status) => this.publish({ type: 'telegram', status }));
+    this.telegram = bridge;
+    bridge.start();
+    return bridge.status();
+  }
+
+  stopTelegram(): void {
+    const bridge = this.telegram;
+    this.telegram = null;
+    void bridge?.stop();
+  }
+
+  /** What the bridge is doing, or the stopped default when none is running. */
+  telegramStatus(): TelegramBridgeStatus {
+    return this.telegram?.status() ?? { botUsername: null, chatId: null, candidate: null, connection: 'stopped', lastError: null, lastPolledAt: null, ignored: 0 };
+  }
+
+  /** One message to the paired chat, so the setup can be seen to work from the phone. */
+  telegramTest(): Promise<void> {
+    if (!this.telegram) throw new Error('The Telegram bridge is not running.');
+    return this.telegram.sendTest();
   }
 
   orchestratorInterrupt(): Promise<void> {
@@ -809,6 +859,9 @@ export class RelayEngine {
     this.idleTimers.clear();
     // Sessions first, with the relay off: their interrupted turns must not wake the orchestrator.
     this.closing = true;
+    const telegram = this.telegram;
+    this.telegram = null;
+    await telegram?.stop();
     if (this.externalTimer) clearInterval(this.externalTimer);
     this.watcher.stop();
     this.bulk.stop();
@@ -872,6 +925,7 @@ export class RelayEngine {
     });
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));
+    runner.on('turn-end', (end) => this.publishTurnEnd(sessionId, end));
     this.runners.set(sessionId, runner);
   }
 
@@ -904,6 +958,18 @@ export class RelayEngine {
     }, this.idleTimeoutMs);
     timer.unref?.();
     this.idleTimers.set(sessionId, timer);
+  }
+
+  /**
+   * Says a turn ended, whoever started it.
+   *
+   * Distinct from the relay to the orchestrator below, which is one agent telling another and
+   * happens only for turns that agent started. This is the plain fact, for anything watching —
+   * the Telegram bridge decides for itself which of these are worth a phone buzz.
+   */
+  private publishTurnEnd(sessionId: string, end: TurnEnd): void {
+    if (this.closing) return;
+    this.publish({ type: 'turn-end', sessionId, origins: end.origins, lastText: end.lastText, error: end.error, aborted: end.aborted });
   }
 
   /** Tells the orchestrator how a turn it started ended; turns the user started stay quiet. */

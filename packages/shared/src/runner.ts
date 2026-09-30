@@ -1,6 +1,7 @@
 import type { QueuedMessage } from './queue';
 import type { Todo } from './todo';
 import type { TranscriptEntry } from './transcript';
+import type { TelegramBridgeStatus } from './telegram';
 
 /** `sessionId` used by runner events that belong to the orchestrator itself. */
 export const ORCHESTRATOR_KEY = 'orchestrator';
@@ -9,7 +10,8 @@ export type SessionState = 'idle' | 'running' | 'waiting-approval' | 'error';
 
 export type DeliveryMode = 'steer' | 'queue' | 'interrupt';
 
-export type MessageOrigin = 'user' | 'orchestrator' | 'aside' | `watch:${string}` | `bulk:${string}`;
+/** `telegram` is the user too, from a phone: treated as a user everywhere except in choosing where the reply goes. */
+export type MessageOrigin = 'user' | 'telegram' | 'orchestrator' | 'aside' | `watch:${string}` | `bulk:${string}`;
 
 /** A transcript entry produced while Relay drives the session; `origin` names who caused the turn. */
 export interface LiveEntry extends TranscriptEntry {
@@ -103,7 +105,10 @@ export type RunnerEvent =
   | { type: 'queue'; sessionId: string; queue: QueuedMessage[] }
   | { type: 'pr-event'; sessionId: string; watchId: string; event: PrEvent }
   /** The whole list, whenever it changes, whoever changed it: the panel and the chat share one copy. */
-  | { type: 'todos'; todos: Todo[] };
+  | { type: 'todos'; todos: Todo[] }
+  /** A turn ended: who started it, its last reply, and how it ended. The orchestrator's own carry ORCHESTRATOR_KEY. */
+  | { type: 'turn-end'; sessionId: string; origins: MessageOrigin[]; lastText: string | null; error: string | null; aborted: boolean }
+  | { type: 'telegram'; status: TelegramBridgeStatus };
 
 export interface RunState {
   states: Record<string, { state: SessionState; error: string | null }>;

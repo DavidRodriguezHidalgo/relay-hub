@@ -9,6 +9,7 @@ import type { TranscriptEntry } from './transcript';
 import type { Todo, TodoDraft, TodoPatch } from './todo';
 import type { Screenshot } from './shots';
 import type { ContextUse } from './context';
+import type { TelegramStatus } from './telegram';
 
 export const IPC = {
   listSessions: 'relay:listSessions',
@@ -55,6 +56,11 @@ export const IPC = {
   detachTodo: 'relay:detachTodo',
   contextUse: 'relay:contextUse',
   moveTodo: 'relay:moveTodo',
+  telegramStatus: 'relay:telegramStatus',
+  setTelegramToken: 'relay:setTelegramToken',
+  pairTelegram: 'relay:pairTelegram',
+  unpairTelegram: 'relay:unpairTelegram',
+  telegramTest: 'relay:telegramTest',
 } as const;
 
 /**
@@ -71,6 +77,11 @@ export const MAIN_CHANNELS: readonly string[] = [
   IPC.applyCheckout,
   IPC.crashReports,
   IPC.setCrashReports,
+  IPC.telegramStatus,
+  IPC.setTelegramToken,
+  IPC.pairTelegram,
+  IPC.unpairTelegram,
+  IPC.telegramTest,
 ];
 
 export interface SendRequest {
@@ -139,4 +150,13 @@ export interface RelayApi {
   screenshots(sessionId: string): Promise<Screenshot[]>;
   /** The absolute path of a dropped file, which the renderer cannot read for itself. */
   pathForFile(file: File): string;
+  /** Where the Telegram bridge stands; `configured: false` and nothing else when there is no token. */
+  telegramStatus(): Promise<TelegramStatus>;
+  /** Stores the bot token (encrypted where the OS allows) and starts polling; null removes it and stops. */
+  setTelegramToken(token: string | null): Promise<TelegramStatus>;
+  /** Binds the bridge to the chat currently offered as a candidate; refused for any other id. */
+  pairTelegram(chatId: number): Promise<TelegramStatus>;
+  unpairTelegram(): Promise<TelegramStatus>;
+  /** Sends one message to the paired chat, so the setup can be seen to work from the phone. */
+  telegramTest(): Promise<void>;
 }
