@@ -21,7 +21,7 @@ export type SdkQueryFn = (params: {
   interrupt(): Promise<unknown>;
   close?(): void;
   supportedCommands?(): Promise<Invocable[]>;
-  supportedModels?(): Promise<{ value: string; displayName?: string; description?: string }[]>;
+  supportedModels?(): Promise<{ value: string; resolvedModel?: string; displayName?: string; description?: string }[]>;
   setModel?(model?: string): Promise<void>;
 };
 
@@ -197,7 +197,14 @@ export class SdkAgentClient implements AgentClient {
       return {
         commands: commands.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint ?? '' })),
         models: models.map(
-          (m): ModelChoice => ({ id: m.value, name: m.displayName ?? m.value, description: m.description ?? '', current: false }),
+          (m): ModelChoice => ({
+            id: m.value,
+            name: m.displayName ?? m.value,
+            description: m.description ?? '',
+            // an option that does not say what it resolves to can only speak for itself
+            resolvedModel: m.resolvedModel ?? m.value,
+            current: false,
+          }),
         ),
       };
     } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { modelLabel, type NewSessionModel } from '@relay/shared';
 
 interface Project {
   name: string;
@@ -8,6 +9,8 @@ interface Project {
 
 interface Props {
   listProjects: () => Promise<Project[]>;
+  /** What this session will come up on; null while it is still being looked up. */
+  model: NewSessionModel | null;
   onCreate: (req: { project: string; branch: string; prompt: string }) => Promise<{ sessionId: string; cwd: string }>;
   onCreated: (sessionId: string) => void;
   onCancel: () => void;
@@ -20,7 +23,7 @@ function previewPath(root: string, branch: string): string {
 }
 
 /** Starts a fresh Claude session in a new worktree of one of your repos. */
-export function NewSessionForm({ listProjects, onCreate, onCreated, onCancel }: Props) {
+export function NewSessionForm({ listProjects, model, onCreate, onCreated, onCancel }: Props) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState('');
   const [branch, setBranch] = useState('');
@@ -71,6 +74,8 @@ export function NewSessionForm({ listProjects, onCreate, onCreated, onCancel }: 
         <input aria-label="Branch" placeholder="feat/my-change" value={branch} onChange={(e) => setBranch(e.target.value)} />
       </label>
       {project && branch.trim() && <p className="new-session__where">New worktree: {previewPath(project, branch.trim())}</p>}
+      {/* said before the session exists, so the model is never a surprise found out afterwards */}
+      {model?.resolvedModel && <p className="new-session__where">Runs on {modelLabel(model.resolvedModel)}</p>}
       <label>
         First instruction
         <textarea aria-label="First instruction" rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />

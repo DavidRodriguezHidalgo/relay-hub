@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CheckoutPlan } from '@relay/shared';
+import type { CheckoutPlan, NewSessionModel } from '@relay/shared';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Settings } from './Settings';
 
 const base = {
-  newSessionModel: null,
+  newSessionModel: null as NewSessionModel | null,
   onNewSessionModel: vi.fn(),
   claudeDefaultModel: null,
   claudeSettingsPath: '/home/.claude/settings.json',
@@ -218,54 +218,48 @@ describe('Settings tells apart pulling, rebuilding and an unmerged change', () =
 });
 
 describe('Settings and the model new sessions start on', () => {
-  it('names the saved default and where it lives, rather than leaving it a mystery', () => {
+  const MODELS = [
+    { id: 'default', name: 'Default (recommended)', description: '', resolvedModel: 'claude-opus-5[1m]', current: true },
+    { id: 'sonnet', name: 'Sonnet', description: 'fast', resolvedModel: 'claude-sonnet-5', current: false },
+  ];
+  const RECOMMENDED = { id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended' as const };
+
+  it('says what a new session will run on, so it is not a surprise found out later', () => {
+    render(<Settings {...base} models={MODELS} newSessionModel={RECOMMENDED} />);
+    expect(screen.getByText(/New sessions run on Opus 5 \[1m\]/)).toBeInTheDocument();
+  });
+
+  it('says it ignores the saved default and leaves that file alone, naming both', () => {
     render(
       <Settings
         {...base}
+        models={MODELS}
+        newSessionModel={RECOMMENDED}
         claudeDefaultModel="claude-fable-5-1[1m]"
         claudeSettingsPath="/Users/someone/.claude/settings.json"
       />,
     );
-    expect(screen.getByText(/Relay asks for no model unless you choose one here/)).toBeInTheDocument();
-    expect(screen.getByText(/\/Users\/someone\/\.claude\/settings\.json/)).toBeInTheDocument();
+    const note = screen.getByText(/Fable 5\.1/);
+    expect(note).toHaveTextContent('/Users/someone/.claude/settings.json');
+    expect(note).toHaveTextContent(/never writes/);
   });
 
-  it('offers Claude Code’s default as the first choice, naming what that is', () => {
-    render(<Settings {...base} claudeDefaultModel="claude-fable-5-1[1m]" />);
+  it('offers only models the real source listed, with the one in use selected', () => {
+    render(<Settings {...base} models={MODELS} newSessionModel={RECOMMENDED} />);
     const picker = screen.getByLabelText('Model for new sessions');
-    expect(picker).toHaveValue('');
-    expect(picker).toHaveTextContent(/Claude Code's default/);
+    expect(picker).toHaveValue('default');
+    expect([...picker.querySelectorAll('option')].map((o) => o.value)).toEqual(['default', 'sonnet']);
   });
 
   it('lets a model be chosen for new sessions', async () => {
     const onNewSessionModel = vi.fn();
-    render(
-      <Settings
-        {...base}
-        onNewSessionModel={onNewSessionModel}
-        models={[{ id: 'claude-sonnet-4-5', name: 'Sonnet', description: 'fast', current: false }]}
-      />,
-    );
-    await userEvent.selectOptions(screen.getByLabelText('Model for new sessions'), 'claude-sonnet-4-5');
-    expect(onNewSessionModel).toHaveBeenCalledWith('claude-sonnet-4-5');
+    render(<Settings {...base} models={MODELS} newSessionModel={RECOMMENDED} onNewSessionModel={onNewSessionModel} />);
+    await userEvent.selectOptions(screen.getByLabelText('Model for new sessions'), 'sonnet');
+    expect(onNewSessionModel).toHaveBeenCalledWith('sonnet');
   });
 
-  it('hands the choice back with the empty option, rather than leaving no way out', async () => {
-    const onNewSessionModel = vi.fn();
-    render(
-      <Settings
-        {...base}
-        newSessionModel="claude-sonnet-4-5"
-        onNewSessionModel={onNewSessionModel}
-        models={[{ id: 'claude-sonnet-4-5', name: 'Sonnet', description: 'fast', current: true }]}
-      />,
-    );
-    await userEvent.selectOptions(screen.getByLabelText('Model for new sessions'), '');
-    expect(onNewSessionModel).toHaveBeenCalledWith(null);
-  });
-
-  it('says plainly when Claude Code has no saved default', () => {
-    render(<Settings {...base} claudeDefaultModel={null} />);
-    expect(screen.getByText(/Claude Code has no saved default/)).toBeInTheDocument();
+  it('says so plainly when the model list could not be read, rather than naming a model it is not sure of', () => {
+    render(<Settings {...base} models={[]} newSessionModel={{ id: null, resolvedModel: null, source: 'unknown' }} />);
+    expect(screen.getByText(/could not be read/)).toBeInTheDocument();
   });
 });

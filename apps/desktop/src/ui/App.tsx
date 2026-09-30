@@ -8,6 +8,7 @@ import {
   type TranscriptEntry,
   type UpdateCheck,
   type ModelChoice,
+  type NewSessionModel,
   type SessionStatus,
   type CheckoutPlan,
   type CheckoutResult,
@@ -126,7 +127,7 @@ export function App() {
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
   const [crashReports, setCrashReports] = useState(false);
-  const [newSessionModel, setNewSessionModel] = useState<string | null>(null);
+  const [newSessionModel, setNewSessionModel] = useState<NewSessionModel | null>(null);
   const [claudeDefault, setClaudeDefault] = useState<{ model: string | null; path: string }>({ model: null, path: '' });
   const [modelChoices, setModelChoices] = useState<ModelChoice[]>([]);
 
@@ -138,10 +139,10 @@ export function App() {
   useEffect(() => {
     void window.relay.settings().then((s) => {
       setAllowAllActions(s.allowAllActions);
-      setNewSessionModel(s.newSessionModel);
       setClaudeDefault({ model: s.claudeDefaultModel, path: s.claudeSettingsPath });
     });
     void window.relay.availableModels().then(setModelChoices, () => undefined);
+    void window.relay.newSessionModel().then(setNewSessionModel, () => undefined);
     void window.relay.crashReports().then(setCrashReports, () => undefined);
   }, []);
 
@@ -307,7 +308,10 @@ export function App() {
           onNewSessionModel={(model) => {
             void window.relay
               .setNewSessionModel(model)
-              .then(() => setNewSessionModel(model))
+              .then(async () => {
+                setNewSessionModel(await window.relay.newSessionModel());
+                setModelChoices(await window.relay.availableModels());
+              })
               .catch((e: unknown) => setSettingsError(e instanceof Error ? e.message : String(e)));
           }}
           claudeDefaultModel={claudeDefault.model}
@@ -367,6 +371,7 @@ export function App() {
           creating && (
             <NewSessionForm
               listProjects={window.relay.listProjects}
+              model={newSessionModel}
               onCreate={(req) => window.relay.createSession(req)}
               onCreated={(id) => {
                 setCreating(false);

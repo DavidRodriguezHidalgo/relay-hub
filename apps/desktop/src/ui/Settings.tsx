@@ -1,7 +1,19 @@
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
-import { modelLabel, type ModelChoice } from '@relay/shared';
+import { modelLabel, type ModelChoice, type NewSessionModel } from '@relay/shared';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
+
+/** What a new session will come up on, said plainly enough to act on before starting one. */
+function runsOn(model: NewSessionModel | null): string {
+  if (!model) return 'Looking up what new sessions will run on…';
+  if (!model.resolvedModel) {
+    return model.source === 'chosen'
+      ? `New sessions run on ${modelLabel(model.id!)}, which is no longer in the list of models offered.`
+      : 'The list of models could not be read, so Relay will let Claude Code choose and cannot say what that will be.';
+  }
+  const why = model.source === 'chosen' ? 'your choice' : 'the recommended default';
+  return `New sessions run on ${modelLabel(model.resolvedModel)} — ${why}.`;
+}
 
 interface Props {
   theme: Theme;
@@ -10,9 +22,9 @@ interface Props {
   onAllowAllActions: (on: boolean) => void;
   crashReports: boolean;
   onCrashReports: (on: boolean) => void;
-  /** What Relay asks for when it starts a session; null leaves the choice to Claude Code. */
-  newSessionModel: string | null;
-  onNewSessionModel: (model: string | null) => void;
+  /** What a new session will run on, or null before it has been looked up. */
+  newSessionModel: NewSessionModel | null;
+  onNewSessionModel: (model: string) => void;
   /** What Claude Code would pick on its own, and where that is saved. */
   claudeDefaultModel: string | null;
   claudeSettingsPath: string;
@@ -96,12 +108,9 @@ export function Settings(p: Props) {
             Model
             <select
               aria-label="Model for new sessions"
-              value={p.newSessionModel ?? ''}
-              onChange={(e) => p.onNewSessionModel(e.target.value || null)}
+              value={p.newSessionModel?.id ?? ''}
+              onChange={(e) => p.onNewSessionModel(e.target.value)}
             >
-              <option value="">
-                Claude Code's default{p.claudeDefaultModel ? ` — ${modelLabel(p.claudeDefaultModel)}` : ''}
-              </option>
               {p.models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -109,10 +118,13 @@ export function Settings(p: Props) {
               ))}
             </select>
           </label>
+          <p className="settings__note">{runsOn(p.newSessionModel)}</p>
           <p className="settings__note">
             {p.claudeDefaultModel
-              ? `Relay asks for no model unless you choose one here, so a new session comes up on whatever Claude Code has saved — currently ${modelLabel(p.claudeDefaultModel)}, set by a /model command and kept in ${p.claudeSettingsPath}. Choosing here overrides that for sessions Relay starts, without touching that file.`
-              : `Claude Code has no saved default, so a new session comes up on whatever it picks. Choosing here makes Relay ask for one instead. Its setting lives in ${p.claudeSettingsPath}.`}
+              ? `Relay asks for this model by name every time it starts a session. Your own saved default (${modelLabel(
+                  p.claudeDefaultModel,
+                )}, in ${p.claudeSettingsPath}) is left to the sessions you start yourself — Relay does not use it and never writes to that file.`
+              : `Relay asks for this model by name every time it starts a session, so nothing it starts depends on the saved default in ${p.claudeSettingsPath}. Relay never writes to that file.`}
           </p>
         </section>
         <section className="settings__section">

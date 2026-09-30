@@ -5,8 +5,8 @@ import type { ModelChoice } from '@relay/shared';
 import { ModelPicker } from './ModelPicker';
 
 const choices: ModelChoice[] = [
-  { id: 'claude-opus-5', name: 'Opus 5', description: '', current: true },
-  { id: 'claude-sonnet-4-5', name: 'Sonnet 4.5', description: '', current: false },
+  { id: 'claude-opus-5', name: 'Opus 5', description: '', resolvedModel: 'claude-opus-5', current: true },
+  { id: 'claude-sonnet-4-5', name: 'Sonnet 4.5', description: '', resolvedModel: 'claude-sonnet-4-5', current: false },
 ];
 
 describe('ModelPicker', () => {

@@ -3,7 +3,7 @@ import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure, type NewSessionModel } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -33,6 +33,7 @@ import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
 import { describeFailure } from './failures/classify';
 import { claudeDefaultModel, claudeSettingsPath } from './models/default-model';
+import { newSessionModel as resolveNewSessionModel } from './models/new-session-model';
 import { modelInEffect } from '@relay/shared';
 
 /** At most this many images are reported for one session, newest first. */
@@ -135,13 +136,11 @@ export interface SendOptions {
 export interface RelaySettings {
   allowAllActions: boolean;
   /**
-   * What Relay asks for when it starts a session. Null means it asks for nothing and Claude Code
-   * decides, which is what it has always done.
+   * What Claude Code would pick on its own, read from its settings; null when it has no saved
+   * default. Relay does not use it — it is reported so the app can say plainly that it is ignored.
    */
-  newSessionModel: string | null;
-  /** What Claude Code would pick on its own, read from its settings; null when it has no saved default. */
   claudeDefaultModel: string | null;
-  /** Where that saved default lives, so the app can say where to change it. */
+  /** Where that saved default lives, so the app can name the file it is leaving alone. */
   claudeSettingsPath: string;
 }
 
@@ -521,7 +520,6 @@ export class RelayEngine {
   settings(): RelaySettings {
     return {
       allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true',
-      newSessionModel: this.store.getMeta(NEW_SESSION_MODEL_KEY),
       claudeDefaultModel: claudeDefaultModel(homedir(), (path) => readFileSync(path, 'utf8')),
       claudeSettingsPath: claudeSettingsPath(homedir()),
     };
@@ -536,12 +534,29 @@ export class RelayEngine {
     this.store.setMeta(NEW_SESSION_MODEL_KEY, model);
   }
 
-  /** The models a session could run on, asked of the orchestrator's own directory. */
-  async availableModels(): Promise<ModelChoice[]> {
+  /**
+   * What a new session will run on, before one is started.
+   *
+   * Resolved live rather than stored, so the answer follows the model list instead of freezing
+   * whatever was recommended on the day the setting was first written.
+   */
+  async newSessionModel(): Promise<NewSessionModel> {
+    return resolveNewSessionModel(this.store.getMeta(NEW_SESSION_MODEL_KEY), await this.offeredModels());
+  }
+
+  /** The model list, asked of the orchestrator's own directory since Settings has no session to ask about. */
+  private async offeredModels(): Promise<ModelChoice[]> {
     const cwd = [...this.orchestratorCwds][0] ?? process.cwd();
     const { models } = await this.commands.list(cwd);
-    const chosen = this.store.getMeta(NEW_SESSION_MODEL_KEY);
-    return models.map((m) => ({ ...m, current: chosen === null ? false : m.id === chosen }));
+    return models;
+  }
+
+  /** The models a session could run on, asked of the orchestrator's own directory. */
+  async availableModels(): Promise<ModelChoice[]> {
+    const models = await this.offeredModels();
+    // marks what a new session will actually use, which with no choice stored is the recommended one
+    const inUse = resolveNewSessionModel(this.store.getMeta(NEW_SESSION_MODEL_KEY), models).id;
+    return models.map((m) => ({ ...m, current: m.id === inUse }));
   }
 
   setAllowAllActions(on: boolean): void {
@@ -653,8 +668,8 @@ export class RelayEngine {
       client: this.agent,
       approvals: this.approvals,
       profile: { kind: 'session' },
-      // asked for only when it has been chosen here; otherwise Claude Code's own default stands
-      model: this.store.getMeta(NEW_SESSION_MODEL_KEY) ?? undefined,
+      // always asked for, so a new session never inherits whatever a past /model command saved
+      model: (await this.newSessionModel()).id ?? undefined,
     });
     let sessionId: string;
     try {

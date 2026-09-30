@@ -35,6 +35,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
     IPC.setAllowAllActions,
     IPC.setNewSessionModel,
     IPC.availableModels,
+    IPC.newSessionModel,
     IPC.channels,
     IPC.aside,
     IPC.checkForUpdate,
@@ -79,6 +80,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.setAllowAllActions, (on: boolean) => engine.setAllowAllActions(on));
   handle(IPC.setNewSessionModel, (model: string | null) => engine.setNewSessionModel(model));
   handle(IPC.availableModels, () => engine.availableModels());
+  handle(IPC.newSessionModel, () => engine.newSessionModel());
   // everything the process answers, the app's own handlers included, or the window reads a
   // complete process as an out-of-date one
   handle(IPC.channels, () => [...channels, ...MAIN_CHANNELS]);

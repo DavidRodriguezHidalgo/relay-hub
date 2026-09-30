@@ -12,7 +12,7 @@ describe('NewSessionForm', () => {
   it('needs a project, a branch and an instruction, then creates the session', async () => {
     const onCreate = vi.fn(async () => ({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' }));
     const onCreated = vi.fn();
-    render(<NewSessionForm listProjects={async () => projects} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
+    render(<NewSessionForm listProjects={async () => projects} model={null} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
     const submit = await screen.findByRole('button', { name: 'Create session' });
     expect(submit).toBeDisabled();
     await userEvent.selectOptions(screen.getByLabelText('Project'), '/code/factorial');
@@ -31,7 +31,7 @@ describe('NewSessionForm', () => {
       throw new Error('The branch feat/x already exists; pick another name or use its worktree');
     });
     const onCreated = vi.fn();
-    render(<NewSessionForm listProjects={async () => projects} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
+    render(<NewSessionForm listProjects={async () => projects} model={null} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
     await userEvent.selectOptions(await screen.findByLabelText('Project'), '/code/factorial');
     await userEvent.type(screen.getByLabelText('Branch'), 'feat/x');
     await userEvent.type(screen.getByLabelText('First instruction'), 'x');
@@ -39,5 +39,29 @@ describe('NewSessionForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
     expect(onCreated).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Create session' })).toBeEnabled();
+  });
+});
+
+describe('NewSessionForm and the model it will use', () => {
+  const projects = async () => [{ name: 'relay', root: '/code/relay', sessions: 2 }];
+
+  it('says what the session will run on before it is created', async () => {
+    render(
+      <NewSessionForm
+        listProjects={projects}
+        model={{ id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended' }}
+        onCreate={vi.fn()}
+        onCreated={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(/Runs on Opus 5 \[1m\]/)).toBeInTheDocument();
+  });
+
+  it('says nothing about the model rather than guessing, when it is not known yet', () => {
+    render(
+      <NewSessionForm listProjects={projects} model={null} onCreate={vi.fn()} onCreated={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(screen.queryByText(/Runs on/)).not.toBeInTheDocument();
   });
 });

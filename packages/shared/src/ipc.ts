@@ -2,7 +2,7 @@ import type { Invocable } from './commands';
 import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { Accomplished } from './accomplished';
-import type { ModelChoice } from './models';
+import type { ModelChoice, NewSessionModel } from './models';
 import type { SessionStatus } from './status';
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
 import type { TranscriptEntry } from './transcript';
@@ -34,6 +34,7 @@ export const IPC = {
   setAllowAllActions: 'relay:setAllowAllActions',
   setNewSessionModel: 'relay:setNewSessionModel',
   availableModels: 'relay:availableModels',
+  newSessionModel: 'relay:newSessionModel',
   channels: 'relay:channels',
   aside: 'relay:aside',
   checkForUpdate: 'relay:checkForUpdate',
@@ -105,7 +106,6 @@ export interface RelayApi {
   takeOver(sessionId: string): Promise<number[]>;
   settings(): Promise<{
     allowAllActions: boolean;
-    newSessionModel: string | null;
     claudeDefaultModel: string | null;
     claudeSettingsPath: string;
   }>;
@@ -114,6 +114,8 @@ export interface RelayApi {
   setNewSessionModel(model: string | null): Promise<void>;
   /** The models a new session could run on. */
   availableModels(): Promise<ModelChoice[]>;
+  /** What a new session will run on, and whether that is a choice or the recommended default. */
+  newSessionModel(): Promise<NewSessionModel>;
   /** The channels the running main process answers; a window compares it with what it expects. */
   channels(): Promise<string[]>;
   /** A side question answered from a copy of the session; resolves with the answer. */

@@ -287,8 +287,8 @@ describe('SdkAgentClient', () => {
     const described = await new SdkAgentClient(fakeQuery).describe('/r');
     expect(described.commands).toEqual([{ name: 'review', description: 'Review', argumentHint: '[pr]' }]);
     expect(described.models).toEqual([
-      { id: 'default', name: 'Default (recommended)', description: 'Opus 5', current: false },
-      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', current: false },
+      { id: 'default', name: 'Default (recommended)', description: 'Opus 5', resolvedModel: 'claude-opus-5', current: false },
+      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', resolvedModel: 'claude-sonnet-5', current: false },
     ]);
     expect(closed).toBe(true);
   });
@@ -310,5 +310,19 @@ describe('SdkAgentClient', () => {
     expect(seen!.options).toMatchObject({ model: 'sonnet' });
     await run.setModel?.('opus[1m]');
     expect(switched).toEqual(['opus[1m]']);
+  });
+});
+
+describe('SdkAgentClient and an option that does not say what it resolves to', () => {
+  it('lets the option speak for itself rather than leaving the answer blank', async () => {
+    const fakeQuery = (() => {
+      const g = (async function* () {})() as AsyncGenerator<unknown> & Record<string, unknown>;
+      g.supportedCommands = async () => [];
+      g.supportedModels = async () => [{ value: 'sonnet', displayName: 'Sonnet' }];
+      g.close = () => undefined;
+      return g;
+    }) as unknown as SdkQueryFn;
+    const { models } = await new SdkAgentClient(fakeQuery).describe('/r');
+    expect(models[0]).toMatchObject({ id: 'sonnet', resolvedModel: 'sonnet' });
   });
 });
