@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test } from '@playwright/test';
+import { _electron as electron, expect, test, type Page } from '@playwright/test';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -35,6 +35,20 @@ async function launchWithLongTranscript(turns: number) {
   });
 }
 
+/**
+ * The header must stay clear of the send box, which is pinned to the bottom of the same scroller.
+ *
+ * That box is `devTools` only (`import.meta.env.DEV`), so a packaged build — which is what CI
+ * drives — has no input on this panel at all and nothing to overlap. The check runs where the box
+ * exists and says so where it does not, rather than waiting for an element that is never coming.
+ */
+async function expectClearOfTheSendBox(page: Page, header: { y: number; height: number }) {
+  const sendBox = page.locator('.dev-send textarea');
+  if ((await sendBox.count()) === 0) return;
+  const send = (await sendBox.boundingBox())!;
+  expect(header.y + header.height).toBeLessThan(send.y);
+}
+
 test('the session header stays at the top of the panel while the conversation scrolls under it', async () => {
   const app = await launchWithLongTranscript(60);
   const page = await app.firstWindow();
@@ -43,7 +57,6 @@ test('the session header stays at the top of the panel while the conversation sc
 
   const panel = page.getByLabel('Session panel');
   const bar = page.locator('.session-panel__bar');
-  const sendBox = page.locator('.dev-send textarea');
   await expect(bar).toBeVisible();
 
   const atTop = (await bar.boundingBox())!;
@@ -70,9 +83,7 @@ test('the session header stays at the top of the panel while the conversation sc
   // one line: a tall block stuck to the top would eat the panel
   expect(pinned.height).toBeLessThan(56);
 
-  // it must never reach the send box, which is pinned to the bottom of the same scroller
-  const send = (await sendBox.boundingBox())!;
-  expect(pinned.y + pinned.height).toBeLessThan(send.y);
+  await expectClearOfTheSendBox(page, pinned);
 
   await app.close();
 });
@@ -92,8 +103,7 @@ test('the pinned header stays one line on a narrow window, and still clears the 
   const panelBox = (await panel.boundingBox())!;
   expect(Math.abs(pinned.y - panelBox.y)).toBeLessThan(2);
   expect(pinned.height).toBeLessThan(56);
-  const send = (await page.locator('.dev-send textarea').boundingBox())!;
-  expect(pinned.y + pinned.height).toBeLessThan(send.y);
+  await expectClearOfTheSendBox(page, pinned);
 
   await app.close();
 });
