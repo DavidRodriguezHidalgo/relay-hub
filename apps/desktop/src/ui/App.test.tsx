@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { IPC, type RelayApi, type RunnerEvent, type SessionSummary } from '@relay/shared';
+import { IPC, NO_TELEGRAM, type RelayApi, type RunnerEvent, type SessionSummary } from '@relay/shared';
 import { App } from './App';
 
 const s = (over: Partial<SessionSummary>): SessionSummary => ({
@@ -68,6 +68,11 @@ describe('App', () => {
       attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
       detachTodo: vi.fn().mockResolvedValue([]),
       contextUse: vi.fn().mockResolvedValue(null),
+      telegramStatus: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      setTelegramToken: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      pairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      unpairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      telegramTest: vi.fn().mockResolvedValue(undefined),
     };
     Object.assign(window, { relay });
   });
@@ -494,6 +499,11 @@ describe('App collisions', () => {
       attachTodo: vi.fn().mockResolvedValue({ mode: 'steer', todos: [] }),
       detachTodo: vi.fn().mockResolvedValue([]),
       contextUse: vi.fn().mockResolvedValue(null),
+      telegramStatus: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      setTelegramToken: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      pairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      unpairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
+      telegramTest: vi.fn().mockResolvedValue(undefined),
     };
     Object.assign(window, { relay });
   });

@@ -247,6 +247,8 @@
   .settings__section h3 { @apply mt-0 mb-1.5 text-[13px] font-semibold text-muted uppercase; }
   .settings__row { @apply flex items-center gap-2 py-0.5; }
   .settings__note { @apply mt-1.5 mb-0 text-[12px] leading-[1.5] text-muted; }
+  .settings__steps { @apply mt-1.5 mb-1.5 flex flex-col gap-1 pl-5 text-[12px] leading-[1.5] text-muted; }
+  .settings__steps li { @apply list-decimal; }
   .gh-banner { @apply shrink-0 bg-accent px-3 py-1 text-center text-[12px] font-semibold text-on-accent; }
   .watch { @apply text-[11px] text-muted; }
 }

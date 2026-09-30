@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BulkRun, ExternalSessions, GhStatus, LiveEntry, PendingApproval, PrWatch, QueuedMessage, RunState, RunnerEvent, Todo } from '@relay/shared';
+import type { BulkRun, ExternalSessions, GhStatus, LiveEntry, PendingApproval, PrWatch, QueuedMessage, RunState, RunnerEvent, TelegramBridgeStatus, Todo } from '@relay/shared';
 
 export interface RunView {
   states: RunState['states'];
@@ -12,11 +12,13 @@ export interface RunView {
   queue: Record<string, QueuedMessage[]>;
   /** The todo list, kept here so the panel and the chat can never disagree about it. */
   todos: Todo[];
+  /** The Telegram bridge's own report of itself; null until it says something, which it never does unconfigured. */
+  telegram: TelegramBridgeStatus | null;
 }
 
 /** Mirrors the engine's run state in the renderer: initial snapshot, then events. */
 export function useRunState(): RunView {
-  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {}, todos: [] });
+  const [view, setView] = useState<RunView>({ states: {}, approvals: [], liveEntries: {}, bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {}, todos: [], telegram: null });
   useEffect(() => {
     // events that arrive before the snapshot are replayed on top of it, so the snapshot never undoes them
     let early: RunnerEvent[] | null = [];
@@ -69,7 +71,10 @@ function apply(v: RunView, event: RunnerEvent): RunView {
           case 'queue':
             return { ...v, queue: { ...v.queue, [event.sessionId]: event.queue } };
           case 'pr-event':
+          case 'turn-end':
             return v;
+          case 'telegram':
+            return { ...v, telegram: event.status };
           case 'bulk': {
             const others = v.bulkRuns.filter((r) => r.id !== event.run.id);
             return { ...v, bulkRuns: [event.run, ...others].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) };

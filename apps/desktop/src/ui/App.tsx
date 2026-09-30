@@ -30,6 +30,7 @@ import { SessionPanel } from './SessionPanel';
 import { dotState } from './sessionDot';
 import { useFollowBottom } from './useFollowBottom';
 import { useRunState } from './useRunState';
+import { useTelegram } from './useTelegram';
 
 /** Stable empty list: a new array each render would defeat the transcript's memoisation. */
 const NO_ENTRIES: TranscriptEntry[] = [];
@@ -154,6 +155,7 @@ export function App() {
       return next;
     });
   const run = useRunState();
+  const telegram = useTelegram(run.telegram);
   /** The engine owns this one, so it is set there first and only then shown as on. */
   const changeAllowAll = async (on: boolean) => {
     try {
@@ -310,6 +312,14 @@ export function App() {
           checkoutResult={checkoutResult}
           pulling={pulling}
           onPull={() => void pull()}
+          telegram={telegram.status}
+          telegramBusy={telegram.busy}
+          telegramError={telegram.error}
+          telegramTestSent={telegram.testSent}
+          onTelegramToken={(token) => void telegram.setToken(token)}
+          onTelegramPair={(chatId) => void telegram.pair(chatId)}
+          onTelegramUnpair={() => void telegram.unpair()}
+          onTelegramTest={() => void telegram.test()}
           onClose={() => setSettingsOpen(false)}
         />
       )}

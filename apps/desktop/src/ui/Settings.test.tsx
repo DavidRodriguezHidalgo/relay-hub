@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CheckoutPlan } from '@relay/shared';
+import { NO_TELEGRAM, type CheckoutPlan } from '@relay/shared';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Settings } from './Settings';
@@ -23,6 +23,14 @@ const base = {
   checkoutResult: null,
   pulling: false,
   onPull: vi.fn(),
+  telegram: NO_TELEGRAM,
+  telegramBusy: false,
+  telegramError: null,
+  telegramTestSent: false,
+  onTelegramToken: vi.fn(),
+  onTelegramPair: vi.fn(),
+  onTelegramUnpair: vi.fn(),
+  onTelegramTest: vi.fn(),
 };
 
 describe('Settings', () => {
