@@ -325,7 +325,9 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
     this.patch({ ignored: this.st.ignored + 1 });
   }
 
+  /** Nothing is ever sent while unpaired: there is no one to send it to. */
   private send(text: string): void {
+    if (this.chatId === null) return;
     for (const part of chunk(text)) this.enqueue({ kind: 'send', text: part });
   }
 
