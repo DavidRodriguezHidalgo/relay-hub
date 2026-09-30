@@ -235,6 +235,50 @@ describe('RelayEngine', () => {
     expect(client.starts).toHaveLength(2);
   });
 
+  it('reports a failed turn after the runner is gone, and forgets it once the session runs clean', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client, undefined, { idleTimeoutMs: 30 });
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result('error_during_execution: boom');
+    await tick();
+
+    // the runner is closed for being idle, which used to take the failure with it
+    await new Promise((r) => setTimeout(r, 80));
+    expect(engine!.runState().states['s-basic']).toBeUndefined();
+    expect(engine!.failures()['s-basic']).toEqual({
+      kind: 'crash',
+      message: 'error_during_execution: boom',
+      at: '2026-09-23T00:00:00.000Z',
+    });
+
+    await engine!.send({ sessionId: 's-basic', prompt: 'b', mode: 'steer', origin: 'user' });
+    await tick();
+    client.result();
+    await tick();
+    expect(engine!.failures()['s-basic']).toBeUndefined();
+  });
+
+  it('names the failure from the error code rather than the wording', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    client.apiError('u-1', 'authentication_failed', 'Something went wrong');
+    await tick();
+    expect(engine!.failures()['s-basic']?.kind).toBe('authentication');
+  });
+
+  it('a stopped turn is not recorded as a failure', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    await engine!.send({ sessionId: 's-basic', prompt: 'a', mode: 'steer', origin: 'user' });
+    await tick();
+    await engine!.interrupt('s-basic');
+    await tick();
+    expect(engine!.failures()['s-basic']).toBeUndefined();
+  });
+
   it('close interrupts running sessions', async () => {
     const client = new FakeAgentClient();
     await startWithBasic(client);

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { BulkRun, DeliveryMode, PrWatch, RunState, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import type { BulkRun, DeliveryMode, PrWatch, RunState, SessionFailure, SessionSummary, TranscriptBlock, TranscriptEntry } from '@relay/shared';
+import { FAILURE_MEANING } from '@relay/shared';
 import type { AgentTool, AgentToolResult } from '../runner/agent-client';
 
 /**
@@ -15,10 +16,14 @@ const TEXT_MAX = 240;
 const RESULT_MAX = 120;
 const BLOCKS_MAX = 6;
 const SUMMARY_MAX = 300;
+/** Rows per side of a needs_attention answer; more than this is a queue to work through, not a status. */
+const ATTENTION_MAX = 10;
 
 export interface RelayToolDeps {
   listSessions(): SessionSummary[];
   runState(): RunState;
+  /** The last failure of every session that has one, keyed by session id; survives its runner. */
+  failures(): Record<string, SessionFailure>;
   getTranscript(id: string): Promise<TranscriptEntry[]>;
   send(req: { sessionId: string; prompt: string; mode: DeliveryMode; origin: 'orchestrator' }): Promise<string>;
   /** false when the session was not running. */
@@ -51,16 +56,46 @@ const fail = (err: unknown): AgentToolResult => ({
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 const clipOrNull = (text: string | null) => (text === null ? null : clip(text, SUMMARY_MAX));
 
-function row(s: SessionSummary, run: RunState) {
+/**
+ * A failure is dropped once the session has worked for this long after it.
+ *
+ * A record is only cleared by a later turn through Relay, so a session picked up in a terminal
+ * would keep wearing an old failure. Transcript activity well after the failure says it has moved
+ * on. The grace is there because the failing turn's own last message lands a moment before the
+ * record is written, and that must not read as recovery.
+ */
+const RECOVERED_AFTER_MS = 60_000;
+
+/** The failure this session is still in, if any. */
+function failureOf(s: SessionSummary, failures: Record<string, SessionFailure>): SessionFailure | null {
+  const f = failures[s.id];
+  if (!f) return null;
+  const moved = Date.parse(s.lastActivity) - Date.parse(f.at) > RECOVERED_AFTER_MS;
+  return moved ? null : f;
+}
+
+/** Compact enough to repeat once per listed session: the kind carries most of the meaning. */
+const brief = (f: SessionFailure) => ({
+  kind: f.kind,
+  message: clip(f.message, SUMMARY_MAX),
+  ...(f.resetsAt ? { resetsAt: f.resetsAt } : {}),
+});
+
+function row(s: SessionSummary, run: RunState, failures: Record<string, SessionFailure>) {
+  const failure = failureOf(s, failures);
   return {
     id: s.id,
     repo: s.repo,
     branch: s.branch,
     title: s.title,
-    state: run.states[s.id]?.state ?? 'idle',
+    // a failed session outlives its runner, so with no live state a recorded failure still rules
+    state: run.states[s.id]?.state ?? (failure ? 'error' : 'idle'),
     lastActivity: s.lastActivity,
     prNumber: s.prNumber,
     pendingApprovals: run.approvals.filter((a) => a.sessionId === s.id).length,
+    ...(failure ? { failure: brief(failure) } : {}),
+    // not a fault, but sending to it will be refused until the user takes it over
+    ...(run.external[s.id] ? { heldElsewhere: true } : {}),
   };
 }
 
@@ -90,6 +125,7 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
       try {
         const q = (query ?? '').trim().toLowerCase();
         const run = deps.runState();
+        const failures = deps.failures();
         // Same matching as the sidebar's groupSessions (apps/desktop); duplicated because the engine cannot import the app.
         const rows = deps
           .listSessions()
@@ -99,7 +135,7 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
               (q === '' || [s.title, s.branch ?? '', s.repo].some((f) => f.toLowerCase().includes(q))),
           )
           .sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
-          .map((s) => row(s, run));
+          .map((s) => row(s, run, failures));
         const shown = rows.slice(0, LIST_MAX);
         const more = rows.length - shown.length;
         return ok({
@@ -122,6 +158,7 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
         const session = find(id);
         if (!session) return fail(new Error(`Unknown session ${id}`));
         const run = deps.runState();
+        const failures = deps.failures();
         const recent = (await deps.getTranscript(id))
           .filter((e) => !e.isMeta && !e.isSidechain)
           .slice(-RECENT_MAX)
@@ -134,7 +171,12 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
             ],
           }));
         return ok({
-          session: { ...row(session, run), cwd: session.cwd, error: clipOrNull(run.states[id]?.error ?? null) },
+          session: {
+            ...row(session, run, failures),
+            cwd: session.cwd,
+            error: clipOrNull(run.states[id]?.error ?? null),
+            ...(failures[id] ? { means: FAILURE_MEANING[failures[id].kind] } : {}),
+          },
           approvals: run.approvals
             .filter((a) => a.sessionId === id)
             .map((a) => ({ id: a.id, summary: clip(a.summary, SUMMARY_MAX), reason: a.reason })),
@@ -291,9 +333,57 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     },
   };
 
+  const needsAttention: AgentTool<Record<string, never>> = {
+    name: 'needs_attention',
+    description:
+      'Everything that is stuck right now, in one call: sessions whose last turn failed (with the kind of failure and ' +
+      'what it means) and sessions waiting on an approval. Use this to answer "what is broken" rather than listing ' +
+      'every session and reading each one.',
+    input: {},
+    handler: async () => {
+      try {
+        const run = deps.runState();
+        const failures = deps.failures();
+        const sessions = deps.listSessions();
+        const named = (id: string) => sessions.find((s) => s.id === id);
+
+        const failing = sessions
+          .map((s) => ({ s, f: failureOf(s, failures) }))
+          .filter((r): r is { s: SessionSummary; f: SessionFailure } => r.f !== null)
+          .sort((a, b) => b.f.at.localeCompare(a.f.at))
+          .slice(0, ATTENTION_MAX)
+          .map(({ s, f }) => ({
+            id: s.id,
+            title: s.title,
+            repo: s.repo,
+            ...brief(f),
+            at: f.at,
+            means: FAILURE_MEANING[f.kind],
+          }));
+
+        const waiting = run.approvals.slice(0, ATTENTION_MAX).map((a) => ({
+          approvalId: a.id,
+          sessionId: a.sessionId,
+          title: named(a.sessionId)?.title ?? null,
+          summary: clip(a.summary, SUMMARY_MAX),
+          reason: a.reason,
+        }));
+
+        return ok({
+          failing,
+          waiting,
+          ...(failing.length === 0 && waiting.length === 0 ? { note: 'Nothing is failing or waiting.' } : {}),
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  };
+
   return [
     listSessions,
     getSession,
+    needsAttention,
     sendToSession,
     interruptSession,
     proposeBulk,

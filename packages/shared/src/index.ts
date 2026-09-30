@@ -38,3 +38,5 @@ export { modelInEffect, modelLabel } from './model-in-effect';
 export type { ModelInEffect } from './model-in-effect';
 export { scrubText, scrubEvent } from './scrub';
 export type { ScrubbableEvent } from './scrub';
+export type { FailureKind, SessionFailure } from './failure';
+export { FAILURE_MEANING } from './failure';

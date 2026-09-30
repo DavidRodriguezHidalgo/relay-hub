@@ -16,6 +16,7 @@ function deps(over: Partial<RelayToolDeps> = {}): RelayToolDeps {
       s({ id: 'c', title: 'Old', isStale: true }),
     ],
     runState: () => ({ states: { a: { state: 'running', error: null } }, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} }),
+    failures: () => ({}),
     getTranscript: async () => [],
     send: vi.fn(async () => 'm-1'),
     interrupt: vi.fn(async () => true),
@@ -46,7 +47,7 @@ const call = async (d: RelayToolDeps, name: string, args: Record<string, unknown
 describe('relay tools', () => {
   it('exposes exactly the M3 tools', () => {
     expect(createRelayTools(deps()).map((t) => t.name)).toEqual([
-      'list_sessions', 'get_session', 'send_to_session', 'interrupt_session', 'propose_bulk_action',
+      'list_sessions', 'get_session', 'needs_attention', 'send_to_session', 'interrupt_session', 'propose_bulk_action',
       'list_prs', 'create_watch', 'delete_watch', 'list_projects', 'create_session',
     ]);
   });
@@ -213,5 +214,76 @@ describe('relay tools and the orchestrator’s context', () => {
     const out = JSON.parse((await call(deps({ getTranscript: async () => entries }), 'get_session', { id: 'a' })).text);
     expect(out.recent).toHaveLength(8);
     expect(out.recent.at(-1).content[0]).toContain('line 29');
+  });
+});
+
+describe('relay tools: what is broken', () => {
+  const failed = {
+    a: { kind: 'usage-limit' as const, message: 'Usage limit reached; resets at 18:00', at: '2026-09-22T00:00:10.000Z', resetsAt: '18:00' },
+  };
+
+  it('list_sessions marks a session that failed even with no live run state', async () => {
+    const rows = JSON.parse(
+      (await call(deps({ failures: () => failed, runState: () => ({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {} }) }), 'list_sessions', {})).text,
+    ).sessions;
+    expect(rows[0]).toMatchObject({
+      id: 'a',
+      state: 'error',
+      failure: { kind: 'usage-limit', message: 'Usage limit reached; resets at 18:00', resetsAt: '18:00' },
+    });
+    expect(rows[1]).not.toHaveProperty('failure');
+  });
+
+  it('forgets a failure the session has visibly worked past', async () => {
+    const stale = { b: { kind: 'crash' as const, message: 'boom', at: '2026-09-20T00:00:00.000Z' } };
+    const rows = JSON.parse((await call(deps({ failures: () => stale }), 'list_sessions', {})).text).sessions;
+    // b last worked on the 21st, a day after it failed
+    expect(rows.find((r: { id: string }) => r.id === 'b')).not.toHaveProperty('failure');
+  });
+
+  it('get_session explains what the failure means', async () => {
+    const out = JSON.parse((await call(deps({ failures: () => failed }), 'get_session', { id: 'a' })).text);
+    expect(out.session.failure.kind).toBe('usage-limit');
+    expect(out.session.means).toBe('Out of usage for now; it will work again by itself.');
+  });
+
+  it('needs_attention answers failures and approvals in one call', async () => {
+    const d = deps({
+      failures: () => failed,
+      runState: () => ({
+        states: {},
+        approvals: [{ id: 'ap-1', sessionId: 'b', summary: 'Run git push --force', reason: 'destructive-git' as const, toolName: 'Bash', input: {}, createdAt: 'x', cwd: '/c' }],
+        bulkRuns: [], watches: [], gh: { state: 'ok' }, external: {}, queue: {},
+      }),
+    });
+    const out = JSON.parse((await call(d, 'needs_attention', {})).text);
+    expect(out.failing).toEqual([
+      {
+        id: 'a', title: 'Mileage claims', repo: 'repo', kind: 'usage-limit',
+        message: 'Usage limit reached; resets at 18:00', resetsAt: '18:00',
+        at: '2026-09-22T00:00:10.000Z', means: 'Out of usage for now; it will work again by itself.',
+      },
+    ]);
+    expect(out.waiting).toEqual([
+      { approvalId: 'ap-1', sessionId: 'b', title: 'OCR ideas', summary: 'Run git push --force', reason: 'destructive-git' },
+    ]);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('needs_attention says so plainly when nothing is wrong', async () => {
+    const out = JSON.parse((await call(deps(), 'needs_attention', {})).text);
+    expect(out).toEqual({ failing: [], waiting: [], note: 'Nothing is failing or waiting.' });
+  });
+});
+
+describe('relay tools: a session held in a terminal', () => {
+  const held = () => ({ states: {}, approvals: [], bulkRuns: [], watches: [], gh: { state: 'ok' as const }, external: { a: 'busy' as const }, queue: {} });
+
+  it('is flagged but not called an error, and is not listed as broken', async () => {
+    const d = deps({ runState: held });
+    const rows = JSON.parse((await call(d, 'list_sessions', {})).text).sessions;
+    expect(rows[0]).toMatchObject({ id: 'a', state: 'idle', heldElsewhere: true });
+    expect(rows[1]).not.toHaveProperty('heldElsewhere');
+    expect(JSON.parse((await call(d, 'needs_attention', {})).text).failing).toEqual([]);
   });
 });
