@@ -537,7 +537,12 @@ export class RelayEngine {
       chatId: opts.chatId,
       now: this.now,
     });
-    bridge.on('status', (status) => this.publish({ type: 'telegram', status }));
+    const onStatus = (status: TelegramBridgeStatus) => {
+      // only while this is the live bridge: an old one winding down must not publish its way
+      // over the status of the one that replaced it
+      if (this.telegram === bridge) this.publish({ type: 'telegram', status });
+    };
+    bridge.on('status', onStatus);
     this.telegram = bridge;
     bridge.start();
     return bridge.status();
@@ -546,6 +551,7 @@ export class RelayEngine {
   stopTelegram(): void {
     const bridge = this.telegram;
     this.telegram = null;
+    bridge?.removeAllListeners('status');
     void bridge?.stop();
   }
 

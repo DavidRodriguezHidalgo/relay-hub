@@ -38,7 +38,7 @@ export function TelegramSettings(p: Props) {
   const dead = s.connection === 'stopped' && s.lastError !== null;
 
   return (
-    <section className="settings__section">
+    <section className="settings__section" aria-label="Telegram">
       <h3>Telegram</h3>
       <p className="settings__note">
         Message Relay from your phone. Your Mac polls Telegram, so nothing of yours is exposed to the internet and it

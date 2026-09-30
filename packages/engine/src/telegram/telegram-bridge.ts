@@ -32,6 +32,8 @@ export interface TelegramBridgeOptions {
 
 /** Where the last handled update is remembered, so a restart continues rather than repeats. */
 const OFFSET_KEY = 'telegram.offset';
+/** Which bot that offset belongs to: offsets from one bot mean nothing to another. */
+const BOT_KEY = 'telegram.botId';
 const POLL_TIMEOUT_SEC = 30;
 const BACKOFF_MIN_MS = 1_000;
 const BACKOFF_MAX_MS = 60_000;
@@ -161,15 +163,28 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
     while (!signal.aborted) {
       try {
         if (!this.st.botUsername) {
-          const me = await this.api.getMe();
+          const me = await this.api.getMe(signal);
           this.patch({ botUsername: me.username ?? String(me.id) });
+          // A different bot numbers its updates from scratch, so an offset kept from the last one
+          // would confirm-and-discard everything the new bot has to say, for ever.
+          if (this.store.getMeta(BOT_KEY) !== String(me.id)) {
+            this.store.setMeta(BOT_KEY, String(me.id));
+            this.store.setMeta(OFFSET_KEY, null);
+            offset = null;
+          }
         }
         const updates = await this.api.getUpdates(offset, this.pollTimeoutSec, signal);
         backoff = BACKOFF_MIN_MS;
         this.patch({ connection: 'ok', lastError: null, lastPolledAt: this.now().toISOString() });
         for (const u of updates) {
           if (signal.aborted) return;
-          await this.handle(u);
+          try {
+            await this.handle(u);
+          } catch (err) {
+            // handling failed on its own terms, which the poll loop must not read as Telegram
+            // being unreachable: retrying the same update for ever would wedge the bridge
+            this.send(`Relay could not handle that: ${err instanceof Error ? err.message : String(err)}`);
+          }
           // only once the update is Relay's problem: a crash before this line means Telegram sends it again
           offset = u.update_id + 1;
           this.store.setMeta(OFFSET_KEY, String(offset));
@@ -316,7 +331,11 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
 
   private enqueue(item: Outbound): void {
     if (this.abort.signal.aborted) return;
-    if (this.outbound.length >= OUTBOUND_MAX) this.outbound.shift();
+    if (this.outbound.length >= OUTBOUND_MAX) {
+      // index 0 may be in flight; dropping it would lose a message that is on its way out and
+      // then let the delivery's own shift() discard an innocent one behind it
+      this.outbound.splice(this.drainActive ? 1 : 0, 1);
+    }
     this.outbound.push(item);
     if (this.drainActive) return;
     this.drainActive = true;
@@ -354,8 +373,10 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
   }
 
   private async deliver(item: Outbound): Promise<void> {
-    if (item.kind === 'edit') return this.api.editMessageText(this.chatId!, item.messageId, item.text);
-    const { messageId } = await this.api.sendMessage(this.chatId!, item.text, item.keyboard);
+    // the signal goes with it: quitting must not wait out a request to a Telegram that has stopped answering
+    const signal = this.abort.signal;
+    if (item.kind === 'edit') return this.api.editMessageText(this.chatId!, item.messageId, item.text, undefined, signal);
+    const { messageId } = await this.api.sendMessage(this.chatId!, item.text, item.keyboard, signal);
     item.onSent?.(messageId);
   }
 

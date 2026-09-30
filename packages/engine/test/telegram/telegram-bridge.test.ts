@@ -233,10 +233,25 @@ describe('TelegramBridge', () => {
     it('resumes from the stored offset after a restart', async () => {
       const store = new MemoryStore();
       store.meta.set('telegram.offset', '77');
+      store.meta.set('telegram.botId', '1'); // the same bot the fake reports
       const { api, bridge } = setup(ME, store);
       stop = () => bridge.stop();
       await until(() => api.polls.length === 1);
       expect(api.polls[0]).toBe(77);
+    });
+
+    it('throws away an offset that belonged to a different bot, which would swallow everything the new one says', async () => {
+      const store = new MemoryStore();
+      store.meta.set('telegram.offset', '9999');
+      store.meta.set('telegram.botId', '7'); // a bot that is not the one answering now
+      const { api, store: s, bridge } = setup(ME, store);
+      stop = () => bridge.stop();
+      await until(() => api.polls.length >= 1);
+      expect(api.polls[0]).toBeNull();
+      expect(s.getMeta('telegram.botId')).toBe('1');
+      // and a message from the new bot is acted on rather than confirmed away
+      api.push(message(ME, '/help'));
+      await until(() => api.sent.length === 1);
     });
 
     it('says when Relay would not take the message, and still moves on', async () => {
@@ -438,9 +453,12 @@ describe('TelegramBridge', () => {
       relay.emit({ type: 'turn-end', sessionId: 's1', origins: ['orchestrator'], lastText: 'Added 3 tests.', error: null, aborted: false });
       relay.emit({ type: 'turn-end', sessionId: 's1', origins: ['user'], lastText: 'chatter', error: null, aborted: false });
       relay.emit({ type: 'state', sessionId: 's2', state: 'running', error: null });
+      // a runner that fails emits both of these for one failure; only one message may result
       relay.emit({ type: 'state', sessionId: 's2', state: 'error', error: 'died' });
+      relay.emit({ type: 'turn-end', sessionId: 's2', origins: ['orchestrator'], lastText: null, error: 'died', aborted: false });
       await until(() => api.sent.length === 2);
-      expect(api.sent.map((s) => s.text)).toEqual(['✔ Add tests (feat/zero) finished.\n\nAdded 3 tests.', '✖ Fix login hit an error: died']);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(api.sent.map((s) => s.text)).toEqual(['✔ Add tests (feat/zero) finished.\n\nAdded 3 tests.', '✖ Fix login failed: died']);
     });
   });
 
@@ -491,6 +509,48 @@ describe('TelegramBridge', () => {
       expect(api.sent.map((s) => s.text.split('\n\n')[1])).toEqual(['one', 'three']);
       expect(bridge.status().lastError).toMatch(/chat not found/);
     });
+  });
+
+  it('a message it cannot handle is reported and left behind, never retried for ever', async () => {
+    const { api, relay, store, bridge } = setup();
+    stop = () => bridge.stop();
+    relay.orchestratorSend = () => {
+      throw new Error('something unexpected');
+    };
+    const u = message(ME, 'go');
+    api.push(u);
+    await until(() => api.sent.length === 1);
+    expect(api.sent[0]!.text).toMatch(/something unexpected/);
+    // the offset moved past it: the same message must not be handed over again on the next poll
+    await until(() => store.getMeta('telegram.offset') === String(u.update_id + 1));
+  });
+
+  it('drops the oldest waiting message when the queue is full, never the one being delivered', async () => {
+    const { api, relay, bridge } = setup();
+    stop = () => bridge.stop();
+    let release!: () => void;
+    // hold the first delivery open so everything after it queues behind it
+    api.failSend = [];
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const original = api.sendMessage.bind(api);
+    let first = true;
+    api.sendMessage = async (chatId: number, text: string, keyboard?: InlineKeyboard) => {
+      if (first) {
+        first = false;
+        await held;
+      }
+      return original(chatId, text, keyboard);
+    };
+    for (let i = 0; i < 130; i += 1) {
+      relay.emit({ type: 'turn-end', sessionId: 's1', origins: ['orchestrator'], lastText: `m${i}`, error: null, aborted: false });
+    }
+    release();
+    await until(() => api.sent.length >= 100, 5_000);
+    // the one in flight when the queue filled is the first out, not a casualty of the overflow
+    expect(api.sent[0]!.text).toContain('m0');
+    expect(api.sent.map((s) => s.text).join('\n')).not.toContain('m129x');
   });
 
   it('stops promptly, unsubscribes, and reports stopped', async () => {

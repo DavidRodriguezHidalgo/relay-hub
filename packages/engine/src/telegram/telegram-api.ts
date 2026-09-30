@@ -46,14 +46,18 @@ export interface InlineKeyboard {
   inline_keyboard: { text: string; callback_data: string }[][];
 }
 
+/**
+ * Every call takes the caller's signal so a shutdown is not held up by a request to a Telegram
+ * that is not answering; without it, quitting would wait out the request timeout.
+ */
 export interface TelegramApi {
-  getMe(): Promise<{ id: number; username: string | null }>;
+  getMe(signal?: AbortSignal): Promise<{ id: number; username: string | null }>;
   /** Long-polls for up to `timeoutSec`; `offset` null asks for whatever is pending. */
   getUpdates(offset: number | null, timeoutSec: number, signal?: AbortSignal): Promise<TelegramUpdate[]>;
-  sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard): Promise<{ messageId: number }>;
-  editMessageText(chatId: number, messageId: number, text: string, keyboard?: InlineKeyboard): Promise<void>;
-  answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void>;
-  sendChatAction(chatId: number, action: 'typing'): Promise<void>;
+  sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard, signal?: AbortSignal): Promise<{ messageId: number }>;
+  editMessageText(chatId: number, messageId: number, text: string, keyboard?: InlineKeyboard, signal?: AbortSignal): Promise<void>;
+  answerCallbackQuery(callbackQueryId: string, text?: string, signal?: AbortSignal): Promise<void>;
+  sendChatAction(chatId: number, action: 'typing', signal?: AbortSignal): Promise<void>;
 }
 
 /** Telegram answered, but with an error; `status` is its error code (401, 409, 429...). */
@@ -89,8 +93,8 @@ export class HttpTelegramApi implements TelegramApi {
     this.base = (opts.baseUrl ?? TELEGRAM_API).replace(/\/$/, '');
   }
 
-  async getMe(): Promise<{ id: number; username: string | null }> {
-    const me = await this.call<{ id: number; username?: string }>('getMe', {});
+  async getMe(signal?: AbortSignal): Promise<{ id: number; username: string | null }> {
+    const me = await this.call<{ id: number; username?: string }>('getMe', {}, REQUEST_TIMEOUT_MS, signal);
     return { id: me.id, username: me.username ?? null };
   }
 
@@ -99,25 +103,31 @@ export class HttpTelegramApi implements TelegramApi {
     return this.call<TelegramUpdate[]>('getUpdates', body, timeoutSec * 1000 + POLL_GRACE_MS, signal);
   }
 
-  async sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard): Promise<{ messageId: number }> {
-    const sent = await this.call<{ message_id: number }>('sendMessage', {
-      chat_id: chatId,
-      text,
-      ...(keyboard ? { reply_markup: keyboard } : {}),
-    });
+  async sendMessage(chatId: number, text: string, keyboard?: InlineKeyboard, signal?: AbortSignal): Promise<{ messageId: number }> {
+    const sent = await this.call<{ message_id: number }>(
+      'sendMessage',
+      { chat_id: chatId, text, ...(keyboard ? { reply_markup: keyboard } : {}) },
+      REQUEST_TIMEOUT_MS,
+      signal,
+    );
     return { messageId: sent.message_id };
   }
 
-  async editMessageText(chatId: number, messageId: number, text: string, keyboard?: InlineKeyboard): Promise<void> {
-    await this.call('editMessageText', { chat_id: chatId, message_id: messageId, text, ...(keyboard ? { reply_markup: keyboard } : {}) });
+  async editMessageText(chatId: number, messageId: number, text: string, keyboard?: InlineKeyboard, signal?: AbortSignal): Promise<void> {
+    await this.call(
+      'editMessageText',
+      { chat_id: chatId, message_id: messageId, text, ...(keyboard ? { reply_markup: keyboard } : {}) },
+      REQUEST_TIMEOUT_MS,
+      signal,
+    );
   }
 
-  async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
-    await this.call('answerCallbackQuery', { callback_query_id: callbackQueryId, ...(text ? { text } : {}) });
+  async answerCallbackQuery(callbackQueryId: string, text?: string, signal?: AbortSignal): Promise<void> {
+    await this.call('answerCallbackQuery', { callback_query_id: callbackQueryId, ...(text ? { text } : {}) }, REQUEST_TIMEOUT_MS, signal);
   }
 
-  async sendChatAction(chatId: number, action: 'typing'): Promise<void> {
-    await this.call('sendChatAction', { chat_id: chatId, action });
+  async sendChatAction(chatId: number, action: 'typing', signal?: AbortSignal): Promise<void> {
+    await this.call('sendChatAction', { chat_id: chatId, action }, REQUEST_TIMEOUT_MS, signal);
   }
 
   private async call<T>(method: string, body: Record<string, unknown>, timeoutMs = REQUEST_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {

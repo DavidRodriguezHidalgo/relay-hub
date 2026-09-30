@@ -1,10 +1,10 @@
 import { ORCHESTRATOR_KEY, type BulkRun, type MessageOrigin, type PendingApproval, type RunnerEvent, type SessionState } from '@relay/shared';
-import type { PhoneVerdict } from './approval-policy';
+import { PHONE_COMMAND_MAX, type PhoneVerdict } from './approval-policy';
 
 /** Enough of a last reply to know how it went; the app has the rest. */
 const REPLY_MAX = 300;
 /** A command is shown whole unless it is absurd; the message must fit Telegram's 4096. */
-const COMMAND_MAX = 1500;
+const COMMAND_MAX = PHONE_COMMAND_MAX;
 
 export interface SessionNames {
   session(id: string): { title: string; branch: string | null } | null;
@@ -37,9 +37,8 @@ export function notificationFor(event: RunnerEvent, ctx: SessionNames): string |
       const reply = event.lastText ? clip(event.lastText, REPLY_MAX) : '(no reply)';
       return event.aborted ? `■ ${who} was stopped.\n\n${reply}` : `✔ ${who} finished.\n\n${reply}`;
     }
-    case 'state':
-      if (event.state !== 'error' || event.sessionId === ORCHESTRATOR_KEY) return null;
-      return `✖ ${label(event.sessionId, ctx)} hit an error: ${clip(event.error ?? 'unknown error', REPLY_MAX)}`;
+    // 'state' with an error is deliberately not reported: a failing runner emits it *and* a
+    // turn-end carrying the same error, and only the turn-end knows who the work was for.
     case 'bulk':
       return bulkMessage(event.run);
     default:

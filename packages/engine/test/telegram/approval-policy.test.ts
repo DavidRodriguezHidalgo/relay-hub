@@ -61,4 +61,12 @@ describe('phoneApprovalVerdict', () => {
     const verdict = phoneApprovalVerdict({ ...bash('x'), toolName: 'Bash', input: {} });
     expect(verdict.allowOnce).toBe(false);
   });
+
+  it('refuses a command too long to be shown in full: you cannot allow what you cannot read', () => {
+    // the safe step is first, so the destructive scan alone would say yes; the tail is what matters
+    const hidden = `git rebase main # ${'x'.repeat(2000)}`;
+    const verdict = phoneApprovalVerdict(bash(hidden));
+    expect(verdict.allowOnce).toBe(false);
+    expect(verdict.allowOnce === false && verdict.why).toMatch(/too long to show/);
+  });
 });

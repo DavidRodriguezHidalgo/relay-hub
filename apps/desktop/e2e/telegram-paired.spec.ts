@@ -79,7 +79,7 @@ test('pairs a phone in Settings, then answers it — and refuses every other cha
     env: { ...process.env, RELAY_PROJECTS_DIR: join(root, 'projects'), RELAY_TELEGRAM_API: `http://127.0.0.1:${telegram.port}` },
   });
   const page = await app.firstWindow();
-  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  const dialog = page.getByRole('region', { name: 'Telegram' });
   const openSettings = async () => {
     await page.getByRole('button', { name: 'Settings' }).click();
     await expect(dialog).toBeVisible();

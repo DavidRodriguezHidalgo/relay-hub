@@ -41,10 +41,15 @@ describe('notificationFor', () => {
     expect(notificationFor(turnEnd({ sessionId: ORCHESTRATOR_KEY, origins: ['telegram'] }), ctx)).toBeNull();
   });
 
-  it('reports a session error, but not the orchestrator’s (its reply path says so)', () => {
-    expect(notificationFor({ type: 'state', sessionId: 's2', state: 'error', error: 'expired login' }, ctx)).toBe('✖ Fix login hit an error: expired login');
+  it('reports a failure once, from the turn that failed, never also from the state change', () => {
+    // a failing runner emits both; two phone messages for one failure is exactly the noise to avoid
+    expect(notificationFor(turnEnd({ error: 'expired login', lastText: null }), ctx)).toBe('✖ Add tests for the zero-rate case (feat/zero) failed: expired login');
+    expect(notificationFor({ type: 'state', sessionId: 's1', state: 'error', error: 'expired login' }, ctx)).toBeNull();
     expect(notificationFor({ type: 'state', sessionId: 's2', state: 'running', error: null }, ctx)).toBeNull();
-    expect(notificationFor({ type: 'state', sessionId: ORCHESTRATOR_KEY, state: 'error', error: 'x' }, ctx)).toBeNull();
+  });
+
+  it('stays quiet about a failure in a session being driven from the app', () => {
+    expect(notificationFor(turnEnd({ origins: ['user'], error: 'expired login' }), ctx)).toBeNull();
   });
 
   it('summarises a finished bulk run once, and says when one is waiting for the plan card', () => {
