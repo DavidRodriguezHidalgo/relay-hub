@@ -523,7 +523,9 @@ export class RelayEngine {
   startTelegram(opts: { token: string; chatId: number | null; api?: TelegramApi }): TelegramBridgeStatus {
     this.stopTelegram();
     const bridge = new TelegramBridge({
-      api: opts.api ?? new HttpTelegramApi(opts.token),
+      // RELAY_TELEGRAM_API points the bridge at a stand-in server, which is how the whole path
+      // — phone message to session and back — is exercised without a real bot.
+      api: opts.api ?? new HttpTelegramApi(opts.token, { baseUrl: process.env.RELAY_TELEGRAM_API ?? undefined }),
       relay: {
         orchestratorSend: (prompt, origin) => this.orchestratorSend(prompt, origin),
         runState: () => this.runState(),

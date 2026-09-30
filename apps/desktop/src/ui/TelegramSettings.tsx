@@ -34,6 +34,8 @@ export function TelegramSettings(p: Props) {
   const [token, setToken] = useState('');
   const s = p.status;
   const line = connectionLine(s);
+  /** Stopped with a reason means nothing is polling: saying what to do next would be a lie. */
+  const dead = s.connection === 'stopped' && s.lastError !== null;
 
   return (
     <section className="settings__section">
@@ -81,12 +83,12 @@ export function TelegramSettings(p: Props) {
 
       {s.configured && (
         <>
-          <p className="settings__row">
-            {s.botUsername ? `@${s.botUsername}` : 'Asking Telegram which bot this is…'}
-          </p>
+          {(s.botUsername || !dead) && (
+            <p className="settings__row">{s.botUsername ? `@${s.botUsername}` : 'Asking Telegram which bot this is…'}</p>
+          )}
           {line && <p className={line.bad ? 'error' : 'settings__note'} role={line.bad ? 'alert' : undefined}>{line.text}</p>}
 
-          {s.chatId === null ? (
+          {dead ? null : s.chatId === null ? (
             <>
               <p className="settings__note">
                 Send {s.botUsername ? `@${s.botUsername}` : 'your bot'} a message from your phone, then pair the chat it

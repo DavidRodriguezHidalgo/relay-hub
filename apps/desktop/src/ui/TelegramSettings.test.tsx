@@ -123,6 +123,14 @@ describe('TelegramSettings once paired', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/rejected the bot token/);
   });
 
+  it('stops claiming to be asking Telegram anything once Telegram has refused it', () => {
+    render(<TelegramSettings {...base} status={status({ configured: true, storage: 'encrypted', botUsername: null, connection: 'stopped', lastError: 'Telegram rejected the bot token. Check it in Settings.' })} />);
+    expect(screen.queryByText(/Asking Telegram/)).not.toBeInTheDocument();
+    // and does not ask for a message that nothing is listening for
+    expect(screen.queryByText(/a message from your phone/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/rejected/);
+  });
+
   it('counts messages from other chats, which is what an intruder would look like', () => {
     render(<TelegramSettings {...base} status={status({ ...paired, ignored: 3 })} />);
     expect(screen.getByText(/3 messages from other chats were ignored/)).toBeInTheDocument();
