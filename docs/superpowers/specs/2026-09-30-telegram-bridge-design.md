@@ -86,6 +86,9 @@ phone you see one line — the command — and not the transcript, the diff, or 
   `--force`/`-f`, not branch deletion, `reset --hard`, `clean`, `branch -D`, `filter-*`,
   and never a path outside the session's folder or a blocked path — those need the context
   you do not have on a phone.
+- **Allow once is also refused for any command too long to display in full** (1500 characters).
+  Allowing approves the whole line, not the step that made Relay ask: `git rebase main && curl
+  … | sh` is one approval, and a decision about a tail you were never shown is not a decision.
 - **Allow this kind** (a standing permission) is never offered from the phone.
 
 An approval message carries the buttons; pressing one answers the same `ApprovalQueue` the
@@ -102,7 +105,7 @@ One message each, no more:
 | A session's turn ended, started by you from the phone or by the orchestrator | yes: title, last reply (clipped to 300 chars) | That is work you delegated; you want to hear it ended. |
 | A session's turn ended, started from the session's own box in the app | no | You were at the keyboard; each message would buzz the phone mid-conversation. |
 | A session's turn ended, started by a PR watch or a bulk row | no | Watches fire on their own schedule; bulk rows are summarised once. |
-| Session error | yes | Something you asked for died. |
+| Session error | yes, once, from the failed turn | Something you asked for died. A failing runner emits both a `state: error` and a `turn-end` carrying the same error; only the turn-end knows whose work it was, so only it is reported. |
 | Bulk run finished | yes, one summary | One message for N sessions, never N. |
 | Bulk run proposed | yes, a notice | It waits for the plan card in the app; you should know it is stuck on you. |
 | PR events, state changes, queue changes, todos, external sessions, watch changes | no | Noise; the app shows them. |
@@ -113,14 +116,20 @@ never make a message fail to send), split at 4000 characters.
 
 ## Never losing a message
 
-- Long polling with an `offset` persisted in the engine's store (`telegram.offset`). The
-  offset advances only after the update has been handed to the orchestrator's queue (the
-  same durability the app's chat has). A crash in between means Telegram redelivers on
-  restart; Telegram keeps undelivered updates for 24 hours.
+- Long polling with an `offset` persisted in the engine's store (`telegram.offset`), beside the
+  id of the bot it belongs to (`telegram.botId`). The offset advances only after the update has
+  been handed to the orchestrator's queue (the same durability the app's chat has). A crash in
+  between means Telegram redelivers on restart; Telegram keeps undelivered updates for 24 hours.
+  A new bot numbers its updates from scratch, so on a token change the offset is thrown away
+  rather than confirming away everything the new bot says.
+- An update the bridge cannot handle is reported to the chat and the offset still advances:
+  retrying the same poisonous update for ever would wedge the bridge.
 - Telegram unreachable: the poll loop backs off (1s doubling to 60s), status shows
   "unreachable since …", nothing throws out of the loop. Outbound messages wait in a bounded
-  queue (100) and are retried with the same backoff. On quit the outbound queue is dropped —
-  notifications, not your instructions.
+  queue (100) and are retried with the same backoff; when it overflows the oldest *waiting*
+  message is let go, never the one being delivered. On quit the outbound queue is dropped —
+  notifications, not your instructions — and every outbound call carries the abort signal so
+  quitting is not held up by a Telegram that has stopped answering.
 - HTTP 401 stops polling with "token rejected" (no point hammering). 409 reports the webhook
   case above and keeps retrying slowly.
 - Restart: the desktop reads `telegram.json`, starts the bridge with the token and chat id,
