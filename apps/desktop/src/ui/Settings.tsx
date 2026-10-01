@@ -1,19 +1,7 @@
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
-import { modelLabel, type ModelChoice, type NewSessionModel } from '@relay/shared';
+import { modelLabel, newSessionModelSentence, type ModelChoice, type NewSessionModel } from '@relay/shared';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
-
-/** What a new session will come up on, said plainly enough to act on before starting one. */
-function runsOn(model: NewSessionModel | null): string {
-  if (!model) return 'Looking up what new sessions will run on…';
-  if (!model.resolvedModel) {
-    return model.source === 'chosen'
-      ? `New sessions run on ${modelLabel(model.id!)}, which is no longer in the list of models offered.`
-      : 'The list of models could not be read, so Relay will let Claude Code choose and cannot say what that will be.';
-  }
-  const why = model.source === 'chosen' ? 'your choice' : 'the recommended default';
-  return `New sessions run on ${modelLabel(model.resolvedModel)} — ${why}.`;
-}
 
 interface Props {
   theme: Theme;
@@ -111,6 +99,9 @@ export function Settings(p: Props) {
               value={p.newSessionModel?.id ?? ''}
               onChange={(e) => p.onNewSessionModel(e.target.value)}
             >
+              {/* a stored choice the list no longer offers matches no option; without this the
+                  select would show nothing while the note underneath names a model */}
+              {!p.models.some((m) => m.id === p.newSessionModel?.id) && <option value="">—</option>}
               {p.models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -118,7 +109,7 @@ export function Settings(p: Props) {
               ))}
             </select>
           </label>
-          <p className="settings__note">{runsOn(p.newSessionModel)}</p>
+          <p className="settings__note">{newSessionModelSentence(p.newSessionModel)}</p>
           <p className="settings__note">
             {p.claudeDefaultModel
               ? `Relay asks for this model by name every time it starts a session. Your own saved default (${modelLabel(

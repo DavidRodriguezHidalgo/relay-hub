@@ -777,6 +777,7 @@ describe('RelayEngine', () => {
     });
     void engine!.createSession({ project: 'myrepo', branch: 'feat/a', prompt: 'go', origin: 'user' });
     for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    // load-bearing: this one assertion is what proves the resolved model reaches the runner at all
     expect(sessionClient.lastOpts?.model).toBe('default');
   });
 
@@ -817,6 +818,48 @@ describe('RelayEngine', () => {
     void engine!.createSession({ project: 'myrepo', branch: 'feat/c', prompt: 'go', origin: 'user' });
     for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
     expect(sessionClient.lastOpts?.model).toBe('default');
+  });
+
+  it('keeps asking for that model after the runner has been closed and rebuilt', async () => {
+    const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt, idleTimeoutMs: 30 });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+
+    const creating = engine!.createSession({ project: 'myrepo', branch: 'feat/later', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    sessionClient.init('born-later');
+    const { sessionId } = await creating;
+    expect(sessionClient.lastOpts?.model).toBe('default');
+
+    // the session's own transcript, so a later send can find it exactly as it would in real use
+    const src = await readFile(fixture('basic.jsonl'), 'utf8');
+    const file = join(root, 'projects', 'p', `${sessionId}.jsonl`);
+    await writeFile(file, src.replaceAll('/repo/wt-a', join(repo + '-worktrees', 'feat-later')).replaceAll('s-basic', sessionId));
+    const old = new Date('2026-09-20T10:01:00.000Z');
+    await utimes(file, old, old);
+    for (let i = 0; !engine!.listSessions().some((s) => s.id === sessionId) && i < 100; i += 1) await new Promise((r) => setTimeout(r, 50));
+
+    // the runner is closed for being idle, exactly as ten minutes of quiet would close it
+    sessionClient.result();
+    await tick();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(engine!.runState().states[sessionId]).toBeUndefined();
+
+    const before = sessionClient.starts.length;
+    await engine!.send({ sessionId, prompt: 'again', mode: 'steer', origin: 'user' });
+    for (let i = 0; sessionClient.starts.length === before && i < 100; i += 1) await tick();
+    expect(sessionClient.starts.length).toBe(before + 1);
+    // rebuilt from scratch, and still asking by name rather than leaving it to the settings file
+    expect(sessionClient.starts.at(-1)?.model).toBe('default');
   });
 
   it('asks for nothing only when it has no list to choose from, rather than inventing a model name', async () => {

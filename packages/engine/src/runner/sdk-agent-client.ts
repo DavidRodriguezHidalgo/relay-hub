@@ -7,6 +7,7 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { blocksFromContent } from '../transcript/parse-transcript';
+import { RECOMMENDED_MODEL_ID } from '@relay/shared';
 import type { Invocable, ModelChoice } from '@relay/shared';
 import type { AgentCapabilities, AgentClient, AgentInput, AgentMessage, AgentRun, AgentStartOptions } from './agent-client';
 
@@ -201,8 +202,9 @@ export class SdkAgentClient implements AgentClient {
             id: m.value,
             name: m.displayName ?? m.value,
             description: m.description ?? '',
-            // an option that does not say what it resolves to can only speak for itself
-            resolvedModel: m.resolvedModel ?? m.value,
+            // an option that does not say what it resolves to can speak for itself, unless it is
+            // the recommended sentinel: that names no model, and 'runs on Default' says nothing
+            resolvedModel: m.resolvedModel ?? (m.value === RECOMMENDED_MODEL_ID ? null : m.value),
             current: false,
           }),
         ),

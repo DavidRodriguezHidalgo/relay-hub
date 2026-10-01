@@ -146,6 +146,17 @@ export function App() {
     void window.relay.crashReports().then(setCrashReports, () => undefined);
   }, []);
 
+  /** The engine resolves what the choice means, so it is asked again rather than guessed at here. */
+  const changeNewSessionModel = async (model: string) => {
+    try {
+      await window.relay.setNewSessionModel(model);
+      setNewSessionModel(await window.relay.newSessionModel());
+      setSettingsError(null);
+    } catch (e) {
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   /** The main process owns the choice, so it is set there first and only then shown as on. */
   const changeCrashReports = async (on: boolean) => {
     try {
@@ -305,15 +316,7 @@ export function App() {
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
           newSessionModel={newSessionModel}
-          onNewSessionModel={(model) => {
-            void window.relay
-              .setNewSessionModel(model)
-              .then(async () => {
-                setNewSessionModel(await window.relay.newSessionModel());
-                setModelChoices(await window.relay.availableModels());
-              })
-              .catch((e: unknown) => setSettingsError(e instanceof Error ? e.message : String(e)));
-          }}
+          onNewSessionModel={(model) => void changeNewSessionModel(model)}
           claudeDefaultModel={claudeDefault.model}
           claudeSettingsPath={claudeDefault.path}
           models={modelChoices}

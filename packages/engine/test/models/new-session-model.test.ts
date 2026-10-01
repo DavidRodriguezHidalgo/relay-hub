@@ -24,6 +24,12 @@ describe('recommendedModel', () => {
     expect(recommendedModel([LIST[1]!, LIST[3]!])?.id).toBe('opus[1m]');
   });
 
+  it('does not call an unmarked first option recommended, because the source never recommended it', () => {
+    expect(newSessionModel(null, [LIST[1]!, LIST[3]!])).toEqual({
+      id: 'opus[1m]', resolvedModel: 'claude-opus-5[1m]', source: 'first-listed',
+    });
+  });
+
   it('has nothing to offer from an empty list', () => {
     expect(recommendedModel([])).toBeNull();
   });

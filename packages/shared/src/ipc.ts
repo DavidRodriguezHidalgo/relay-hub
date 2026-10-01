@@ -2,7 +2,7 @@ import type { Invocable } from './commands';
 import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, RunnerEvent } from './runner';
 import type { SessionSummary } from './session';
 import type { Accomplished } from './accomplished';
-import type { ModelChoice, NewSessionModel } from './models';
+import type { ModelChoice, NewSessionModel, RelaySettings } from './models';
 import type { SessionStatus } from './status';
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
 import type { TranscriptEntry } from './transcript';
@@ -104,13 +104,9 @@ export interface RelayApi {
   createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
   takeOver(sessionId: string): Promise<number[]>;
-  settings(): Promise<{
-    allowAllActions: boolean;
-    claudeDefaultModel: string | null;
-    claudeSettingsPath: string;
-  }>;
+  settings(): Promise<RelaySettings>;
   setAllowAllActions(on: boolean): Promise<void>;
-  /** What Relay asks for when it starts a session; null hands the choice back to Claude Code. */
+  /** What Relay asks for when it starts a session; null goes back to the recommended option. */
   setNewSessionModel(model: string | null): Promise<void>;
   /** The models a new session could run on. */
   availableModels(): Promise<ModelChoice[]>;

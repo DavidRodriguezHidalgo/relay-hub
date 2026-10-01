@@ -3,10 +3,9 @@ import { join } from 'node:path';
 /**
  * The model Claude Code will use when nobody asks for one.
  *
- * Relay passes no model when it starts a session, so whatever the CLI has saved is what the
- * session comes up on. `/model` writes that saved value, which is why a command run days ago
- * still decides what a brand-new session runs as — and why the honest place to change it is the
- * file below rather than a value hard-coded here.
+ * Relay does not use it: it asks for a model by name, so nothing it starts depends on this. It is
+ * read only so the app can say which file it is leaving alone, and name what that file holds —
+ * `/model` writes it, and sessions the user starts themselves still follow it.
  */
 export const CLAUDE_SETTINGS = '.claude/settings.json';
 

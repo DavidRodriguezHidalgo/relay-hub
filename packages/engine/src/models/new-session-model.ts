@@ -1,12 +1,5 @@
+import { RECOMMENDED_MODEL_ID } from '@relay/shared';
 import type { ModelChoice, NewSessionModel } from '@relay/shared';
-
-/**
- * The value the model source uses for "whatever is recommended right now".
- *
- * It belongs to the source's own vocabulary and is not the name of a model, so asking for it keeps
- * meaning the sensible everyday choice after the model behind it changes.
- */
-const RECOMMENDED_ID = 'default';
 
 /**
  * The option to use when the user has expressed no preference.
@@ -15,7 +8,7 @@ const RECOMMENDED_ID = 'default';
  * because these lists are ordered with the everyday choice first.
  */
 export function recommendedModel(models: ModelChoice[]): ModelChoice | null {
-  return models.find((m) => m.id === RECOMMENDED_ID) ?? models[0] ?? null;
+  return models.find((m) => m.id === RECOMMENDED_MODEL_ID) ?? models[0] ?? null;
 }
 
 /**
@@ -32,8 +25,9 @@ export function newSessionModel(chosen: string | null, models: ModelChoice[]): N
   if (chosen) {
     return { id: chosen, resolvedModel: models.find((m) => m.id === chosen)?.resolvedModel ?? null, source: 'chosen' };
   }
-  const recommended = recommendedModel(models);
-  return recommended
-    ? { id: recommended.id, resolvedModel: recommended.resolvedModel, source: 'recommended' }
-    : { id: null, resolvedModel: null, source: 'unknown' };
+  const pick = recommendedModel(models);
+  if (!pick) return { id: null, resolvedModel: null, source: 'unknown' };
+  // only the marked row may be called recommended; the first of an unmarked list is just the first
+  const source = pick.id === RECOMMENDED_MODEL_ID ? 'recommended' : 'first-listed';
+  return { id: pick.id, resolvedModel: pick.resolvedModel, source };
 }

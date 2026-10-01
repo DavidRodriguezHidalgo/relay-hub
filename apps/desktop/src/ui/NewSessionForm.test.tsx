@@ -44,24 +44,29 @@ describe('NewSessionForm', () => {
 
 describe('NewSessionForm and the model it will use', () => {
   const projects = async () => [{ name: 'relay', root: '/code/relay', sessions: 2 }];
+  const form = (model: Parameters<typeof NewSessionForm>[0]['model']) =>
+    render(
+      <NewSessionForm listProjects={projects} model={model} onCreate={vi.fn()} onCreated={vi.fn()} onCancel={vi.fn()} />,
+    );
 
   it('says what the session will run on before it is created', async () => {
-    render(
-      <NewSessionForm
-        listProjects={projects}
-        model={{ id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended' }}
-        onCreate={vi.fn()}
-        onCreated={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-    expect(await screen.findByText(/Runs on Opus 5 \[1m\]/)).toBeInTheDocument();
+    form({ id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended' });
+    expect(await screen.findByText(/New sessions run on Opus 5 \[1m\]/)).toBeInTheDocument();
+  });
+
+  it('warns when the chosen model is no longer offered, instead of showing nothing at all', () => {
+    form({ id: 'claude-sonnet-4-5', resolvedModel: null, source: 'chosen' });
+    // creation would fail on this, so it has to be said where the session is created
+    expect(screen.getByText(/no longer in the list of models offered/)).toBeInTheDocument();
+  });
+
+  it('says so when the model list could not be read, rather than staying quiet', () => {
+    form({ id: null, resolvedModel: null, source: 'unknown' });
+    expect(screen.getByText(/could not be read/)).toBeInTheDocument();
   });
 
   it('says nothing about the model rather than guessing, when it is not known yet', () => {
-    render(
-      <NewSessionForm listProjects={projects} model={null} onCreate={vi.fn()} onCreated={vi.fn()} onCancel={vi.fn()} />,
-    );
-    expect(screen.queryByText(/Runs on/)).not.toBeInTheDocument();
+    form(null);
+    expect(screen.queryByText(/run on/)).not.toBeInTheDocument();
   });
 });

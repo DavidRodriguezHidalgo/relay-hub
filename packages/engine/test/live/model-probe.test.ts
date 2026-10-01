@@ -60,6 +60,8 @@ describe.skipIf(!live)('the model a session Relay creates actually runs on', () 
       projectsDir: join(homedir(), '.claude', 'projects'),
       dbPath: join(root, 'relay.db'),
       orchestratorDir: join(root, 'orch'),
+      // short enough to watch the runner close, which is what ten quiet minutes does in real use
+      idleTimeoutMs: 3_000,
     });
     try {
       const create = async (branch: string) => {
@@ -88,6 +90,28 @@ describe.skipIf(!live)('the model a session Relay creates actually runs on', () 
 
       // the point of the whole change: neither session inherited what the settings file says
       if (saved) expect([...onRecommended, ...onChosen]).not.toContain(bare(saved));
+
+      // And it has to survive the runner being closed, which happens after ten idle minutes and
+      // on every restart. That path builds a fresh runner, so it has to ask for the model again.
+      const { sessionId } = await engine.createSession({
+        project: repo, branch: 'feat/model-probe-reopened', prompt: 'Reply with the single word: ok', origin: 'user',
+      });
+      for (let i = 0; i < 300 && engine.runState().states[sessionId]?.state === 'running'; i += 1) {
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+      for (let i = 0; i < 60 && engine.runState().states[sessionId]; i += 1) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      expect(engine.runState().states[sessionId]).toBeUndefined();
+      // a transcript written seconds ago reads as held by another writer; wait that window out
+      await new Promise((r) => setTimeout(r, 18_000));
+      await engine.send({ sessionId, prompt: 'Reply with the single word: again', mode: 'steer', origin: 'user' });
+      for (let i = 0; i < 300 && engine.runState().states[sessionId]?.state === 'running'; i += 1) {
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+      const afterReopen = modelsInTranscript(sessionId);
+      console.log(`after the runner closed and was rebuilt -> ran on ${afterReopen.join(', ')}`);
+      expect(afterReopen).toEqual([bare(chosen.resolvedModel!)]);
     } finally {
       await engine.close();
       await rm(root, { recursive: true, force: true });

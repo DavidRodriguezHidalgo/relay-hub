@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { modelLabel, type NewSessionModel } from '@relay/shared';
+import { newSessionModelIsTrouble, newSessionModelSentence, type NewSessionModel } from '@relay/shared';
 
 interface Project {
   name: string;
@@ -74,8 +74,13 @@ export function NewSessionForm({ listProjects, model, onCreate, onCreated, onCan
         <input aria-label="Branch" placeholder="feat/my-change" value={branch} onChange={(e) => setBranch(e.target.value)} />
       </label>
       {project && branch.trim() && <p className="new-session__where">New worktree: {previewPath(project, branch.trim())}</p>}
-      {/* said before the session exists, so the model is never a surprise found out afterwards */}
-      {model?.resolvedModel && <p className="new-session__where">Runs on {modelLabel(model.resolvedModel)}</p>}
+      {/* said before the session exists, so the model is never a surprise found out afterwards —
+          including when it is bad news, which is exactly when this used to render nothing at all */}
+      {model && (
+        <p className={newSessionModelIsTrouble(model) ? 'error' : 'new-session__where'}>
+          {newSessionModelSentence(model)}
+        </p>
+      )}
       <label>
         First instruction
         <textarea aria-label="First instruction" rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
