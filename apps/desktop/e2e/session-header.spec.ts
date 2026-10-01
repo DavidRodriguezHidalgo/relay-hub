@@ -11,10 +11,11 @@ const fixtures = resolve(__dirname, '../../../packages/engine/test/fixtures');
  * A header pinned to the top only shows its behaviour against a conversation taller than the
  * panel; with a short one it would pass by sitting still and prove nothing.
  */
-async function launchWithLongTranscript(turns: number) {
+async function launchWithLongTranscript(turns: number, opts: { pr?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'relay-e2e-header-'));
   await mkdir(join(root, 'projects', 'p'), { recursive: true });
-  const lines = (await readFile(join(fixtures, 'basic.jsonl'), 'utf8')).split('\n').filter(Boolean);
+  const all = (await readFile(join(fixtures, 'basic.jsonl'), 'utf8')).split('\n').filter(Boolean);
+  const lines = opts.pr === false ? all.filter((l) => !l.includes('"pr-link"')) : all;
   const padding = Array.from({ length: turns }, (_, i) =>
     JSON.stringify({
       type: 'assistant',
@@ -85,6 +86,32 @@ test('the session header stays at the top of the panel while the conversation sc
 
   await expectClearOfTheSendBox(page, pinned);
 
+  // the things reached for while a session works, all inside the pinned strip
+  const strip = bar;
+  // without a real agent the model list is empty, so the picker degrades to plain text; either way it is here
+  await expect(strip.locator('.model')).toBeVisible();
+  await expect(strip.getByRole('link', { name: 'PR #42' })).toBeVisible();
+  await expect(strip.getByRole('button', { name: 'Show subagent turns' })).toBeVisible();
+
+  await app.close();
+});
+
+test('a session with no pull request simply leaves it out of the header', async () => {
+  const app = await launchWithLongTranscript(60, { pr: false });
+  const page = await app.firstWindow();
+  await page.getByLabel('Show stale').check();
+  await page.getByText('Add tests for the zero-rate case').click();
+
+  const panel = page.getByLabel('Session panel');
+  const bar = page.locator('.session-panel__bar');
+  await panel.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expect(bar.locator('.model')).toBeVisible();
+  await expect(bar.getByRole('link')).toHaveCount(0);
+
+  const pinned = (await bar.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(Math.abs(pinned.y - panelBox.y)).toBeLessThan(2);
+  expect(pinned.height).toBeLessThan(56);
   await app.close();
 });
 
@@ -104,6 +131,9 @@ test('the pinned header stays one line on a narrow window, and still clears the 
   expect(Math.abs(pinned.y - panelBox.y)).toBeLessThan(2);
   expect(pinned.height).toBeLessThan(56);
   await expectClearOfTheSendBox(page, pinned);
+  // everything still there and on one row: the title is what gives way, not the controls
+  await expect(bar.locator('.model')).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'Show subagent turns' })).toBeVisible();
 
   await app.close();
 });
