@@ -317,7 +317,6 @@ export function App() {
           telegramError={telegram.error}
           telegramTestSent={telegram.testSent}
           onTelegramToken={(token) => void telegram.setToken(token)}
-          onTelegramPair={(chatId) => void telegram.pair(chatId)}
           onTelegramUnpair={() => void telegram.unpair()}
           onTelegramTest={() => void telegram.test()}
           onClose={() => setSettingsOpen(false)}

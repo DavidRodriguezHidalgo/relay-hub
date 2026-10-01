@@ -8,7 +8,6 @@ export interface TelegramView {
   /** A test message went, and the window can say so until the next change. */
   testSent: boolean;
   setToken(token: string | null): Promise<void>;
-  pair(chatId: number): Promise<void>;
   unpair(): Promise<void>;
   test(): Promise<void>;
 }
@@ -17,8 +16,8 @@ export interface TelegramView {
  * The Telegram settings as the window sees them.
  *
  * The main process owns the token and the bridge, so every change goes there first and the
- * answer becomes the new state — the window never guesses what took. Live status (a candidate
- * arriving, the connection dropping) comes from the bridge's own events, passed in.
+ * answer becomes the new state — the window never guesses what took. Live status (a chat binding
+ * itself, the connection dropping) comes from the bridge's own events, passed in.
  */
 export function useTelegram(live: TelegramBridgeStatus | null): TelegramView {
   const [status, setStatus] = useState<TelegramStatus>(NO_TELEGRAM);
@@ -59,9 +58,6 @@ export function useTelegram(live: TelegramBridgeStatus | null): TelegramView {
     testSent,
     setToken: async (token) => {
       await change(() => window.relay.setTelegramToken(token));
-    },
-    pair: async (chatId) => {
-      await change(() => window.relay.pairTelegram(chatId));
     },
     unpair: async () => {
       await change(() => window.relay.unpairTelegram());

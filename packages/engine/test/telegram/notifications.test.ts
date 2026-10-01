@@ -76,7 +76,7 @@ describe('notificationFor', () => {
       { type: 'pr-event', sessionId: 's1', watchId: 'w', event: { kind: 'merged', summary: 'merged', details: 'd' } },
       { type: 'watch-removed', watchId: 'w', gh: { state: 'ok' } },
       { type: 'approval-resolved', approvalId: 'a', decision: 'deny' },
-      { type: 'telegram', status: { botUsername: null, chatId: null, candidate: null, connection: 'ok', lastError: null, lastPolledAt: null, ignored: 0 } },
+      { type: 'telegram', status: { botUsername: null, chatId: null, chatName: null, connection: 'ok', lastError: null, lastPolledAt: null, ignored: 0 } },
     ];
     for (const e of quiet) expect(notificationFor(e, ctx)).toBeNull();
   });

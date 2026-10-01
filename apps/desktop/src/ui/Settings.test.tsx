@@ -28,7 +28,6 @@ const base = {
   telegramError: null,
   telegramTestSent: false,
   onTelegramToken: vi.fn(),
-  onTelegramPair: vi.fn(),
   onTelegramUnpair: vi.fn(),
   onTelegramTest: vi.fn(),
 };

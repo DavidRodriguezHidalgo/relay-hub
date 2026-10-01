@@ -132,9 +132,12 @@ set this up, none of it runs: no polling, no errors, nothing in Settings but the
 4. In Relay, open **Settings → Telegram**, paste the token and press **Save token**. Relay stores
    it in your Mac's keychain, in its own file in the app's data folder. It is never written to the
    repository, and the field never shows it back to you.
-5. Open your new bot in Telegram **from the phone you want to use** and send it anything.
-6. Settings now offers **Pair this chat**, naming who wrote. Press it.
-7. Press **Send test message** to see it arrive.
+5. Open your new bot in Telegram **from the phone you want to use** and send it anything. That
+   chat becomes yours, Relay replies to say so, and there is nothing else to set up.
+
+Do step 5 straight after step 4. The first chat to message the bot is the one Relay obeys, so the
+sooner you claim it the smaller the window in which anyone else could. Settings and a desktop
+notification both name the chat that got bound, so if it was not you, unpair and revoke the token.
 
 From then on: send an instruction the way you would type it into the Relay chat ("tell the mileage
 session to add tests for the zero-rate case"), or `/status` to hear what is running. `/status` is
@@ -142,15 +145,19 @@ answered by Relay itself and costs nothing.
 
 ### Who can drive it
 
-Only the chat you paired. Every message is checked against that chat id — a message from anyone
-else, or from a group your bot was added to, is dropped without a reply, and Settings counts how
-many.
+Only the chat that claimed the bot. Every message after that is checked against its chat id — a
+message from anyone else, or from a group your bot was added to, is dropped without a reply, and
+Settings counts how many.
 
 If somebody steals the bot token they can read what you send the bot from then on, and send you
-messages that look like Relay. They **cannot drive your machine**: authority comes from the chat
-id on incoming messages, which Telegram sets from the real sender. They can also stop messages
-reaching you, which Relay reports rather than hides. Recovery is `/revoke` at BotFather, then
-pasting the new token in Settings.
+messages that look like Relay. Once a chat is bound they **cannot drive your machine**: authority
+comes from the chat id on incoming messages, which Telegram sets from the real sender. They can
+also stop messages reaching you, which Relay reports rather than hides.
+
+The one window that matters is between saving the token and sending your first message: whoever
+writes first is obeyed. That is the price of having no second setup step — so claim the chat
+immediately, and if the notification names someone else, unpair in Settings and revoke the token.
+Recovery is `/revoke` at BotFather, then pasting the new token in Settings.
 
 ### What a phone may approve
 

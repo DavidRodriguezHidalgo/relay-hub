@@ -38,5 +38,5 @@ export { modelInEffect, modelLabel } from './model-in-effect';
 export type { ModelInEffect } from './model-in-effect';
 export { scrubText, scrubEvent } from './scrub';
 export { NO_TELEGRAM } from './telegram';
-export type { TelegramBridgeStatus, TelegramCandidate, TelegramConnection, TelegramStatus } from './telegram';
+export type { TelegramBridgeStatus, TelegramConnection, TelegramStatus } from './telegram';
 export type { ScrubbableEvent } from './scrub';

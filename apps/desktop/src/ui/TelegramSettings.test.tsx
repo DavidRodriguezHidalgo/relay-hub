@@ -11,7 +11,6 @@ const base = {
   testSent: false,
   onSaveToken: vi.fn(),
   onRemoveToken: vi.fn(),
-  onPair: vi.fn(),
   onUnpair: vi.fn(),
   onTest: vi.fn(),
 };
@@ -53,25 +52,17 @@ describe('TelegramSettings when nothing is set up', () => {
 describe('TelegramSettings with a token but no paired chat', () => {
   const unpaired = status({ configured: true, storage: 'encrypted', botUsername: 'relay_bot', connection: 'ok' });
 
-  it('names the bot and asks for a message from the phone', () => {
+  it('names the bot and asks only for a message — there is no second step', () => {
     render(<TelegramSettings {...base} status={unpaired} />);
     expect(screen.getAllByText(/@relay_bot/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/a message from your phone/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Pair/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Now message/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Pair/ })).not.toBeInTheDocument();
   });
 
-  it('offers to pair the chat that wrote, naming who it was', async () => {
-    const onPair = vi.fn();
-    render(<TelegramSettings {...base} status={status({ ...unpaired, candidate: { chatId: 4242, name: 'David R', at: 't' } })} onPair={onPair} />);
-    expect(screen.getByText(/David R/)).toBeInTheDocument();
-    expect(screen.getByText(/4242/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Pair this chat' }));
-    expect(onPair).toHaveBeenCalledWith(4242);
-  });
-
-  it('says plainly that nothing is acted on until a chat is paired', () => {
+  it('says the first chat to write wins, and why that means doing it now', () => {
     render(<TelegramSettings {...base} status={unpaired} />);
-    expect(screen.getByText(/Nothing is acted on until you pair a chat/i)).toBeInTheDocument();
+    expect(screen.getByText(/first chat to write becomes yours/i)).toBeInTheDocument();
+    expect(screen.getByText(/do it now rather than later/i)).toBeInTheDocument();
   });
 
   it('removes the token', async () => {

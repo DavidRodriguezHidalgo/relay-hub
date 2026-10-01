@@ -22,8 +22,10 @@ export interface TelegramBridgeOptions {
   api: TelegramApi;
   relay: RelayFacade;
   store: MetaStore;
-  /** The one chat honoured; null while unpaired, when the bridge only records who wrote. */
+  /** The one chat honoured; null takes the first private chat that writes as the owner's. */
   chatId: number | null;
+  /** Who that chat belongs to, when it is already known from a previous run. */
+  chatName?: string | null;
   now?: () => Date;
   /** Waits, or rejects as soon as the signal aborts; a test makes it instant. */
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -55,7 +57,7 @@ type Outbound =
   | { kind: 'send'; text: string; keyboard?: InlineKeyboard; onSent?: (messageId: number) => void }
   | { kind: 'edit'; messageId: number; text: string };
 
-type BridgeEvents = { status: [TelegramBridgeStatus] };
+type BridgeEvents = { status: [TelegramBridgeStatus]; paired: [{ chatId: number; name: string }] };
 
 const defaultSleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -98,7 +100,8 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
   private readonly api: TelegramApi;
   private readonly relay: RelayFacade;
   private readonly store: MetaStore;
-  private readonly chatId: number | null;
+  /** Not readonly: the first chat to write becomes this, without a restart. */
+  private chatId: number | null;
   private readonly now: () => Date;
   private readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   private readonly pollTimeoutSec: number;
@@ -124,11 +127,19 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
     this.now = opts.now ?? (() => new Date());
     this.sleep = opts.sleep ?? defaultSleep;
     this.pollTimeoutSec = opts.pollTimeoutSec ?? POLL_TIMEOUT_SEC;
-    this.st = { botUsername: null, chatId: opts.chatId, candidate: null, connection: 'stopped', lastError: null, lastPolledAt: null, ignored: 0 };
+    this.st = {
+      botUsername: null,
+      chatId: opts.chatId,
+      chatName: opts.chatName ?? null,
+      connection: 'stopped',
+      lastError: null,
+      lastPolledAt: null,
+      ignored: 0,
+    };
   }
 
   status(): TelegramBridgeStatus {
-    return { ...this.st, candidate: this.st.candidate ? { ...this.st.candidate } : null };
+    return { ...this.st };
   }
 
   start(): void {
@@ -215,12 +226,20 @@ export class TelegramBridge extends EventEmitter<BridgeEvents> {
     const m = update.message;
     if (!m) return;
     if (m.chat.type !== 'private' || !m.from || m.from.id !== m.chat.id) return this.ignore();
-    if (this.chatId === null) {
-      this.patch({ candidate: { chatId: m.chat.id, name: nameOf(m.from), at: this.now().toISOString() } });
-      return;
-    }
-    if (m.chat.id !== this.chatId) return this.ignore();
+    // The first private chat to write is taken as the owner's, so setting the token is the only
+    // step: there is no way to learn the id without being written to, and a second trip to
+    // Settings to confirm it was the friction this is meant to remove.
+    if (this.chatId === null) this.pairWith(m.chat.id, nameOf(m.from));
+    else if (m.chat.id !== this.chatId) return this.ignore();
     await this.handleMessage(m);
+  }
+
+  /** Binds to a chat and says so, here and on the phone, so a chat that is not yours is obvious at once. */
+  private pairWith(chatId: number, name: string): void {
+    this.chatId = chatId;
+    this.patch({ chatId, chatName: name });
+    this.send(`Paired with this chat. Relay will act on messages from here, and ignore every other chat.`);
+    this.emit('paired', { chatId, name });
   }
 
   private async handleMessage(m: TelegramMessage): Promise<void> {

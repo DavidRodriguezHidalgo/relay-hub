@@ -58,7 +58,6 @@ export const IPC = {
   moveTodo: 'relay:moveTodo',
   telegramStatus: 'relay:telegramStatus',
   setTelegramToken: 'relay:setTelegramToken',
-  pairTelegram: 'relay:pairTelegram',
   unpairTelegram: 'relay:unpairTelegram',
   telegramTest: 'relay:telegramTest',
 } as const;
@@ -79,7 +78,6 @@ export const MAIN_CHANNELS: readonly string[] = [
   IPC.setCrashReports,
   IPC.telegramStatus,
   IPC.setTelegramToken,
-  IPC.pairTelegram,
   IPC.unpairTelegram,
   IPC.telegramTest,
 ];
@@ -154,8 +152,6 @@ export interface RelayApi {
   telegramStatus(): Promise<TelegramStatus>;
   /** Stores the bot token (encrypted where the OS allows) and starts polling; null removes it and stops. */
   setTelegramToken(token: string | null): Promise<TelegramStatus>;
-  /** Binds the bridge to the chat currently offered as a candidate; refused for any other id. */
-  pairTelegram(chatId: number): Promise<TelegramStatus>;
   unpairTelegram(): Promise<TelegramStatus>;
   /** Sends one message to the paired chat, so the setup can be seen to work from the phone. */
   telegramTest(): Promise<void>;

@@ -68,7 +68,7 @@ class StandInTelegram {
   }
 }
 
-test('pairs a phone in Settings, then answers it — and refuses every other chat', async () => {
+test('binds itself to the first chat that writes, answers it, and refuses every other chat', async () => {
   const telegram = new StandInTelegram();
   await telegram.start();
   const root = await mkdtemp(join(tmpdir(), 'relay-e2e-paired-'));
@@ -90,26 +90,29 @@ test('pairs a phone in Settings, then answers it — and refuses every other cha
   await dialog.getByRole('button', { name: 'Save token' }).click();
   await expect(dialog.getByText('@relay_stand_in_bot', { exact: true })).toBeVisible();
 
-  // nothing is acted on before pairing: a message now only offers the chat
-  telegram.deliver(CHAT, 'hello from my phone');
-  await expect(dialog.getByRole('button', { name: 'Pair this chat' })).toBeVisible({ timeout: 15_000 });
-  await expect(dialog).toContainText('David R');
-  expect(telegram.sent).toEqual([]);
-
-  await dialog.getByRole('button', { name: 'Pair this chat' }).click();
-  await expect(dialog).toContainText(`Paired with David R (chat ${CHAT})`);
+  // the first chat to write becomes the owner's, with no second step in Settings.
+  // It writes /status rather than prose on purpose: a command is answered by the bridge itself,
+  // so this test never calls the model and stays fast and deterministic in CI.
+  await expect(dialog).toContainText('Now message');
+  telegram.deliver(CHAT, '/status');
+  await expect(dialog).toContainText(`Paired with David R (chat ${CHAT})`, { timeout: 20_000 });
+  await expect.poll(() => telegram.sent.map((s) => s.text).join('\n'), { timeout: 10_000 }).toMatch(/Paired with this chat/);
 
   // a message from the paired chat is answered, without the AI for /status
+  const before = telegram.sent.length;
   telegram.deliver(CHAT, '/status');
-  await expect.poll(() => telegram.sent.length, { timeout: 20_000 }).toBeGreaterThan(0);
-  expect(telegram.sent[0]!.chat_id).toBe(CHAT);
-  expect(telegram.sent[0]!.text).toMatch(/Nothing is running|Running:/);
+  await expect.poll(() => telegram.sent.length, { timeout: 20_000 }).toBeGreaterThan(before);
+  const status = telegram.sent[telegram.sent.length - 1]!;
+  expect(status.chat_id).toBe(CHAT);
+  // the message that bound the chat is also an instruction, so Relay may well be busy with it
+  expect(status.text).toMatch(/Nothing is running|Running:|Relay chat is working/);
 
-  // a message from anyone else is dropped without a reply
-  const answered = telegram.sent.length;
+  // a message from anyone else is dropped without a reply. Counting messages would be flaky —
+  // a reply to the owner can still be on its way — so the property checked is the real one:
+  // nothing Relay ever sends goes anywhere but the bound chat.
   telegram.deliver(9999, '/status');
   await page.waitForTimeout(3_000);
-  expect(telegram.sent).toHaveLength(answered);
+  expect(telegram.sent.map((s) => s.chat_id)).toEqual(telegram.sent.map(() => CHAT));
 
   // the test button reaches the phone
   await dialog.getByRole('button', { name: 'Send test message' }).click();

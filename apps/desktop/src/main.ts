@@ -105,11 +105,17 @@ async function start(): Promise<void> {
   };
   // The bridge is the app's, not the engine's: the token lives here, and an app with no token
   // never starts anything, never polls, and never reports a problem it does not have.
-  const telegram = new TelegramService(engine, app.getPath('userData'), safeStorage);
+  // A chat binding itself is the one moment where a mistake matters, so it is said out loud
+  // rather than only sitting in Settings: if that was not you, unpair and revoke the token.
+  const telegram = new TelegramService(engine, app.getPath('userData'), safeStorage, ({ chatId, name }) =>
+    new Notification({
+      title: 'Relay Hub: Telegram paired',
+      body: `${name} (chat ${chatId}) can now drive Relay. If that was not you, unpair in Settings and revoke the bot token.`,
+    }).show(),
+  );
   await telegram.startIfConfigured();
   ipcMain.handle(IPC.telegramStatus, () => telegram.status());
   ipcMain.handle(IPC.setTelegramToken, (_event, token: string | null) => telegram.setToken(token));
-  ipcMain.handle(IPC.pairTelegram, (_event, chatId: number) => telegram.pair(chatId));
   ipcMain.handle(IPC.unpairTelegram, () => telegram.unpair());
   ipcMain.handle(IPC.telegramTest, () => telegram.test());
   ipcMain.handle(IPC.crashReports, () => reportingChoice(app.getPath('userData')) === 'yes');

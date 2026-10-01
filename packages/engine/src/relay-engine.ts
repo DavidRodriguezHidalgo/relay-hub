@@ -520,7 +520,14 @@ export class RelayEngine {
    * The engine keeps no token of its own: it is handed one, or it is not, and without a call
    * to this nothing about Telegram ever runs.
    */
-  startTelegram(opts: { token: string; chatId: number | null; api?: TelegramApi }): TelegramBridgeStatus {
+  startTelegram(opts: {
+    token: string;
+    chatId: number | null;
+    chatName?: string | null;
+    api?: TelegramApi;
+    /** Called when the first chat writes and becomes the owner's, so the app can remember it. */
+    onPaired?: (paired: { chatId: number; name: string }) => void;
+  }): TelegramBridgeStatus {
     this.stopTelegram();
     const bridge = new TelegramBridge({
       // RELAY_TELEGRAM_API points the bridge at a stand-in server, which is how the whole path
@@ -535,8 +542,10 @@ export class RelayEngine {
       },
       store: this.store,
       chatId: opts.chatId,
+      chatName: opts.chatName ?? null,
       now: this.now,
     });
+    if (opts.onPaired) bridge.on('paired', opts.onPaired);
     const onStatus = (status: TelegramBridgeStatus) => {
       // only while this is the live bridge: an old one winding down must not publish its way
       // over the status of the one that replaced it
@@ -552,12 +561,13 @@ export class RelayEngine {
     const bridge = this.telegram;
     this.telegram = null;
     bridge?.removeAllListeners('status');
+    bridge?.removeAllListeners('paired');
     void bridge?.stop();
   }
 
   /** What the bridge is doing, or the stopped default when none is running. */
   telegramStatus(): TelegramBridgeStatus {
-    return this.telegram?.status() ?? { botUsername: null, chatId: null, candidate: null, connection: 'stopped', lastError: null, lastPolledAt: null, ignored: 0 };
+    return this.telegram?.status() ?? { botUsername: null, chatId: null, chatName: null, connection: 'stopped', lastError: null, lastPolledAt: null, ignored: 0 };
   }
 
   /** One message to the paired chat, so the setup can be seen to work from the phone. */

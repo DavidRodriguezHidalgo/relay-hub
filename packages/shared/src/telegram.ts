@@ -1,11 +1,3 @@
-/** A Telegram chat that messaged the bot while no chat was paired; shown in Settings for the user to accept. */
-export interface TelegramCandidate {
-  chatId: number;
-  /** The sender as Telegram names them: first and last name, or @username. */
-  name: string;
-  at: string;
-}
-
 export type TelegramConnection =
   /** Started, not yet heard back from Telegram. */
   | 'starting'
@@ -19,9 +11,16 @@ export type TelegramConnection =
 export interface TelegramBridgeStatus {
   /** The bot's @username once Telegram has said what it is. */
   botUsername: string | null;
-  /** The one chat whose messages are acted on; null while unpaired. */
+  /**
+   * The one chat whose messages are acted on; null until the first one writes.
+   *
+   * The first private chat to message the bot is taken as the owner's and everything after is
+   * measured against it. That is a deliberate trade for having no second step: see the note in
+   * Settings about setting the token and messaging the bot straight away.
+   */
   chatId: number | null;
-  candidate: TelegramCandidate | null;
+  /** Who that chat belongs to, as Telegram names them. */
+  chatName: string | null;
   connection: TelegramConnection;
   lastError: string | null;
   lastPolledAt: string | null;
@@ -34,19 +33,16 @@ export interface TelegramStatus extends TelegramBridgeStatus {
   configured: boolean;
   /** How the token is kept on disk; null when there is none. */
   storage: 'encrypted' | 'plain' | null;
-  /** The paired chat's owner, as recorded when it was paired. */
-  chatName: string | null;
 }
 
 export const NO_TELEGRAM: TelegramStatus = {
   botUsername: null,
   chatId: null,
-  candidate: null,
+  chatName: null,
   connection: 'stopped',
   lastError: null,
   lastPolledAt: null,
   ignored: 0,
   configured: false,
   storage: null,
-  chatName: null,
 };

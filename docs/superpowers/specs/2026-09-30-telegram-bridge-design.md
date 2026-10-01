@@ -45,13 +45,19 @@ Two additions to shared types: `MessageOrigin` gains `'telegram'`; `RunnerEvent`
 
 ## Authentication
 
-The bridge is bound to exactly one Telegram **chat id**, yours. Binding happens at the Mac:
+The bridge is bound to exactly one Telegram **chat id**, yours:
 
-1. You paste the bot token in Settings. The bridge starts polling but is **unpaired**: it
-   acts on nothing and replies to nobody.
-2. You message the bot from your phone. The bridge records the sender (chat id, name) as a
-   *candidate* and Settings shows "Message from *Name* (chat 1234). Pair this chat?".
-3. You click **Pair** in Settings. From then on only that chat id is honoured.
+1. You paste the bot token in Settings. The bridge starts polling but is **unbound**: it acts on
+   nothing and replies to nobody.
+2. You message the bot from your phone. That chat is taken as yours, remembered, and answered;
+   the message is treated as your first instruction rather than swallowed.
+
+There is deliberately no confirmation step. Telegram will not reveal a chat id until something
+writes to the bot, so one message is unavoidable; asking for a click in Settings afterwards buys
+little and was the friction worth removing. The cost is a window between saving the token and
+claiming the chat, in which a holder of the token could claim it instead. Settings says so, the
+setup steps say to claim it at once, and the binding raises a desktop notification naming the
+chat, so a wrong one is noticed rather than discovered later.
 
 Every update is checked: the chat must be a private chat, `chat.id` and `from.id` must both
 equal the bound id (so a group the bot was added to never counts), and callback buttons are
@@ -163,10 +169,11 @@ One section, *Telegram*, in the existing dialog, using the existing row/note/err
 and theme tokens (no new colours):
 
 - **No token:** numbered setup steps and a token field with *Save*.
-- **Token, unpaired:** the bot's `@username` (from `getMe`), "Send your bot a message from
-  your phone", the candidate when one arrives with **Pair this chat**, and *Remove token*.
-- **Paired:** "Paired with *Name* (chat id)", connection state and last error, **Send test
-  message**, *Unpair*, *Remove token*.
+- **Token, unbound:** the bot's `@username` (from `getMe`) and "Now message it from your phone —
+  the first chat to write becomes yours", plus *Remove token*.
+- **Bound:** "Paired with *Name* (chat id)", connection state and last error, **Send test
+  message**, *Unpair*, *Remove token*. Binding also raises a desktop notification naming the
+  chat, since that is the one moment a mistake matters.
 
 The token is write-only in the UI: never shown back.
 

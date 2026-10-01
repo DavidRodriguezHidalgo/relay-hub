@@ -70,7 +70,6 @@ describe('App', () => {
       contextUse: vi.fn().mockResolvedValue(null),
       telegramStatus: vi.fn().mockResolvedValue(NO_TELEGRAM),
       setTelegramToken: vi.fn().mockResolvedValue(NO_TELEGRAM),
-      pairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
       unpairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
       telegramTest: vi.fn().mockResolvedValue(undefined),
     };
@@ -501,7 +500,6 @@ describe('App collisions', () => {
       contextUse: vi.fn().mockResolvedValue(null),
       telegramStatus: vi.fn().mockResolvedValue(NO_TELEGRAM),
       setTelegramToken: vi.fn().mockResolvedValue(NO_TELEGRAM),
-      pairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
       unpairTelegram: vi.fn().mockResolvedValue(NO_TELEGRAM),
       telegramTest: vi.fn().mockResolvedValue(undefined),
     };

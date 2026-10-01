@@ -10,7 +10,6 @@ interface Props {
   testSent: boolean;
   onSaveToken: (token: string) => void;
   onRemoveToken: () => void;
-  onPair: (chatId: number) => void;
   onUnpair: () => void;
   onTest: () => void;
 }
@@ -57,7 +56,7 @@ export function TelegramSettings(p: Props) {
             <li>In Telegram, open a chat with @BotFather.</li>
             <li>Send /newbot and follow the two questions (a name, then a username ending in “bot”).</li>
             <li>BotFather replies with a token — paste the token below and save it.</li>
-            <li>Then message your new bot from your phone and pair the chat here.</li>
+            <li>Message your new bot from your phone. That chat becomes yours; nothing else is needed.</li>
           </ol>
           <label className="settings__row">
             Bot token
@@ -75,8 +74,8 @@ export function TelegramSettings(p: Props) {
           </button>
           <p className="settings__note">
             The token is kept in your Mac’s keychain, never in the repository. Anyone who gets it can read what you
-            send the bot and send you messages as the bot, but cannot drive your machine — only your paired chat can do
-            that.
+            send the bot and send you messages as the bot. They could also claim the bot by writing to it before you
+            do, which is why you should message it as soon as you save the token.
           </p>
         </>
       )}
@@ -89,20 +88,11 @@ export function TelegramSettings(p: Props) {
           {line && <p className={line.bad ? 'error' : 'settings__note'} role={line.bad ? 'alert' : undefined}>{line.text}</p>}
 
           {dead ? null : s.chatId === null ? (
-            <>
-              <p className="settings__note">
-                Send {s.botUsername ? `@${s.botUsername}` : 'your bot'} a message from your phone, then pair the chat it
-                arrives from. Nothing is acted on until you pair a chat.
-              </p>
-              {s.candidate && (
-                <p className="settings__row">
-                  Message from {s.candidate.name} (chat {s.candidate.chatId}).
-                  <button type="button" disabled={p.busy} onClick={() => p.onPair(s.candidate!.chatId)}>
-                    Pair this chat
-                  </button>
-                </p>
-              )}
-            </>
+            <p className="settings__note">
+              Now message {s.botUsername ? `@${s.botUsername}` : 'your bot'} from your phone. The first chat to write
+              becomes yours, and every other chat is ignored from then on — so do it now rather than later, while only
+              you know the bot is there.
+            </p>
           ) : (
             <>
               <p className="settings__row">

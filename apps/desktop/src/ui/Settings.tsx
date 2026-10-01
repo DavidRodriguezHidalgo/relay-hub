@@ -34,7 +34,6 @@ interface Props {
   telegramError: string | null;
   telegramTestSent: boolean;
   onTelegramToken: (token: string | null) => void;
-  onTelegramPair: (chatId: number) => void;
   onTelegramUnpair: () => void;
   onTelegramTest: () => void;
 }
@@ -98,7 +97,6 @@ export function Settings(p: Props) {
           testSent={p.telegramTestSent}
           onSaveToken={(token) => p.onTelegramToken(token)}
           onRemoveToken={() => p.onTelegramToken(null)}
-          onPair={p.onTelegramPair}
           onUnpair={p.onTelegramUnpair}
           onTest={p.onTelegramTest}
         />

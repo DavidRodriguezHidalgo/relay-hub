@@ -131,6 +131,11 @@ const message = (chatId: number, text: string | null, over: Partial<TelegramUpda
     ...over,
   },
 });
+/** A message in a group the bot was added to: never the owner's chat, whoever sent it. */
+const groupMessage = (): TelegramUpdate => ({
+  update_id: updateId++,
+  message: { message_id: updateId, chat: { id: -100, type: 'group' }, from: { id: ME, first_name: 'D' }, date: 0, text: 'hi' },
+});
 const press = (fromId: number, data: string, chatId = fromId): TelegramUpdate => ({
   update_id: updateId++,
   callback_query: { id: `cb${updateId}`, from: { id: fromId, first_name: 'D' }, data, message: { message_id: 1, chat: { id: chatId, type: 'private' }, date: 0 } },
@@ -165,13 +170,36 @@ describe('TelegramBridge', () => {
   });
 
   describe('pairing and authentication', () => {
-    it('unpaired: records who wrote as a candidate, replies to nobody, sends nothing to Relay', async () => {
+    it('takes the first private chat that writes as the owner, says so, and acts on that same message', async () => {
       const { api, relay, bridge } = setup(null);
       stop = () => bridge.stop();
-      api.push(message(42, '/start'));
-      await until(() => bridge.status().candidate !== null);
-      expect(bridge.status().candidate).toEqual({ chatId: 42, name: 'David R', at: '2026-09-30T10:00:00.000Z' });
-      expect(api.sent).toEqual([]);
+      const paired: { chatId: number; name: string }[] = [];
+      bridge.on('paired', (p) => paired.push(p));
+      api.push(message(ME, 'what is running?'));
+      await until(() => bridge.status().chatId !== null);
+      expect(bridge.status()).toMatchObject({ chatId: ME, chatName: 'David R' });
+      expect(paired).toEqual([{ chatId: ME, name: 'David R' }]);
+      // the message that paired is not swallowed: it is the first instruction
+      await until(() => relay.sends.length === 1);
+      expect(relay.sends[0]).toEqual({ prompt: 'what is running?', origin: 'telegram' });
+      expect(api.sent[0]!.text).toMatch(/Paired with this chat/);
+    });
+
+    it('once paired, a second chat is ignored however quickly it writes', async () => {
+      const { api, relay, bridge } = setup(null);
+      stop = () => bridge.stop();
+      api.push(message(ME, 'first'), message(77, 'me too'));
+      await until(() => bridge.status().ignored === 1);
+      expect(bridge.status().chatId).toBe(ME);
+      expect(relay.sends.map((s) => s.prompt)).toEqual(['first']);
+    });
+
+    it('a group message never pairs, even as the very first thing the bot sees', async () => {
+      const { api, relay, bridge } = setup(null);
+      stop = () => bridge.stop();
+      api.push(groupMessage());
+      await until(() => bridge.status().ignored === 1);
+      expect(bridge.status().chatId).toBeNull();
       expect(relay.sends).toEqual([]);
     });
 
@@ -191,13 +219,14 @@ describe('TelegramBridge', () => {
       await until(() => bridge.status().ignored === 1);
       expect(api.sent).toEqual([]);
       expect(relay.sends).toEqual([]);
-      expect(bridge.status().candidate).toBeNull();
+      // the chat it is bound to is untouched by a stranger writing
+      expect(bridge.status().chatId).toBe(ME);
     });
 
     it('paired: a group the bot was added to never counts, even when the sender is me', async () => {
       const { api, relay, bridge } = setup();
       stop = () => bridge.stop();
-      api.push({ update_id: updateId++, message: { message_id: 1, chat: { id: -100, type: 'group' }, from: { id: ME, first_name: 'D' }, date: 0, text: 'hi' } });
+      api.push(groupMessage());
       await until(() => bridge.status().ignored === 1);
       expect(relay.sends).toEqual([]);
     });
