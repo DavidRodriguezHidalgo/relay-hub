@@ -8,6 +8,7 @@ import {
   type TranscriptEntry,
   type UpdateCheck,
   type ModelChoice,
+  type NewSessionModel,
   type SessionStatus,
   type CheckoutPlan,
   type CheckoutResult,
@@ -127,6 +128,9 @@ export function App() {
   const [theme, setTheme] = useState<Theme | null>(loadTheme);
   const [allowAllActions, setAllowAllActions] = useState(false);
   const [crashReports, setCrashReports] = useState(false);
+  const [newSessionModel, setNewSessionModel] = useState<NewSessionModel | null>(null);
+  const [claudeDefault, setClaudeDefault] = useState<{ model: string | null; path: string }>({ model: null, path: '' });
+  const [modelChoices, setModelChoices] = useState<ModelChoice[]>([]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -134,9 +138,25 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    void window.relay.settings().then((s) => setAllowAllActions(s.allowAllActions));
+    void window.relay.settings().then((s) => {
+      setAllowAllActions(s.allowAllActions);
+      setClaudeDefault({ model: s.claudeDefaultModel, path: s.claudeSettingsPath });
+    });
+    void window.relay.availableModels().then(setModelChoices, () => undefined);
+    void window.relay.newSessionModel().then(setNewSessionModel, () => undefined);
     void window.relay.crashReports().then(setCrashReports, () => undefined);
   }, []);
+
+  /** The engine resolves what the choice means, so it is asked again rather than guessed at here. */
+  const changeNewSessionModel = async (model: string) => {
+    try {
+      await window.relay.setNewSessionModel(model);
+      setNewSessionModel(await window.relay.newSessionModel());
+      setSettingsError(null);
+    } catch (e) {
+      setSettingsError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   /** The main process owns the choice, so it is set there first and only then shown as on. */
   const changeCrashReports = async (on: boolean) => {
@@ -297,6 +317,11 @@ export function App() {
           onTheme={setTheme}
           allowAllActions={allowAllActions}
           onAllowAllActions={(on) => void changeAllowAll(on)}
+          newSessionModel={newSessionModel}
+          onNewSessionModel={(model) => void changeNewSessionModel(model)}
+          claudeDefaultModel={claudeDefault.model}
+          claudeSettingsPath={claudeDefault.path}
+          models={modelChoices}
           crashReports={crashReports}
           onCrashReports={(on) => void changeCrashReports(on)}
           error={settingsError}
@@ -358,6 +383,7 @@ export function App() {
           creating && (
             <NewSessionForm
               listProjects={window.relay.listProjects}
+              model={newSessionModel}
               onCreate={(req) => window.relay.createSession(req)}
               onCreated={(id) => {
                 setCreating(false);

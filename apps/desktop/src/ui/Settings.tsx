@@ -1,4 +1,5 @@
 import type { CheckoutPlan, CheckoutResult, TelegramStatus, UpdateCheck, UpdateMode } from '@relay/shared';
+import { modelLabel, newSessionModelSentence, type ModelChoice, type NewSessionModel } from '@relay/shared';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
 import { TelegramSettings } from './TelegramSettings';
@@ -10,6 +11,14 @@ interface Props {
   onAllowAllActions: (on: boolean) => void;
   crashReports: boolean;
   onCrashReports: (on: boolean) => void;
+  /** What a new session will run on, or null before it has been looked up. */
+  newSessionModel: NewSessionModel | null;
+  onNewSessionModel: (model: string) => void;
+  /** What Claude Code would pick on its own, and where that is saved. */
+  claudeDefaultModel: string | null;
+  claudeSettingsPath: string;
+  /** Models a new session could run on; empty until they have been asked for. */
+  models: ModelChoice[];
   /** Why the last change did not take, when it did not. */
   error: string | null;
   onClose: () => void;
@@ -100,6 +109,34 @@ export function Settings(p: Props) {
           onUnpair={p.onTelegramUnpair}
           onTest={p.onTelegramTest}
         />
+        <section className="settings__section">
+          <h3>New sessions</h3>
+          <label className="settings__row">
+            Model
+            <select
+              aria-label="Model for new sessions"
+              value={p.newSessionModel?.id ?? ''}
+              onChange={(e) => p.onNewSessionModel(e.target.value)}
+            >
+              {/* a stored choice the list no longer offers matches no option; without this the
+                  select would show nothing while the note underneath names a model */}
+              {!p.models.some((m) => m.id === p.newSessionModel?.id) && <option value="">—</option>}
+              {p.models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="settings__note">{newSessionModelSentence(p.newSessionModel)}</p>
+          <p className="settings__note">
+            {p.claudeDefaultModel
+              ? `Relay asks for this model by name every time it starts a session. Your own saved default (${modelLabel(
+                  p.claudeDefaultModel,
+                )}, in ${p.claudeSettingsPath}) is left to the sessions you start yourself — Relay does not use it and never writes to that file.`
+              : `Relay asks for this model by name every time it starts a session, so nothing it starts depends on the saved default in ${p.claudeSettingsPath}. Relay never writes to that file.`}
+          </p>
+        </section>
         <section className="settings__section">
           <h3>Crash reports</h3>
           <label className="settings__row">

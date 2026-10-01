@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse } from '@relay/shared';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure, type NewSessionModel, type RelaySettings } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -29,6 +31,9 @@ import { SessionStore } from './store/session-store';
 import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
+import { describeFailure } from './failures/classify';
+import { claudeDefaultModel, claudeSettingsPath } from './models/default-model';
+import { newSessionModel as resolveNewSessionModel } from './models/new-session-model';
 import { modelInEffect, type TelegramBridgeStatus } from '@relay/shared';
 import { TelegramBridge } from './telegram/telegram-bridge';
 import { HttpTelegramApi, type TelegramApi } from './telegram/telegram-api';
@@ -48,6 +53,19 @@ const ALLOW_ALL_KEY = 'settings.allowAllActions';
 
 /** Meta key holding the model a session was switched to. */
 const modelKey = (sessionId: string) => `model.${sessionId}`;
+
+/**
+ * Meta key for a session's last failure.
+ *
+ * Run state lives only as long as its runner, and an idle runner is closed after ten minutes, so a
+ * failed session used to read back as idle within the hour — and as idle again after a restart. A
+ * failure is kept because the question "what is broken" outlives the process that hit it.
+ */
+const FAILURE_PREFIX = 'failure.';
+const failureKey = (sessionId: string) => `${FAILURE_PREFIX}${sessionId}`;
+
+/** Meta key for the model Relay asks for when it starts a session; absent means the recommended one. */
+const NEW_SESSION_MODEL_KEY = 'settings.newSessionModel';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -115,11 +133,6 @@ export interface SendOptions {
   origin: MessageOrigin;
 }
 
-/** The single entry point the desktop app (and later a daemon) talks to. */
-/** Settings the user controls, kept by Relay rather than by any one session. */
-export interface RelaySettings {
-  allowAllActions: boolean;
-}
 
 export class RelayEngine {
   private readonly runners = new Map<string, SessionRunner>();
@@ -201,6 +214,7 @@ export class RelayEngine {
       ...createRelayTools({
         listSessions: () => this.listSessions(),
         runState: () => this.runState(),
+        failures: () => this.failures(),
         getTranscript: (id) => this.getTranscript(id),
         send: async (req) => {
           this.refuseRelayOnly();
@@ -497,7 +511,41 @@ export class RelayEngine {
 
   /** What the user has turned on for themselves; kept across restarts. */
   settings(): RelaySettings {
-    return { allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true' };
+    return {
+      allowAllActions: this.store.getMeta(ALLOW_ALL_KEY) === 'true',
+      claudeDefaultModel: claudeDefaultModel(homedir(), (path) => readFileSync(path, 'utf8')),
+      claudeSettingsPath: claudeSettingsPath(homedir()),
+    };
+  }
+
+  /** Null goes back to the recommended option, which is still asked for by name. */
+  setNewSessionModel(model: string | null): void {
+    this.store.setMeta(NEW_SESSION_MODEL_KEY, model);
+  }
+
+  /**
+   * What a new session will run on, before one is started.
+   *
+   * Resolved live rather than stored, so the answer follows the model list instead of freezing
+   * whatever was recommended on the day the setting was first written.
+   */
+  async newSessionModel(): Promise<NewSessionModel> {
+    return resolveNewSessionModel(this.store.getMeta(NEW_SESSION_MODEL_KEY), await this.offeredModels());
+  }
+
+  /** The model list, asked of the orchestrator's own directory since Settings has no session to ask about. */
+  private async offeredModels(): Promise<ModelChoice[]> {
+    const cwd = [...this.orchestratorCwds][0] ?? process.cwd();
+    const { models } = await this.commands.list(cwd);
+    return models;
+  }
+
+  /** The models a session could run on, asked of the orchestrator's own directory. */
+  async availableModels(): Promise<ModelChoice[]> {
+    const models = await this.offeredModels();
+    // marks what a new session will actually use, which with no choice stored is the recommended one
+    const inUse = resolveNewSessionModel(this.store.getMeta(NEW_SESSION_MODEL_KEY), models).id;
+    return models.map((m) => ({ ...m, current: m.id === inUse }));
   }
 
   /**
@@ -665,6 +713,9 @@ export class RelayEngine {
   }): Promise<{ sessionId: string; cwd: string }> {
     const dir = await this.resolveProject(req.project);
     if (!req.branch) await this.refuseMainCheckout(dir);
+    // resolved before anything is created on disk: it does not depend on the worktree, and a slow
+    // model lookup should not leave a branch and a directory behind it
+    const model = (await this.newSessionModel()).id ?? undefined;
     // a new branch gets a worktree of the main repo; without one the session runs exactly where asked
     const cwd = req.branch
       ? await this.worktrees.createWorktree((await this.worktrees.repoRoot(dir)) ?? dir, req.branch)
@@ -676,6 +727,8 @@ export class RelayEngine {
       client: this.agent,
       approvals: this.approvals,
       profile: { kind: 'session' },
+      // always asked for, so a new session never inherits whatever a past /model command saved
+      model,
     });
     let sessionId: string;
     try {
@@ -701,6 +754,16 @@ export class RelayEngine {
       throw new Error(`Could not start a session in ${cwd}: ${err instanceof Error ? err.message : String(err)}`);
     }
     runner.rekey(sessionId);
+    // Kept for this session, so every later run asks for it again by name.
+    //
+    // A runner is closed ten minutes after its last turn and rebuilt on the next send, and rebuilt
+    // again after a restart. Without this, those runs ask for nothing. Resuming happens to restore
+    // the model from the session's own transcript — measured, not assumed — but that is
+    // undocumented behaviour to lean on for the one thing this change exists to guarantee.
+    //
+    // Written only for sessions Relay started. A session Relay merely found keeps no record, so it
+    // stays on whatever it was last set to, including from a terminal.
+    if (model) this.store.setMeta(modelKey(sessionId), model);
     this.wire(runner, { id: sessionId, title: req.prompt.trim().slice(0, NEW_TITLE_MAX), branch: req.branch ?? null });
     this.publish({ type: 'state', sessionId, state: runner.state, error: runner.error });
     return { sessionId, cwd };
@@ -858,6 +921,31 @@ export class RelayEngine {
     this.approvals.decide(approvalId, decision);
   }
 
+  /**
+   * The last failure of each session that has one, whether or not its runner is still alive.
+   *
+   * A session held by another Claude process is deliberately not in here. It has not failed — it
+   * is simply not Relay's to drive — and calling that an error would put a red mark on every
+   * session the user has open in a terminal. `runState().external` is where that is answered.
+   */
+  failures(): Record<string, SessionFailure> {
+    const out: Record<string, SessionFailure> = {};
+    // one query for the lot, like listSessions does for models; this is read on every tool call
+    const stored = this.store.metaByPrefix(FAILURE_PREFIX);
+    if (stored.size === 0) return out;
+    const known = new Set(this.listSessions().map((s) => s.id));
+    for (const [id, value] of stored) {
+      // a record whose session has gone is left in place but never reported, since nothing can act on it
+      if (!known.has(id)) continue;
+      try {
+        out[id] = JSON.parse(value) as SessionFailure;
+      } catch {
+        // an unreadable record is no record; better silent than a fabricated failure
+      }
+    }
+    return out;
+  }
+
   runState(): RunState {
     const states: RunState['states'] = {};
     for (const [id, r] of this.runners) states[id] = { state: r.state, error: r.error };
@@ -940,6 +1028,20 @@ export class RelayEngine {
           notice: 'You stopped this turn.',
         },
       });
+    });
+    runner.on('turn-end', (end) => {
+      // quitting is not a failure: closing interrupts running turns, and an SDK iterator that
+      // rejects on the way out would otherwise persist an error for a session that was fine
+      if (this.closing) return;
+      // a stopped turn is not a fault: only a real error is kept, and a good turn clears the last one
+      if (end.error) {
+        this.store.setMeta(
+          failureKey(sessionId),
+          JSON.stringify(describeFailure(end.error, this.now().toISOString(), end.apiError)),
+        );
+      } else if (!end.aborted) {
+        this.store.setMeta(failureKey(sessionId), null);
+      }
     });
     runner.on('turn-end', (end) => this.bulk.onTurnEnd(sessionId, end));
     runner.on('turn-end', (end) => this.relayTurnEnd(session, end));

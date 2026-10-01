@@ -241,11 +241,23 @@ export function SessionPanel(p: Props) {
   };
   return (
     <>
-      <header className="session-panel__header">
+      {/*
+        Pinned to the top of the panel while the conversation scrolls under it, so you always know
+        which session you are in and whether it is running. Only what identifies the session is in
+        here: it has to stay one line, or on a narrow window it would eat the panel. Everything
+        used to set a session up sits below, where it scrolls away like the rest.
+
+        It never goes near the send box. That is pinned to the bottom of the same scroller, and the
+        one thing on this panel that is touched constantly.
+      */}
+      <header className="session-panel__bar">
         <h1>{p.session.title}</h1>
+        <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
+        <span className={`state state--${state}`}>{state}</span>
+        <ContextMeter use={p.contextUse ?? null} />
+      </header>
+      <div className="session-panel__detail">
         <p>
-          <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
-          <span className={`state state--${state}`}>{state}</span> <ContextMeter use={p.contextUse ?? null} />{' '}
           <ModelPicker model={p.session.model ?? null} models={p.models} onSetModel={p.onSetModel} /> <code>{p.session.cwd}</code>{' '}
           {p.session.branch && <code>{p.session.branch}</code>}{' '}
           {p.session.prUrl && (
@@ -276,7 +288,7 @@ export function SessionPanel(p: Props) {
           <input type="checkbox" checked={p.showSidechain} onChange={(e) => p.onToggleSidechain(e.target.checked)} />{' '}
           Show subagent turns
         </label>
-      </header>
+      </div>
       {p.approvals.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />
       ))}
