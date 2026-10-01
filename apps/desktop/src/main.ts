@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, Notification, safeStorage, shell } from 'electron';
 import { applyCheckout, downloadRelease, inspectCheckout, repoFromPackage } from '@relay/engine';
 import { existsSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
@@ -12,6 +12,7 @@ import { RelayEngine } from '@relay/engine';
 import { registerEngineIpc } from './ipc';
 import { loadWhenServing } from './dev-server-load';
 import { startCrashReporting, reportingChoice, setReportingChoice } from './telemetry';
+import { TelegramService } from './telegram-service';
 
 // MAIN_WINDOW_VITE_DEV_SERVER_URL and MAIN_WINDOW_VITE_NAME are declared by forge.env.d.ts.
 
@@ -102,6 +103,21 @@ async function start(): Promise<void> {
     const { stdout } = await runCommand(cmd, args, { cwd, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 });
     return { stdout };
   };
+  // The bridge is the app's, not the engine's: the token lives here, and an app with no token
+  // never starts anything, never polls, and never reports a problem it does not have.
+  // A chat binding itself is the one moment where a mistake matters, so it is said out loud
+  // rather than only sitting in Settings: if that was not you, unpair and revoke the token.
+  const telegram = new TelegramService(engine, app.getPath('userData'), safeStorage, ({ chatId, name }) =>
+    new Notification({
+      title: 'Relay Hub: Telegram paired',
+      body: `${name} (chat ${chatId}) can now drive Relay. If that was not you, unpair in Settings and revoke the bot token.`,
+    }).show(),
+  );
+  await telegram.startIfConfigured();
+  ipcMain.handle(IPC.telegramStatus, () => telegram.status());
+  ipcMain.handle(IPC.setTelegramToken, (_event, token: string | null) => telegram.setToken(token));
+  ipcMain.handle(IPC.unpairTelegram, () => telegram.unpair());
+  ipcMain.handle(IPC.telegramTest, () => telegram.test());
   ipcMain.handle(IPC.crashReports, () => reportingChoice(app.getPath('userData')) === 'yes');
   // only the choice is written: the SDK cannot be started once the app is ready, so it is read
   // at the next launch rather than re-initialised into an error of its own

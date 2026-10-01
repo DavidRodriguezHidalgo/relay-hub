@@ -143,9 +143,24 @@ describe('RelayEngine', () => {
     client.assistant('a9', 'hello');
     client.result();
     await tick();
-    // the prompt itself, then the reply; the queue is covered on its own below
-    expect(events.map((e) => e.type).filter((t) => t !== 'queue')).toEqual(['entry', 'state', 'entry', 'state']);
+    // the prompt itself, then the reply, then the turn ending; the queue is covered on its own below
+    expect(events.map((e) => e.type).filter((t) => t !== 'queue')).toEqual(['entry', 'state', 'entry', 'state', 'turn-end']);
     expect(engine!.runState().states['s-basic']).toEqual({ state: 'idle', error: null });
+  });
+
+  it('says a turn ended, whoever started it, so a bridge can decide what is worth reporting', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    const events: RunnerEvent[] = [];
+    engine!.onEvent((e) => events.push(e));
+    await engine!.send({ sessionId: 's-basic', prompt: 'hi', mode: 'steer', origin: 'telegram' });
+    await tick();
+    client.assistant('a9', 'all done');
+    client.result();
+    await tick();
+    expect(events.filter((e) => e.type === 'turn-end')).toEqual([
+      { type: 'turn-end', sessionId: 's-basic', origins: ['telegram'], lastText: 'all done', error: null, aborted: false },
+    ]);
   });
 
   it('send refuses a session whose transcript someone else wrote in the last 15 s', async () => {

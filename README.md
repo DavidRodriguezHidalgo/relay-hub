@@ -41,6 +41,11 @@ fails, when someone reviews or comments, or when the branch falls behind, it wak
 with the news. A merged PR stops being watched. Watching costs nothing — no AI usage, just Relay
 checking.
 
+**Message Relay from your phone.** Set up a Telegram bot and you can send instructions, ask what
+is running, and be told when something finishes or needs you — from anywhere. Your Mac polls
+Telegram, so nothing of yours is exposed to the internet and no ports are opened. See
+[Messaging Relay from your phone](#messaging-relay-from-your-phone).
+
 ## Demo
 
 
@@ -111,6 +116,68 @@ discards anything.
 One thing is missing from the built app today: the box for typing directly to a single session,
 and its `/` menu of your commands and skills, only appear when you run with `pnpm dev`. In the
 built app you drive sessions through the Relay chat instead. Everything else works in both.
+
+## Messaging Relay from your phone
+
+Relay can be driven from Telegram. Your Mac polls Telegram's API every few seconds; Telegram
+never connects to you, so there is nothing to expose and it works from any network. Until you
+set this up, none of it runs: no polling, no errors, nothing in Settings but the steps below.
+
+### Setting it up
+
+1. In Telegram, open a chat with **@BotFather**.
+2. Send `/newbot`. It asks for a display name, then a username ending in `bot`.
+3. BotFather replies with a token like `123456789:AAH…`. That token *is* the bot — treat it as a
+   password.
+4. In Relay, open **Settings → Telegram**, paste the token and press **Save token**. Relay stores
+   it in your Mac's keychain, in its own file in the app's data folder. It is never written to the
+   repository, and the field never shows it back to you.
+5. Open your new bot in Telegram **from the phone you want to use** and send it anything. That
+   chat becomes yours, Relay replies to say so, and there is nothing else to set up.
+
+Do step 5 straight after step 4. The first chat to message the bot is the one Relay obeys, so the
+sooner you claim it the smaller the window in which anyone else could. Settings and a desktop
+notification both name the chat that got bound, so if it was not you, unpair and revoke the token.
+
+From then on: send an instruction the way you would type it into the Relay chat ("tell the mileage
+session to add tests for the zero-rate case"), or `/status` to hear what is running. `/status` is
+answered by Relay itself and costs nothing.
+
+### Who can drive it
+
+Only the chat that claimed the bot. Every message after that is checked against its chat id — a
+message from anyone else, or from a group your bot was added to, is dropped without a reply, and
+Settings counts how many.
+
+If somebody steals the bot token they can read what you send the bot from then on, and send you
+messages that look like Relay. Once a chat is bound they **cannot drive your machine**: authority
+comes from the chat id on incoming messages, which Telegram sets from the real sender. They can
+also stop messages reaching you, which Relay reports rather than hides.
+
+The one window that matters is between saving the token and sending your first message: whoever
+writes first is obeyed. That is the price of having no second setup step — so claim the chat
+immediately, and if the notification names someone else, unpair in Settings and revoke the token.
+Recovery is `/revoke` at BotFather, then pasting the new token in Settings.
+
+### What a phone may approve
+
+Approvals arrive on the phone with buttons. **Deny** always works. **Allow once** is offered only
+for a `git rebase`, a `git commit --amend`, or a `git push --force-with-lease` — steps whose damage
+is local and recoverable. Anything that deletes files, force-pushes without a lease, resets hard,
+or reaches outside the session's own folder says which it is and waits until you are at the
+machine. "Allow this kind" is never offered from a phone.
+
+### What it will not do from a phone
+
+Take over a session open in a terminal; confirm a bulk run (the plan card wants your eyes on the
+rows); turn on "allow all actions"; show you files, diffs or transcripts. Those stay at the Mac.
+
+### What it tells you, and what it does not
+
+You hear about: an approval waiting, a session finishing work you asked for from the phone or
+through the Relay chat, a session erroring, and one summary per finished bulk run. You do not hear
+about: turns you started by typing into a session in the app, PR-watch wake-ups, or any of the
+ordinary state changes the window already shows.
 
 ## Stopping a session
 

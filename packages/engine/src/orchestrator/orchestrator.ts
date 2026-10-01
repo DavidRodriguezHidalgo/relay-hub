@@ -8,7 +8,7 @@ import {
 } from '@relay/shared';
 import type { ApprovalQueue } from '../approvals/approval-queue';
 import type { AgentClient, AgentTool } from '../runner/agent-client';
-import { SessionRunner } from '../runner/session-runner';
+import { SessionRunner, type TurnEnd } from '../runner/session-runner';
 import type { SessionStore } from '../store/session-store';
 import { ORCHESTRATOR_SYSTEM_PROMPT } from './system-prompt';
 
@@ -22,7 +22,7 @@ export interface OrchestratorOptions {
   tools: AgentTool[];
 }
 
-type OrchestratorEvents = { state: [SessionState, string | null]; entry: [LiveEntry] };
+type OrchestratorEvents = { state: [SessionState, string | null]; entry: [LiveEntry]; 'turn-end': [TurnEnd] };
 
 /** The chat agent in the middle column: a runner with Relay's tools and a remembered session. */
 export class Orchestrator extends EventEmitter<OrchestratorEvents> {
@@ -49,6 +49,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     });
     this.runner.on('state', (s, e) => this.emit('state', s, e));
     this.runner.on('entry', (e) => this.emit('entry', e));
+    this.runner.on('turn-end', (end) => this.emit('turn-end', end));
     this.runner.on('turn-end', ({ error }) => {
       if (!error) return;
       // A resume of a transcript that no longer exists fails every time; start over instead.

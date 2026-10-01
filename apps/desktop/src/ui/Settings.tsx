@@ -1,7 +1,8 @@
-import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from '@relay/shared';
+import type { CheckoutPlan, CheckoutResult, TelegramStatus, UpdateCheck, UpdateMode } from '@relay/shared';
 import { modelLabel, newSessionModelSentence, type ModelChoice, type NewSessionModel } from '@relay/shared';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
+import { TelegramSettings } from './TelegramSettings';
 
 interface Props {
   theme: Theme;
@@ -36,6 +37,14 @@ interface Props {
   checkoutResult: CheckoutResult | null;
   pulling: boolean;
   onPull: () => void;
+  /** Everything the Telegram section needs; it renders itself from this. */
+  telegram: TelegramStatus;
+  telegramBusy: boolean;
+  telegramError: string | null;
+  telegramTestSent: boolean;
+  onTelegramToken: (token: string | null) => void;
+  onTelegramUnpair: () => void;
+  onTelegramTest: () => void;
 }
 
 /** One line saying where the app stands against its releases. */
@@ -90,6 +99,16 @@ export function Settings(p: Props) {
             session Relay drives.
           </p>
         </section>
+        <TelegramSettings
+          status={p.telegram}
+          busy={p.telegramBusy}
+          error={p.telegramError}
+          testSent={p.telegramTestSent}
+          onSaveToken={(token) => p.onTelegramToken(token)}
+          onRemoveToken={() => p.onTelegramToken(null)}
+          onUnpair={p.onTelegramUnpair}
+          onTest={p.onTelegramTest}
+        />
         <section className="settings__section">
           <h3>New sessions</h3>
           <label className="settings__row">

@@ -212,6 +212,29 @@ function destructiveKey(tokens: string[]): string | null {
   }
 }
 
+/** One destructive step of a command line: its pattern key (`git push`, `rm`) and the arguments after the program or subcommand. */
+export interface DestructiveStep {
+  key: string;
+  args: string[];
+}
+
+/**
+ * Every destructive step in a command line, in order, including those hidden in subshells and
+ * `sh -c` strings. `classifyToolUse` stops at the first; a caller judging whether the whole
+ * line may run needs all of them.
+ */
+export function destructiveSteps(command: string): DestructiveStep[] {
+  const steps: DestructiveStep[] = [];
+  for (const raw of commands(command)) {
+    const tokens = normalize(raw);
+    const key = destructiveKey(tokens);
+    if (!key) continue;
+    const args = tokens[0] === 'git' ? gitSubcommand(tokens).rest : tokens.slice(1);
+    steps.push({ key, args });
+  }
+  return steps;
+}
+
 function isUnder(path: string, root: string): boolean {
   const rel = relative(root, path);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));

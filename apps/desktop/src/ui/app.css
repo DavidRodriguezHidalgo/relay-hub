@@ -254,13 +254,17 @@
   .allow-all-banner { @apply flex shrink-0 items-center justify-center gap-3 bg-waiting px-3 py-1 text-[12px] font-semibold text-bg; }
   .titlebar__settings { @apply absolute top-1.5 right-3 text-[12px]; }
   .settings-backdrop { @apply fixed inset-0 z-20 flex items-center justify-center bg-bg/80 p-6; }
-  .settings { @apply w-[440px] max-w-full rounded-xl border border-line bg-surface p-4 text-fg; }
+  /* max-h + scroll, or a dialog taller than the window centres itself half off the top and the
+     first sections become unclickable — which is what happens as settings are added */
+  .settings { @apply max-h-full w-[440px] max-w-full overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-4 text-fg; }
   .settings__header { @apply mb-3 flex items-center justify-between; }
   .settings__header h2 { @apply m-0 text-[17px]; }
   .settings__section { @apply mb-4; }
   .settings__section h3 { @apply mt-0 mb-1.5 text-[13px] font-semibold text-muted uppercase; }
   .settings__row { @apply flex items-center gap-2 py-0.5; }
   .settings__note { @apply mt-1.5 mb-0 text-[12px] leading-[1.5] text-muted; }
+  .settings__steps { @apply mt-1.5 mb-1.5 flex flex-col gap-1 pl-5 text-[12px] leading-[1.5] text-muted; }
+  .settings__steps li { @apply list-decimal; }
   .gh-banner { @apply shrink-0 bg-accent px-3 py-1 text-center text-[12px] font-semibold text-on-accent; }
   .watch { @apply text-[11px] text-muted; }
 }

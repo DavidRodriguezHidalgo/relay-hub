@@ -55,6 +55,10 @@ const api: RelayApi = {
   attachTodo: (id, sessionId) => ipcRenderer.invoke(IPC.attachTodo, id, sessionId),
   detachTodo: (id) => ipcRenderer.invoke(IPC.detachTodo, id),
   contextUse: (sessionId) => ipcRenderer.invoke(IPC.contextUse, sessionId),
+  telegramStatus: () => ipcRenderer.invoke(IPC.telegramStatus),
+  setTelegramToken: (token) => ipcRenderer.invoke(IPC.setTelegramToken, token),
+  unpairTelegram: () => ipcRenderer.invoke(IPC.unpairTelegram),
+  telegramTest: () => ipcRenderer.invoke(IPC.telegramTest),
   // File.path is gone in current Electron; only the preload world can still resolve one
   pathForFile: (file) => webUtils.getPathForFile(file),
 };
