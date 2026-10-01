@@ -11,7 +11,7 @@ const use = (over: Partial<ContextUse>): ContextUse => ({
 describe('ContextMeter', () => {
   it('shows the share of the window, marked as approximate', () => {
     render(<ContextMeter use={use({ percent: 50 })} />);
-    expect(screen.getByText('~50% context')).toBeInTheDocument();
+    expect(screen.getByText('~50%')).toBeInTheDocument();
   });
 
   it('says the number is an estimate and where it comes from', () => {

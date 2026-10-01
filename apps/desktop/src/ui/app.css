@@ -143,6 +143,11 @@
   /* one line whatever the width: the title gives way, the status never wraps */
   .session-panel__bar h1 { @apply m-0 min-w-0 flex-1 truncate text-[15px] font-semibold; }
   .session-panel__bar > :not(h1) { @apply shrink-0; }
+  /* the model name is the only variable-width thing here, so it is the one that gives way */
+  .session-panel__bar .model { @apply max-w-28 truncate; }
+  .bar-pr { @apply text-[12px] no-underline hover:underline; }
+  .bar-toggle { @apply flex items-center rounded border-line px-1 py-0.5 text-muted; }
+  .bar-toggle--on { @apply border-accent text-accent-fg; }
   .session-panel__detail { @apply pt-2; }
   .session-panel__detail p { @apply m-0 mb-2 flex flex-wrap items-center gap-1.5 text-[12px]; }
 
@@ -152,6 +157,9 @@
   .state--waiting-approval { @apply border-waiting text-waiting; }
   .state--error { @apply border-danger text-danger; }
   .state--done, .state--finished { @apply border-success text-success; }
+  /* the badge now reads the dot's state, which knows about sessions held in another process */
+  .state--elsewhere { @apply border-running text-running; }
+  .state--open { @apply border-line text-muted; }
   .dot { @apply mr-1.5 inline-block size-2 rounded-full bg-line align-middle; }
   .dot--running { @apply animate-pulse bg-running; }
   /* busy in another Claude process (a terminal, the desktop app): a pulsing ring */

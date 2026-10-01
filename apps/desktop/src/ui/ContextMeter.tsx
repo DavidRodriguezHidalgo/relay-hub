@@ -8,7 +8,8 @@ const NEARLY_FULL = 85;
  *
  * The tokens are the model's own count, but the window is inferred from the model name and a
  * compacted session reads fuller than it is — so the number is always shown as approximate
- * rather than as a figure Relay cannot stand behind.
+ * rather than as a figure Relay cannot stand behind. It shows the number alone because it sits in
+ * a pinned one-row header; the word 'context' and the counts are in its tooltip.
  */
 export function ContextMeter({ use }: { use: ContextUse | null }) {
   if (!use) return null;
@@ -18,7 +19,7 @@ export function ContextMeter({ use }: { use: ContextUse | null }) {
       className={full ? 'context context--full' : 'context'}
       title={`Approximate: ${use.tokens.toLocaleString()} of ${use.limit.toLocaleString()} tokens at the last request${use.model ? `, on ${use.model}` : ''}. Compacting resets it.`}
     >
-      ~{use.percent}% context
+      ~{use.percent}%
     </span>
   );
 }

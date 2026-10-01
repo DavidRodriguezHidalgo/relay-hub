@@ -1,5 +1,20 @@
 import type { ExternalSessions, RunState } from '@relay/shared';
 
+/**
+ * The same states in one word, for the pinned header.
+ *
+ * Kept beside DOT_LABEL so the two cannot drift: the long form stays the accessible name and the
+ * tooltip, the short form is what there is room to read.
+ */
+export const DOT_SHORT: Record<string, string> = {
+  idle: 'idle',
+  running: 'running',
+  'waiting-approval': 'waiting',
+  error: 'error',
+  elsewhere: 'elsewhere',
+  open: 'open',
+};
+
 export const DOT_LABEL: Record<string, string> = {
   idle: 'idle',
   running: 'running',

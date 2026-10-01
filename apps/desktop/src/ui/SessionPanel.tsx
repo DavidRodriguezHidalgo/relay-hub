@@ -18,7 +18,7 @@ import { ApprovalCard } from './ApprovalCard';
 import type { Collision } from './collisions';
 import { matchModels } from './matchModels';
 import { routeSlash } from './slashRouting';
-import { DOT_LABEL, dotState } from './sessionDot';
+import { DOT_LABEL, DOT_SHORT, dotState } from './sessionDot';
 import { applyCommand, commandItem, matchCommands, modelItem, SlashMenu, slashQuery, type MenuItem } from './SlashMenu';
 import { imagePathsFrom, withPaths } from './fileDrop';
 import { mergeEntries } from './mergeEntries';
@@ -203,7 +203,6 @@ export function SessionPanel(p: Props) {
     }
   };
   const merged = useMemo(() => mergeEntries(p.entries, p.liveEntries), [p.entries, p.liveEntries]);
-  const state = p.state?.state ?? 'idle';
   const dot = p.dot ?? dotState(p.session.id, p.state ? { [p.session.id]: p.state } : undefined);
   const submit = () => {
     const text = draft.trim();
@@ -253,18 +252,46 @@ export function SessionPanel(p: Props) {
       <header className="session-panel__bar">
         <h1>{p.session.title}</h1>
         <span className={`dot dot--${dot}`} aria-label={DOT_LABEL[dot]} />
-        <span className={`state state--${state}`}>{state}</span>
+        {/* reads the dot's state, not Relay's own: a session held in a terminal said "idle" before */}
+        <span className={`state state--${dot}`} title={DOT_LABEL[dot]}>
+          {DOT_SHORT[dot] ?? dot}
+        </span>
         <ContextMeter use={p.contextUse ?? null} />
+        <ModelPicker model={p.session.model ?? null} models={p.models} onSetModel={p.onSetModel} />
+        {/* the number alone: the branch and the watch controls stay below, where they are set up once */}
+        {p.session.prUrl && (
+          <a
+            className="bar-pr"
+            href={p.session.prUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`PR #${p.session.prNumber}`}
+            title={`Pull request #${p.session.prNumber}`}
+          >
+            #{p.session.prNumber}
+          </a>
+        )}
+        {/* an icon, because "Show subagent turns" spelled out is wider than everything else here */}
+        <button
+          type="button"
+          className={p.showSidechain ? 'bar-toggle bar-toggle--on' : 'bar-toggle'}
+          aria-label="Show subagent turns"
+          aria-pressed={p.showSidechain}
+          title="Show subagent turns"
+          onClick={() => p.onToggleSidechain(!p.showSidechain)}
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <circle cx="4" cy="3" r="1.6" />
+            <circle cx="4" cy="13" r="1.6" />
+            <circle cx="12" cy="8" r="1.6" />
+            <path d="M4 4.6v6.8M5.6 8H10.4" strokeLinecap="round" />
+          </svg>
+        </button>
       </header>
       <div className="session-panel__detail">
         <p>
-          <ModelPicker model={p.session.model ?? null} models={p.models} onSetModel={p.onSetModel} /> <code>{p.session.cwd}</code>{' '}
+          <code>{p.session.cwd}</code>{' '}
           {p.session.branch && <code>{p.session.branch}</code>}{' '}
-          {p.session.prUrl && (
-            <a href={p.session.prUrl} target="_blank" rel="noreferrer">
-              PR #{p.session.prNumber}
-            </a>
-          )}{' '}
           {p.watch ? (
             <>
               <span className="watch">
@@ -284,10 +311,6 @@ export function SessionPanel(p: Props) {
           )}
         </p>
         {p.state?.error && <p className="error">{p.state.error}</p>}
-        <label>
-          <input type="checkbox" checked={p.showSidechain} onChange={(e) => p.onToggleSidechain(e.target.checked)} />{' '}
-          Show subagent turns
-        </label>
       </div>
       {p.approvals.map((a) => (
         <ApprovalCard key={a.id} approval={a} onDecide={p.onDecide} />

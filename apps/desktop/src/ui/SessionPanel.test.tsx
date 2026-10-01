@@ -686,15 +686,11 @@ describe('SessionPanel message box, without the noise', () => {
 describe('SessionPanel: the header pinned to the top of the panel', () => {
   const pinned = (c: HTMLElement) => c.querySelector('.session-panel__bar')!;
 
-  it('keeps only what identifies the session, so the pinned strip stays one line', () => {
+  it('names the session and says what it is doing', () => {
     const { container } = renderPanel();
     const bar = pinned(container);
     expect(within(bar as HTMLElement).getByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
     expect(bar).toHaveTextContent('idle');
-    // setup details would make it tall, and they are not what you need while reading
-    expect(bar).not.toHaveTextContent('/repo');
-    expect(within(bar as HTMLElement).queryByRole('button', { name: 'Watch PR' })).toBeNull();
-    expect(within(bar as HTMLElement).queryByLabelText(/Show subagent turns/)).toBeNull();
   });
 
   it('still shows the setup details, below the pinned strip where they can scroll away', () => {
@@ -709,5 +705,60 @@ describe('SessionPanel: the header pinned to the top of the panel', () => {
     expect(container.firstElementChild).toBe(pinned(container));
     // the send box is pinned to the bottom of the same scroller and must stay the last word there
     expect(container.querySelector('.dev-send')).toBe(container.lastElementChild);
+  });
+});
+
+describe('SessionPanel: what the pinned header carries', () => {
+  const bar = (c: HTMLElement) => c.querySelector('.session-panel__bar') as HTMLElement;
+  const models = [
+    { id: 'sonnet', name: 'Sonnet', description: '', resolvedModel: 'claude-sonnet-5', current: true },
+    { id: 'opus[1m]', name: 'Opus (1M context)', description: '', resolvedModel: 'claude-opus-5[1m]', current: false },
+  ];
+  const withPr = { ...session, prNumber: 8, prUrl: 'https://github.com/o/r/pull/8' };
+
+  it('carries the things reached for mid-session: model, pull request and subagent turns', () => {
+    const { container } = renderPanel({ session: withPr, models });
+    const strip = within(bar(container));
+    expect(strip.getByLabelText('Model')).toBeInTheDocument();
+    expect(strip.getByRole('link', { name: 'PR #8' })).toHaveAttribute('href', 'https://github.com/o/r/pull/8');
+    expect(strip.getByRole('button', { name: 'Show subagent turns' })).toBeInTheDocument();
+  });
+
+  it('changes the model from the header without scrolling to find it', async () => {
+    const onSetModel = vi.fn();
+    const { container } = renderPanel({ models, onSetModel });
+    await userEvent.selectOptions(within(bar(container)).getByLabelText('Model'), 'opus[1m]');
+    expect(onSetModel).toHaveBeenCalledWith('opus[1m]');
+  });
+
+  it('toggles subagent turns from the header, and says which way it is set', async () => {
+    const onToggleSidechain = vi.fn();
+    const { container } = renderPanel({ showSidechain: true, onToggleSidechain });
+    const toggle = within(bar(container)).getByRole('button', { name: 'Show subagent turns' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(toggle);
+    expect(onToggleSidechain).toHaveBeenCalledWith(false);
+  });
+
+  it('leaves the pull request out when there is none, rather than showing an empty slot', () => {
+    const { container } = renderPanel({ models });
+    expect(within(bar(container)).queryByRole('link')).toBeNull();
+  });
+
+  it('keeps the setup details out, so the strip stays one row', () => {
+    const { container } = renderPanel({ session: withPr, models });
+    const strip = bar(container);
+    expect(strip).not.toHaveTextContent('/repo');
+    expect(within(strip).queryByRole('button', { name: 'Watch PR' })).toBeNull();
+    // the long form of these moved up, so they must not also sit below
+    expect(container.querySelectorAll('[aria-label="Model"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[aria-label="Show subagent turns"]')).toHaveLength(1);
+  });
+
+  it('says a session is running elsewhere instead of calling it idle', () => {
+    const { container } = render(
+      <SessionPanel {...base} entries={[]} liveEntries={[]} state={undefined} approvals={[]} dot="elsewhere" />,
+    );
+    expect(bar(container)).toHaveTextContent('elsewhere');
   });
 });
