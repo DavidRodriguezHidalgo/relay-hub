@@ -33,6 +33,13 @@ class FakeGh implements GhClient {
 import { SessionBusyError } from '../src/runner/session-busy-error';
 import { FakeAgentClient, tick } from './runner/fake-agent-client';
 
+/** The shape the real model source returns, recommended entry first. */
+const MODELS = [
+  { id: 'default', name: 'Default (recommended)', description: '', resolvedModel: 'claude-opus-5[1m]', current: false },
+  { id: 'claude-fable-5-1[1m]', name: 'Fable', description: '', resolvedModel: 'claude-fable-5-1', current: false },
+  { id: 'sonnet', name: 'Sonnet', description: '', resolvedModel: 'claude-sonnet-5', current: false },
+];
+
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
 describe('RelayEngine', () => {
@@ -379,9 +386,11 @@ describe('RelayEngine', () => {
 
   it('relays the end of a turn the orchestrator started, and only those', async () => {
     const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
     const sessionClient = new FakeAgentClient();
     const router: AgentClient = {
       start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
     };
     await startWithBasic(router);
     await engine!.orchestratorSend('tell s-basic to add tests');
@@ -408,9 +417,11 @@ describe('RelayEngine', () => {
 
   function routed() {
     const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
     const sessionClient = new FakeAgentClient();
     const router: AgentClient = {
       start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
     };
     return { orchClient, sessionClient, router };
   }
@@ -720,9 +731,11 @@ describe('RelayEngine', () => {
 
   it('creates a worktree session, registers it under its real id, and relays its turn end to the orchestrator', async () => {
     const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
     const sessionClient = new FakeAgentClient();
     const router: AgentClient = {
       start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
     };
     const wt = fakeWorktrees({});
     await startWithBasic(router, undefined, { worktrees: wt });
@@ -744,6 +757,142 @@ describe('RelayEngine', () => {
     expect(orchClient.received.filter((m) => m.origin === 'watch:turn-end').map((m) => m.text)).toEqual([
       '[turn-end] session "Add a README" (new-session-1, feat/new) finished. Last reply: README added.',
     ]);
+  });
+
+  it('asks for the recommended model by default, instead of inheriting whatever the user has saved', async () => {
+    const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    expect(await engine!.newSessionModel()).toEqual({
+      id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended',
+    });
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/a', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    // load-bearing: this one assertion is what proves the resolved model reaches the runner at all
+    expect(sessionClient.lastOpts?.model).toBe('default');
+  });
+
+  it('asks for the model chosen in settings, so a new session no longer inherits that saved default', async () => {
+    const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    engine!.setNewSessionModel('claude-sonnet-4-5');
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/b', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBe('claude-sonnet-4-5');
+  });
+
+  it('goes back to the recommended model when the setting is cleared, never back to the saved default', async () => {
+    const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    engine!.setNewSessionModel('sonnet');
+    engine!.setNewSessionModel(null);
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/c', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBe('default');
+  });
+
+  it('keeps asking for that model after the runner has been closed and rebuilt', async () => {
+    const orchClient = new FakeAgentClient();
+    orchClient.models = MODELS;
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt, idleTimeoutMs: 30 });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+
+    const creating = engine!.createSession({ project: 'myrepo', branch: 'feat/later', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    sessionClient.init('born-later');
+    const { sessionId } = await creating;
+    expect(sessionClient.lastOpts?.model).toBe('default');
+
+    // the session's own transcript, so a later send can find it exactly as it would in real use
+    const src = await readFile(fixture('basic.jsonl'), 'utf8');
+    const file = join(root, 'projects', 'p', `${sessionId}.jsonl`);
+    await writeFile(file, src.replaceAll('/repo/wt-a', join(repo + '-worktrees', 'feat-later')).replaceAll('s-basic', sessionId));
+    const old = new Date('2026-09-20T10:01:00.000Z');
+    await utimes(file, old, old);
+    for (let i = 0; !engine!.listSessions().some((s) => s.id === sessionId) && i < 100; i += 1) await new Promise((r) => setTimeout(r, 50));
+
+    // the runner is closed for being idle, exactly as ten minutes of quiet would close it
+    sessionClient.result();
+    await tick();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(engine!.runState().states[sessionId]).toBeUndefined();
+
+    const before = sessionClient.starts.length;
+    await engine!.send({ sessionId, prompt: 'again', mode: 'steer', origin: 'user' });
+    for (let i = 0; sessionClient.starts.length === before && i < 100; i += 1) await tick();
+    expect(sessionClient.starts.length).toBe(before + 1);
+    // rebuilt from scratch, and still asking by name rather than leaving it to the settings file
+    expect(sessionClient.starts.at(-1)?.model).toBe('default');
+  });
+
+  it('asks for nothing only when it has no list to choose from, rather than inventing a model name', async () => {
+    const orchClient = new FakeAgentClient();
+    const sessionClient = new FakeAgentClient();
+    const router: AgentClient = {
+      start: (opts) => (opts.profile?.kind === 'orchestrator' ? orchClient : sessionClient).start(opts),
+      describe: (cwd: string) => orchClient.describe(cwd),
+    };
+    const wt = fakeWorktrees({});
+    await startWithBasic(router, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async (cwd: string) => (cwd.endsWith('wt-a') ? repo : null);
+    expect(await engine!.newSessionModel()).toEqual({ id: null, resolvedModel: null, source: 'unknown' });
+    void engine!.createSession({ project: 'myrepo', branch: 'feat/d', prompt: 'go', origin: 'user' });
+    for (let i = 0; !sessionClient.lastOpts && i < 100; i += 1) await tick();
+    expect(sessionClient.lastOpts?.model).toBeUndefined();
+  });
+
+  it('marks what new sessions will actually use as current in the picker, chosen or not', async () => {
+    const client = new FakeAgentClient();
+    await startWithBasic(client);
+    client.models = MODELS;
+    expect((await engine!.availableModels()).filter((m) => m.current).map((m) => m.id)).toEqual(['default']);
+    engine!.setNewSessionModel('sonnet');
+    expect((await engine!.availableModels()).filter((m) => m.current).map((m) => m.id)).toEqual(['sonnet']);
+  });
+
+  it('says where the saved default lives, so it can be changed rather than guessed at', async () => {
+    await startWithBasic(new FakeAgentClient());
+    const s = engine!.settings();
+    expect(s.claudeSettingsPath).toMatch(/\.claude\/settings\.json$/);
   });
 
   it('refuses an ambiguous or unknown project name', async () => {
@@ -943,9 +1092,9 @@ describe('RelayEngine', () => {
   it('remembers that everything was allowed, and stops asking about it', async () => {
     const client = new FakeAgentClient();
     await startWithBasic(client);
-    expect(engine!.settings()).toEqual({ allowAllActions: false });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: false });
     engine!.setAllowAllActions(true);
-    expect(engine!.settings()).toEqual({ allowAllActions: true });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: true });
     await engine!.close();
 
     // a later run of the app, reading the same stored state
@@ -957,7 +1106,7 @@ describe('RelayEngine', () => {
       orchestratorDir: join(root, 'orch'),
       registry: { foreignHolders: async () => [] },
     });
-    expect(engine!.settings()).toEqual({ allowAllActions: true });
+    expect(engine!.settings()).toMatchObject({ allowAllActions: true });
   });
   it('answers a side question from a fork of the session, leaving the session and its turn alone', async () => {
     const client = new FakeAgentClient();
@@ -1019,8 +1168,8 @@ describe('RelayEngine', () => {
   it('lists the models a session can run on, marking the one it is on', async () => {
     const client = new FakeAgentClient();
     client.models = [
-      { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', current: false },
-      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', current: false },
+      { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', resolvedModel: 'opus[1m]', current: false },
+      { id: 'sonnet', name: 'Sonnet', description: 'Efficient', resolvedModel: 'sonnet', current: false },
     ];
     await startWithBasic(client);
     // nothing has run yet: the session's own default is in force, so nothing is marked
@@ -1036,7 +1185,7 @@ describe('RelayEngine', () => {
 
   it('switches a running session to another model, and starts the next run on it', async () => {
     const client = new FakeAgentClient();
-    client.models = [{ id: 'opus[1m]', name: 'Opus', description: '', current: false }];
+    client.models = [{ id: 'opus[1m]', name: 'Opus', description: '', resolvedModel: 'opus[1m]', current: false }];
     await startWithBasic(client);
     await engine!.send({ sessionId: 's-basic', prompt: 'go', mode: 'steer', origin: 'user' });
     await tick();

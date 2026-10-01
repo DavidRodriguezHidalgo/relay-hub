@@ -383,8 +383,8 @@ describe('SessionPanel side questions', () => {
 
 describe('SessionPanel model picker', () => {
   const models: ModelChoice[] = [
-    { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', current: true },
-    { id: 'sonnet', name: 'Sonnet', description: 'Efficient for routine tasks', current: false },
+    { id: 'opus[1m]', name: 'Opus', description: 'Best for complex work', resolvedModel: 'opus[1m]', current: true },
+    { id: 'sonnet', name: 'Sonnet', description: 'Efficient for routine tasks', resolvedModel: 'sonnet', current: false },
   ];
 
   it('offers the models when /model is typed, marking the one in use', async () => {

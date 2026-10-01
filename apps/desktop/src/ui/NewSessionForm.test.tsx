@@ -12,7 +12,7 @@ describe('NewSessionForm', () => {
   it('needs a project, a branch and an instruction, then creates the session', async () => {
     const onCreate = vi.fn(async () => ({ sessionId: 'n1', cwd: '/code/factorial-worktrees/feat-x' }));
     const onCreated = vi.fn();
-    render(<NewSessionForm listProjects={async () => projects} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
+    render(<NewSessionForm listProjects={async () => projects} model={null} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
     const submit = await screen.findByRole('button', { name: 'Create session' });
     expect(submit).toBeDisabled();
     await userEvent.selectOptions(screen.getByLabelText('Project'), '/code/factorial');
@@ -31,7 +31,7 @@ describe('NewSessionForm', () => {
       throw new Error('The branch feat/x already exists; pick another name or use its worktree');
     });
     const onCreated = vi.fn();
-    render(<NewSessionForm listProjects={async () => projects} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
+    render(<NewSessionForm listProjects={async () => projects} model={null} onCreate={onCreate} onCreated={onCreated} onCancel={vi.fn()} />);
     await userEvent.selectOptions(await screen.findByLabelText('Project'), '/code/factorial');
     await userEvent.type(screen.getByLabelText('Branch'), 'feat/x');
     await userEvent.type(screen.getByLabelText('First instruction'), 'x');
@@ -39,5 +39,34 @@ describe('NewSessionForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('already exists');
     expect(onCreated).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Create session' })).toBeEnabled();
+  });
+});
+
+describe('NewSessionForm and the model it will use', () => {
+  const projects = async () => [{ name: 'relay', root: '/code/relay', sessions: 2 }];
+  const form = (model: Parameters<typeof NewSessionForm>[0]['model']) =>
+    render(
+      <NewSessionForm listProjects={projects} model={model} onCreate={vi.fn()} onCreated={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+  it('says what the session will run on before it is created', async () => {
+    form({ id: 'default', resolvedModel: 'claude-opus-5[1m]', source: 'recommended' });
+    expect(await screen.findByText(/New sessions run on Opus 5 \[1m\]/)).toBeInTheDocument();
+  });
+
+  it('warns when the chosen model is no longer offered, instead of showing nothing at all', () => {
+    form({ id: 'claude-sonnet-4-5', resolvedModel: null, source: 'chosen' });
+    // creation would fail on this, so it has to be said where the session is created
+    expect(screen.getByText(/no longer in the list of models offered/)).toBeInTheDocument();
+  });
+
+  it('says so when the model list could not be read, rather than staying quiet', () => {
+    form({ id: null, resolvedModel: null, source: 'unknown' });
+    expect(screen.getByText(/could not be read/)).toBeInTheDocument();
+  });
+
+  it('says nothing about the model rather than guessing, when it is not known yet', () => {
+    form(null);
+    expect(screen.queryByText(/run on/)).not.toBeInTheDocument();
   });
 });

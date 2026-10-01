@@ -26,7 +26,8 @@ export type {
 export type { SendRequest } from './ipc';
 export { ORCHESTRATOR_KEY } from './runner';
 export type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
-export type { ModelChoice } from './models';
+export type { ModelChoice, NewSessionModel, RelaySettings } from './models';
+export { RECOMMENDED_MODEL_ID, newSessionModelSentence, newSessionModelIsTrouble } from './models';
 export type { QueuedMessage, QueuedState } from './queue';
 export type { SessionStatus, StatusCheck } from './status';
 export type { Accomplished } from './accomplished';
