@@ -9,9 +9,10 @@ and get on with the next thing.
 
 ## What you can do with it
 
-**See everything at a glance.** Every session you have on this machine, grouped by project, with
-what it is doing right now: working, waiting on you, finished, or open somewhere else. Search by
-name, and hide the projects you are not thinking about today.
+**See everything at a glance.** The sessions you have touched in the last couple of days, grouped
+by project, with what each is doing right now: working, waiting on you, failed, or open somewhere
+else. Anything still running or waiting stays in the list however old it is. Search by name, show
+the older ones when you want them, and hide the projects you are not thinking about today.
 
 **Read any session's history.** Open a session and read the whole conversation — what you asked,
 what it did, what it changed. Leave and come back and you are still where you were reading.
@@ -35,6 +36,20 @@ you confirm, it closes the other one and picks the conversation up from where it
 
 **Start new work.** Ask Relay to start a session for a new piece of work and it sets up its own
 branch and folder, so it never disturbs what you already have checked out.
+
+**Keep a list of what to do next.** Jot work down in the left panel as it occurs to you, reorder
+it, and hand an item to Claude when you are ready — either as a new session or to one already
+open. The item and the session stay linked, so you can see what came of it.
+
+**Choose what new sessions run on.** Settings holds the model new sessions start on, taken from
+the list Claude Code itself offers. Relay asks for it by name, so a session never quietly inherits
+whatever a `/model` command left behind — and it leaves your own Claude Code settings file alone.
+Each session's own model is shown in its header and can be changed there.
+
+**Ask what is broken.** A session whose last turn failed says so, and says what kind — out of
+usage for now, not logged in, or a crash worth reading. That survives closing the app, so a
+failure from this morning is still there this afternoon. Ask Relay what needs you and it answers
+in one go, failures and waiting approvals together.
 
 **Keep an eye on pull requests.** Point Relay at a session's PR and it watches it for you. When CI
 fails, when someone reviews or comments, or when the branch falls behind, it wakes that session
@@ -129,9 +144,10 @@ set this up, none of it runs: no polling, no errors, nothing in Settings but the
 2. Send `/newbot`. It asks for a display name, then a username ending in `bot`.
 3. BotFather replies with a token like `123456789:AAH…`. That token *is* the bot — treat it as a
    password.
-4. In Relay, open **Settings → Telegram**, paste the token and press **Save token**. Relay stores
-   it in your Mac's keychain, in its own file in the app's data folder. It is never written to the
-   repository, and the field never shows it back to you.
+4. In Relay, open **Settings → Telegram**, paste the token and press **Save token**. Relay keeps it
+   in its own file in the app's data folder, encrypted with your Mac's keychain — and tells you if
+   your machine could not encrypt it, in which case it is stored as plain text. It is never written
+   to the repository, and the field never shows it back to you.
 5. Open your new bot in Telegram **from the phone you want to use** and send it anything. That
    chat becomes yours, Relay replies to say so, and there is nothing else to set up.
 
@@ -140,8 +156,9 @@ sooner you claim it the smaller the window in which anyone else could. Settings 
 notification both name the chat that got bound, so if it was not you, unpair and revoke the token.
 
 From then on: send an instruction the way you would type it into the Relay chat ("tell the mileage
-session to add tests for the zero-rate case"), or `/status` to hear what is running. `/status` is
-answered by Relay itself and costs nothing.
+session to add tests for the zero-rate case"), or `/status` to hear what is running. `/status`,
+`/start` and `/help` are answered by Relay itself and cost nothing. Only text reaches Relay —
+photos, voice notes and files are turned away.
 
 ### Who can drive it
 
@@ -165,7 +182,9 @@ Approvals arrive on the phone with buttons. **Deny** always works. **Allow once*
 for a `git rebase`, a `git commit --amend`, or a `git push --force-with-lease` — steps whose damage
 is local and recoverable. Anything that deletes files, force-pushes without a lease, resets hard,
 or reaches outside the session's own folder says which it is and waits until you are at the
-machine. "Allow this kind" is never offered from a phone.
+machine — as does anything that is not a shell command, anything too long to read in full on a
+phone, and anything Relay cannot parse well enough to tell you what it does. "Allow this kind" is
+never offered from a phone.
 
 ### What it will not do from a phone
 
@@ -174,10 +193,10 @@ rows); turn on "allow all actions"; show you files, diffs or transcripts. Those 
 
 ### What it tells you, and what it does not
 
-You hear about: an approval waiting, a session finishing work you asked for from the phone or
-through the Relay chat, a session erroring, and one summary per finished bulk run. You do not hear
-about: turns you started by typing into a session in the app, PR-watch wake-ups, or any of the
-ordinary state changes the window already shows.
+You hear about: an approval waiting, a session finishing, stopping or failing on work you asked
+for from the phone or through the Relay chat, and a bulk run both when it is proposed and when it
+finishes. You do not hear about: turns you started by typing into a session in the app, PR-watch
+wake-ups, or any of the ordinary state changes the window already shows.
 
 ## Stopping a session
 
