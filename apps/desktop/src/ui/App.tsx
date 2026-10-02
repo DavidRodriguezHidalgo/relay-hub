@@ -9,6 +9,7 @@ import {
   type UpdateCheck,
   type ModelChoice,
   type NewSessionModel,
+  type AccountUsage,
   type SessionStatus,
   type CheckoutPlan,
   type CheckoutResult,
@@ -20,7 +21,9 @@ import { collisionFor } from './collisions';
 import { stalenessOf } from './staleness';
 import { dismissedCollisions, dismissCollision } from './dismissed';
 import { ColumnResizer } from './ColumnResizer';
-import { Settings } from './Settings';
+import { Settings, type SettingsTab } from './Settings';
+import { UsageMeter } from './UsageMeter';
+import { pollUsage } from './usagePoller';
 import { applyTheme, loadTheme, saveTheme, systemTheme, type Theme } from './theme';
 import { clampWidth, loadWidths, saveWidths, type ColumnWidths } from './columnWidths';
 import { NewSessionForm } from './NewSessionForm';
@@ -32,6 +35,9 @@ import { dotState } from './sessionDot';
 import { useFollowBottom } from './useFollowBottom';
 import { useRunState } from './useRunState';
 import { useTelegram } from './useTelegram';
+
+/** Usage barely moves minute to minute, and the engine caches anyway; this is a slow background check. */
+const USAGE_POLL_MS = 5 * 60 * 1_000;
 
 /** Stable empty list: a new array each render would defeat the transcript's memoisation. */
 const NO_ENTRIES: TranscriptEntry[] = [];
@@ -54,6 +60,11 @@ export function App() {
   const panelRef = useRef<HTMLElement>(null);
   const [widths, setWidths] = useState<ColumnWidths>(loadWidths);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
+  const [usage, setUsage] = useState<AccountUsage | null>(null);
+  const [checkingUsage, setCheckingUsage] = useState(false);
+  /** Set when the process behind this window cannot answer for usage at all. */
+  const [usageUnreadable, setUsageUnreadable] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   /** Set when the process behind this window does not answer everything the window will ask. */
   /** Channels the app process does not answer; 0 once it has been asked and agreed. */
@@ -144,8 +155,30 @@ export function App() {
     });
     void window.relay.availableModels().then(setModelChoices, () => undefined);
     void window.relay.newSessionModel().then(setNewSessionModel, () => undefined);
+    // stops asking after one failure: against a main process older than this window there is no
+    // handler for this channel, and retrying on every focus buries its log in the same error
+    const stopUsage = pollUsage({
+      read: () => window.relay.accountUsage(),
+      onValue: setUsage,
+      onGiveUp: () => setUsageUnreadable(true),
+      intervalMs: USAGE_POLL_MS,
+    });
     void window.relay.crashReports().then(setCrashReports, () => undefined);
+    return stopUsage;
   }, []);
+
+  /** Asked for on demand; the engine's own cache keeps a quick second press from costing anything. */
+  const refreshUsage = async () => {
+    setCheckingUsage(true);
+    try {
+      setUsage(await window.relay.accountUsage());
+      setUsageUnreadable(false);
+    } catch {
+      // a failed check leaves the last answer and its timestamp, which the tab shows honestly
+    } finally {
+      setCheckingUsage(false);
+    }
+  };
 
   /** The engine resolves what the choice means, so it is asked again rather than guessed at here. */
   const changeNewSessionModel = async (model: string) => {
@@ -279,7 +312,22 @@ export function App() {
     <div className="shell">
       {/* the window has no frame of its own, so this strip is what you drag it by */}
       <div className="titlebar">
-        <button type="button" className="titlebar__settings" onClick={() => setSettingsOpen(true)}>
+        <UsageMeter
+          usage={usageUnreadable ? null : usage}
+          now={new Date()}
+          onOpen={() => {
+            setSettingsTab('usage');
+            setSettingsOpen(true);
+          }}
+        />
+        <button
+          type="button"
+          className="titlebar__settings"
+          onClick={() => {
+            setSettingsTab('general');
+            setSettingsOpen(true);
+          }}
+        >
           Settings
         </button>
       </div>
@@ -313,6 +361,11 @@ export function App() {
       )}
       {settingsOpen && (
         <Settings
+          initialTab={settingsTab}
+          usage={usageUnreadable ? { available: false, plan: null, windows: [], checkedAt: null } : usage}
+          now={new Date()}
+          refreshingUsage={checkingUsage}
+          onRefreshUsage={() => void refreshUsage()}
           theme={theme ?? systemTheme()}
           onTheme={setTheme}
           allowAllActions={allowAllActions}

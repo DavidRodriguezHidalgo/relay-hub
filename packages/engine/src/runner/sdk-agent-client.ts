@@ -185,6 +185,29 @@ export class SdkAgentClient implements AgentClient {
    * Reads the command list without running a turn: the input stream never yields, so the
    * session connects, answers, and is shut down again without spending tokens.
    */
+  /**
+   * The account's usage limits, straight from the runtime.
+   *
+   * The method behind this is named by the SDK itself as experimental and not to be relied on, so
+   * a version that renames or drops it must leave Relay saying it does not know — never throwing,
+   * and never showing the last number as though it were current.
+   */
+  async accountUsage(): Promise<unknown> {
+    async function* never(): AsyncIterable<SDKUserMessage> {
+      await new Promise<never>(() => undefined);
+    }
+    const q = this.queryFn({ prompt: never(), options: {} });
+    try {
+      const read = (q as { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> })
+        .usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
+      return typeof read === 'function' ? await read.call(q) : null;
+    } catch {
+      return null;
+    } finally {
+      q.close?.();
+    }
+  }
+
   async describe(cwd: string): Promise<AgentCapabilities> {
     async function* never(): AsyncIterable<SDKUserMessage> {
       await new Promise<never>(() => undefined);

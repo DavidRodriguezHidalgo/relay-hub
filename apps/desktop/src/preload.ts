@@ -32,6 +32,7 @@ const api: RelayApi = {
   setNewSessionModel: (model) => ipcRenderer.invoke(IPC.setNewSessionModel, model),
   availableModels: () => ipcRenderer.invoke(IPC.availableModels),
   newSessionModel: () => ipcRenderer.invoke(IPC.newSessionModel),
+  accountUsage: () => ipcRenderer.invoke(IPC.accountUsage),
   channels: () => ipcRenderer.invoke(IPC.channels),
   aside: (sessionId, question) => ipcRenderer.invoke(IPC.aside, sessionId, question),
   checkForUpdate: () => ipcRenderer.invoke(IPC.checkForUpdate),

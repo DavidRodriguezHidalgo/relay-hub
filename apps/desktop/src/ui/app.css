@@ -55,7 +55,7 @@
 
   .shell { @apply flex h-screen flex-col bg-bg; }
   /* macOS puts the traffic lights over this strip, so it stays tall enough to clear them */
-  .titlebar { @apply relative h-10 shrink-0 bg-bg; -webkit-app-region: drag; }
+  .titlebar { @apply relative flex h-10 shrink-0 items-center justify-end gap-2 bg-bg pr-3; -webkit-app-region: drag; }
   .app { @apply grid min-h-0 flex-1 overflow-hidden bg-bg; grid-template-columns: 300px 6px minmax(0, 1fr) 6px 440px; }
   .resizer { @apply cursor-col-resize bg-line/40 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none; }
   .session-list { @apply overflow-auto border-r border-line bg-surface px-2 pt-2 pb-2; }
@@ -260,7 +260,7 @@
   .settings__notes { @apply mt-1 mb-0 max-h-40 overflow-auto rounded bg-bg p-2 text-[12px] whitespace-pre-wrap text-muted; }
   .stale-banner { @apply shrink-0 bg-danger px-3 py-1 text-center text-[12px] font-semibold text-bg; }
   .allow-all-banner { @apply flex shrink-0 items-center justify-center gap-3 bg-waiting px-3 py-1 text-[12px] font-semibold text-bg; }
-  .titlebar__settings { @apply absolute top-1.5 right-3 text-[12px]; }
+  .titlebar__settings { @apply text-[12px]; }
   .settings-backdrop { @apply fixed inset-0 z-20 flex items-center justify-center bg-bg/80 p-6; }
   /* max-h + scroll, or a dialog taller than the window centres itself half off the top and the
      first sections become unclickable — which is what happens as settings are added */
@@ -268,6 +268,28 @@
   .settings__header { @apply mb-3 flex items-center justify-between; }
   .settings__header h2 { @apply m-0 text-[17px]; }
   .settings__section { @apply mb-4; }
+  .settings__tabs { @apply mb-4 flex gap-1 border-b border-line; }
+  .settings__tab { @apply rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-1.5 text-[13px] text-muted hover:border-line hover:text-fg; }
+  .settings__tab--on { @apply border-accent text-fg; }
+
+  /*
+    Quiet until it matters: nothing is rendered at all below the first threshold, so the one piece
+    of chrome always on screen stays empty while there is plenty of allowance left.
+  */
+  .usage-pill { @apply rounded-full border px-2 py-0.5 text-[11px]; }
+  .usage-pill--notable { @apply border-line text-muted; }
+  .usage-pill--tight { @apply border-waiting text-waiting; }
+  .usage-pill--critical { @apply border-danger text-danger; }
+
+  .usage__plan { @apply ml-1.5 text-[12px] font-normal text-muted; }
+  .usage-row { @apply mb-3; }
+  .usage-row__head { @apply flex items-baseline justify-between text-[13px]; }
+  .usage-row__name { @apply text-fg; }
+  .usage-row__percent { @apply text-muted; }
+  .usage-bar { @apply mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2; }
+  .usage-bar__fill { @apply h-full rounded-full bg-accent transition-all; }
+  .usage-bar__fill--tight { @apply bg-waiting; }
+  .usage-bar__fill--critical { @apply bg-danger; }
   .settings__section h3 { @apply mt-0 mb-1.5 text-[13px] font-semibold text-muted uppercase; }
   .settings__row { @apply flex items-center gap-2 py-0.5; }
   .settings__note { @apply mt-1.5 mb-0 text-[12px] leading-[1.5] text-muted; }

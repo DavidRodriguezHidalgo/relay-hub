@@ -1,5 +1,8 @@
 import type { CheckoutPlan, CheckoutResult, TelegramStatus, UpdateCheck, UpdateMode } from '@relay/shared';
 import { modelLabel, newSessionModelSentence, type ModelChoice, type NewSessionModel } from '@relay/shared';
+import { useState } from 'react';
+import type { AccountUsage } from '@relay/shared';
+import { UsageTab } from './UsageTab';
 import type { Theme } from './theme';
 import { checkoutStanding } from './checkoutStanding';
 import { TelegramSettings } from './TelegramSettings';
@@ -19,6 +22,12 @@ interface Props {
   claudeSettingsPath: string;
   /** Models a new session could run on; empty until they have been asked for. */
   models: ModelChoice[];
+  /** Which tab to open on; the usage pill in the title strip opens straight onto Usage. */
+  initialTab?: 'general' | 'usage' | 'about';
+  usage: AccountUsage | null;
+  now: Date;
+  onRefreshUsage: () => void;
+  refreshingUsage: boolean;
   /** Why the last change did not take, when it did not. */
   error: string | null;
   onClose: () => void;
@@ -55,7 +64,17 @@ function updateLine(u: UpdateCheck): string {
   return `You’re up to date (${u.latest} is the newest release).`;
 }
 
+/** Three, so Settings has structure without becoming somewhere you have to navigate. */
+const TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'usage', label: 'Usage' },
+  { id: 'about', label: 'About' },
+] as const;
+
+export type SettingsTab = (typeof TABS)[number]['id'];
+
 export function Settings(p: Props) {
+  const [tab, setTab] = useState<SettingsTab>(p.initialTab ?? 'general');
   return (
     <div className="settings-backdrop" onClick={p.onClose}>
       <div className="settings" role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
@@ -72,6 +91,24 @@ export function Settings(p: Props) {
           </p>
         )}
 
+        <nav className="settings__tabs" role="tablist" aria-label="Settings sections">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`settings-tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`settings-panel-${t.id}`}
+              className={tab === t.id ? 'settings__tab settings__tab--on' : 'settings__tab'}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        <div role="tabpanel" id="settings-panel-general" aria-labelledby="settings-tab-general" hidden={tab !== 'general'}>
         <section className="settings__section">
           <h3>Appearance</h3>
           {(['dark', 'light'] as const).map((t) => (
@@ -149,6 +186,13 @@ export function Settings(p: Props) {
             starts, and a copy run from a checkout never reports at all.
           </p>
         </section>
+        </div>
+
+        <div role="tabpanel" id="settings-panel-usage" aria-labelledby="settings-tab-usage" hidden={tab !== 'usage'}>
+          <UsageTab usage={p.usage} now={p.now} onRefresh={p.onRefreshUsage} refreshing={p.refreshingUsage} />
+        </div>
+
+        <div role="tabpanel" id="settings-panel-about" aria-labelledby="settings-tab-about" hidden={tab !== 'about'}>
         <section className="settings__section">
           <h3>About</h3>
           <p className="settings__row">
@@ -251,6 +295,7 @@ export function Settings(p: Props) {
             </div>
           )}
         </section>
+        </div>
       </div>
     </div>
   );

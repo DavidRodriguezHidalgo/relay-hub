@@ -95,4 +95,6 @@ export interface AgentClient {
   start(opts: AgentStartOptions): AgentRun;
   /** Commands and models a directory offers; absent when the runtime cannot say. */
   describe?(cwd: string): Promise<AgentCapabilities>;
+  /** The account's usage limits as the runtime reports them, raw; absent when it cannot say. */
+  accountUsage?(): Promise<unknown>;
 }
