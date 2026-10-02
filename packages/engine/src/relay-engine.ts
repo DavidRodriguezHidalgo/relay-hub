@@ -85,6 +85,23 @@ const instructionFor = (todo: Todo) => (todo.notes.trim() ? `${todo.title}
 
 ${todo.notes.trim()}` : todo.title);
 
+/**
+ * Refuses to start where there is nothing to work in.
+ *
+ * A worktree removed under a running session used to surface as a failure from inside the runtime
+ * — a native binary error that said nothing about the directory — because the process was simply
+ * spawned into somewhere that no longer existed.
+ */
+async function assertDirectory(cwd: string): Promise<void> {
+  try {
+    await access(cwd);
+  } catch {
+    throw new Error(
+      `${cwd} no longer exists. The worktree it was in was probably removed; start a session elsewhere, or restore it.`,
+    );
+  }
+}
+
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 export interface RelayEngineOptions {
@@ -737,9 +754,18 @@ export class RelayEngine {
     branch?: string;
     prompt: string;
     origin: MessageOrigin;
+    /**
+     * Work in `project` as it stands instead of making a worktree, main checkout included.
+     *
+     * Off by default, and deliberately so: two sessions editing one directory is what produces
+     * double-applied edits and a dirty tree. It is here because the alternative was worse — a
+     * branch held by a worktree cannot be checked out to try it, and removing that worktree kills
+     * the session living in it.
+     */
+    inPlace?: boolean;
   }): Promise<{ sessionId: string; cwd: string }> {
     const dir = await this.resolveProject(req.project);
-    if (!req.branch) await this.refuseMainCheckout(dir);
+    if (!req.branch && !req.inPlace) await this.refuseMainCheckout(dir);
     // resolved before anything is created on disk: it does not depend on the worktree, and a slow
     // model lookup should not leave a branch and a directory behind it
     const model = (await this.newSessionModel()).id ?? undefined;
@@ -747,6 +773,7 @@ export class RelayEngine {
     const cwd = req.branch
       ? await this.worktrees.createWorktree((await this.worktrees.repoRoot(dir)) ?? dir, req.branch)
       : dir;
+    await assertDirectory(cwd);
     const runner = new SessionRunner({
       sessionId: `new:${randomUUID()}`,
       resume: null,
@@ -1018,6 +1045,7 @@ export class RelayEngine {
   private async createRunner(sessionId: string): Promise<SessionRunner> {
     const session = this.listSessions().find((s) => s.id === sessionId);
     if (!session) throw new Error(`Unknown session ${sessionId}`);
+    await assertDirectory(session.cwd);
     await this.assertNotBusy(sessionId, 0);
     const runner = new SessionRunner({
       sessionId,

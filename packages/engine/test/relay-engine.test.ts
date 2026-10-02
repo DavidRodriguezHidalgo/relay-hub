@@ -982,6 +982,57 @@ describe('RelayEngine', () => {
     expect(client.starts).toHaveLength(0);
   });
 
+  it('works in the checkout itself when asked to, rather than refusing it', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async () => repo;
+    const creating = engine!.createSession({ project: repo, prompt: 'x', origin: 'user', inPlace: true });
+    for (let i = 0; !client.lastOpts && i < 100; i += 1) await tick();
+    expect(client.lastOpts?.cwd).toBe(repo);
+    client.init('here-1');
+    expect(await creating).toEqual({ sessionId: 'here-1', cwd: repo });
+    // the point of asking for it: no branch is made and no worktree appears
+    expect(wt.created).toEqual([]);
+  });
+
+  it('still makes a worktree when a branch is given, even alongside the in-place choice', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const repo = join(root, 'myrepo');
+    await mkdir(repo);
+    wt.repoRoot = async () => repo;
+    void engine!.createSession({ project: repo, branch: 'feat/x', prompt: 'x', origin: 'user' });
+    for (let i = 0; !client.lastOpts && i < 100; i += 1) await tick();
+    expect(wt.created).toHaveLength(1);
+    expect(client.lastOpts?.cwd).toBe(wt.created[0]);
+  });
+
+  it('refuses a directory that is not there, before anything is started', async () => {
+    const client = new FakeAgentClient();
+    const wt = fakeWorktrees({});
+    await startWithBasic(client, undefined, { worktrees: wt });
+    const gone = join(root, 'never-made');
+    await expect(
+      engine!.createSession({ project: gone, prompt: 'x', origin: 'user', inPlace: true }),
+    ).rejects.toThrow(/No such directory/i);
+    expect(client.starts).toHaveLength(0);
+  });
+
+  it('says the directory is gone when sending to a session whose worktree was removed', async () => {
+    const client = new FakeAgentClient();
+    const { cwd } = await startWithBasic(client);
+    // exactly what removing a worktree does to the session living in it
+    await rm(cwd, { recursive: true, force: true });
+    await expect(
+      engine!.send({ sessionId: 's-basic', prompt: 'hello', mode: 'steer', origin: 'user' }),
+    ).rejects.toThrow(new RegExp(cwd.replace(/[.*+?^${}()|[\]\\]/g, '\\  it("interrupting a session that is not running says so instead of claiming success", async () => {')));
+    expect(client.starts).toHaveLength(0);
+  });
+
   it("interrupting a session that is not running says so instead of claiming success", async () => {
     await startWithBasic(new FakeAgentClient());
     expect(await engine!.interrupt("s-basic")).toBe(false);

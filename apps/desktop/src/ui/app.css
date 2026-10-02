@@ -76,6 +76,11 @@
   .new-session input, .new-session select, .new-session textarea { @apply w-full text-[13px]; }
   .new-session__where { @apply m-0 font-mono text-[11px] break-all text-muted; }
   .new-session__actions { @apply flex gap-1.5; }
+  .new-session__where-to { @apply m-0 flex gap-3 border-0 p-0 text-muted; }
+  .new-session__where-to legend { @apply mb-1 p-0; }
+  .new-session__where-to label { @apply flex flex-row items-center gap-1 text-fg; }
+  /* the trade-off, where the choice is made */
+  .new-session__risk { @apply m-0 rounded border border-waiting px-2 py-1.5 text-[11px] text-waiting; }
   .session-list ul { @apply m-0 list-none p-0; }
   .session-row { @apply block w-full rounded-md border-0 border-l-2 border-transparent bg-transparent px-2 py-1.5 text-left hover:bg-surface-2; }
   .session-row--selected { @apply border-accent bg-surface-2; }
