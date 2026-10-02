@@ -43,3 +43,5 @@ export type { TelegramBridgeStatus, TelegramConnection, TelegramStatus } from '.
 export type { ScrubbableEvent } from './scrub';
 export type { FailureKind, SessionFailure } from './failure';
 export { FAILURE_MEANING } from './failure';
+export type { AccountUsage, UsageWindow, UsageLevel } from './usage';
+export { usageLevel, pressingWindow, usageSentence, resetWording, USAGE_NOTABLE, USAGE_TIGHT, USAGE_CRITICAL } from './usage';

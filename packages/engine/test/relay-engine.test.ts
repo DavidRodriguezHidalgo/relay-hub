@@ -835,7 +835,7 @@ describe('RelayEngine', () => {
     expect(sessionClient.lastOpts?.model).toBe('default');
   });
 
-  it('keeps asking for that model after the runner has been closed and rebuilt', async () => {
+  it('keeps asking for that model after the runner has been closed and rebuilt', { timeout: 30_000 }, async () => {
     const orchClient = new FakeAgentClient();
     orchClient.models = MODELS;
     const sessionClient = new FakeAgentClient();
@@ -861,7 +861,12 @@ describe('RelayEngine', () => {
     await writeFile(file, src.replaceAll('/repo/wt-a', join(repo + '-worktrees', 'feat-later')).replaceAll('s-basic', sessionId));
     const old = new Date('2026-09-20T10:01:00.000Z');
     await utimes(file, old, old);
-    for (let i = 0; !engine!.listSessions().some((s) => s.id === sessionId) && i < 100; i += 1) await new Promise((r) => setTimeout(r, 50));
+    // generous, because the whole suite runs in parallel and the indexer is watching a real directory
+    const indexed = Date.now() + 15_000;
+    while (!engine!.listSessions().some((s) => s.id === sessionId) && Date.now() < indexed) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(engine!.listSessions().map((s) => s.id)).toContain(sessionId);
 
     // the runner is closed for being idle, exactly as ten minutes of quiet would close it
     sessionClient.result();

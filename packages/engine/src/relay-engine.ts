@@ -3,7 +3,7 @@ import { access, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type SessionFailure, type NewSessionModel, type RelaySettings } from '@relay/shared';
+import { ORCHESTRATOR_KEY, type ApprovalDecision, type BulkRowStatus, type PrEvent, type PrWatch, type SessionState, type BulkRun, type DeliveryMode, type Invocable, type MessageOrigin, type RunnerEvent, type RunState, type SessionSummary, type TranscriptEntry, type UpdateCheck, type ModelChoice, type SessionStatus, type Accomplished, type Todo, type TodoDraft, type TodoPatch, type Screenshot, type ContextUse, type AccountUsage, type SessionFailure, type NewSessionModel, type RelaySettings } from '@relay/shared';
 import { ApprovalQueue } from './approvals/approval-queue';
 import { BulkRuns, repairLoadedRuns } from './bulk/bulk-runs';
 import { ExecGitInfoProvider, type GitInfoProvider } from './git/git-info';
@@ -31,6 +31,7 @@ import { SessionStore } from './store/session-store';
 import { TodoList } from './todos/todo-list';
 import { imagesIn, mediaTypeOf } from './visual/screenshots';
 import { contextUseFrom } from './context/context-use';
+import { accountUsageFrom } from './usage/account-usage';
 import { describeFailure } from './failures/classify';
 import { claudeDefaultModel, claudeSettingsPath } from './models/default-model';
 import { newSessionModel as resolveNewSessionModel } from './models/new-session-model';
@@ -66,6 +67,9 @@ const failureKey = (sessionId: string) => `${FAILURE_PREFIX}${sessionId}`;
 
 /** Meta key for the model Relay asks for when it starts a session; absent means the recommended one. */
 const NEW_SESSION_MODEL_KEY = 'settings.newSessionModel';
+
+/** Usage moves slowly enough that a minute-old answer is still true, and each one costs a process. */
+const USAGE_CACHE_MS = 60_000;
 
 const DEFAULT_IDLE_TIMEOUT_MS = 10 * 60 * 1_000;
 /** How much of a session's last reply the completion relay passes to the orchestrator. */
@@ -154,6 +158,8 @@ export class RelayEngine {
   /** Null unless the app has handed over a bot token; nothing about Telegram runs before that. */
   private telegram: TelegramBridge | null = null;
   private externalTimer: NodeJS.Timeout | null = null;
+  /** The last usage answer and when it was taken, so polling does not spawn a process each time. */
+  private usage: { at: number; value: AccountUsage } | null = null;
 
   private constructor(
     private readonly store: SessionStore,
@@ -507,6 +513,27 @@ export class RelayEngine {
       });
     }
     return checkForUpdate(this.updates);
+  }
+
+  /**
+   * How much of the account's allowance is gone.
+   *
+   * Cached briefly because each answer costs a runtime round trip, and the window polls. A runtime
+   * that cannot answer, or an experimental call that has changed under us, both come back as "not
+   * known" rather than as a number or an exception.
+   */
+  async accountUsage(): Promise<AccountUsage> {
+    const now = this.now().getTime();
+    if (this.usage && now - this.usage.at < USAGE_CACHE_MS) return this.usage.value;
+    let raw: unknown = null;
+    try {
+      raw = (await this.agent.accountUsage?.()) ?? null;
+    } catch {
+      // an experimental API that has moved is a thing Relay does not know, not a crash
+    }
+    const value = accountUsageFrom(raw, this.now().toISOString());
+    this.usage = { at: now, value };
+    return value;
   }
 
   /** What the user has turned on for themselves; kept across restarts. */

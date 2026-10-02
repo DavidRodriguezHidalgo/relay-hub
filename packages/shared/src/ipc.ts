@@ -3,6 +3,7 @@ import type { ApprovalDecision, DeliveryMode, MessageOrigin, PrWatch, RunState, 
 import type { SessionSummary } from './session';
 import type { Accomplished } from './accomplished';
 import type { ModelChoice, NewSessionModel, RelaySettings } from './models';
+import type { AccountUsage } from './usage';
 import type { SessionStatus } from './status';
 import type { CheckoutPlan, CheckoutResult, UpdateCheck, UpdateMode } from './updates';
 import type { TranscriptEntry } from './transcript';
@@ -36,6 +37,7 @@ export const IPC = {
   setNewSessionModel: 'relay:setNewSessionModel',
   availableModels: 'relay:availableModels',
   newSessionModel: 'relay:newSessionModel',
+  accountUsage: 'relay:accountUsage',
   channels: 'relay:channels',
   aside: 'relay:aside',
   checkForUpdate: 'relay:checkForUpdate',
@@ -121,6 +123,8 @@ export interface RelayApi {
   availableModels(): Promise<ModelChoice[]>;
   /** What a new session will run on, and whether that is a choice or the recommended default. */
   newSessionModel(): Promise<NewSessionModel>;
+  /** How much of the account's allowance is gone; `available: false` when Relay cannot tell. */
+  accountUsage(): Promise<AccountUsage>;
   /** The channels the running main process answers; a window compares it with what it expects. */
   channels(): Promise<string[]>;
   /** A side question answered from a copy of the session; resolves with the answer. */

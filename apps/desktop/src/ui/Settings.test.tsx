@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NO_TELEGRAM, type CheckoutPlan, type NewSessionModel } from '@relay/shared';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Settings } from './Settings';
 
 const base = {
+  usage: null,
+  now: new Date('2026-10-02T08:30:00.000Z'),
+  onRefreshUsage: vi.fn(),
+  refreshingUsage: false,
   newSessionModel: null as NewSessionModel | null,
   onNewSessionModel: vi.fn(),
   claudeDefaultModel: null,
@@ -54,7 +58,7 @@ describe('Settings', () => {
     await userEvent.click(toggle);
     expect(onAllowAllActions).toHaveBeenCalledWith(true);
 
-    rerender(<Settings {...base} allowAllActions onAllowAllActions={onAllowAllActions} />);
+    rerender(<Settings {...base} initialTab="about" allowAllActions onAllowAllActions={onAllowAllActions} />);
     expect(screen.getByRole('checkbox', { name: /Allow all actions/ })).toBeChecked();
     await userEvent.click(screen.getByRole('checkbox', { name: /Allow all actions/ }));
     expect(onAllowAllActions).toHaveBeenLastCalledWith(false);
@@ -73,24 +77,24 @@ describe('Settings', () => {
   });
   it('checks for updates on request and says where the app stands', async () => {
     const onCheckForUpdate = vi.fn();
-    const { rerender } = render(<Settings {...base} onCheckForUpdate={onCheckForUpdate} />);
+    const { rerender } = render(<Settings {...base} initialTab="about" onCheckForUpdate={onCheckForUpdate} />);
     await userEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
     expect(onCheckForUpdate).toHaveBeenCalled();
 
     const done = { current: '0.1.0', latest: '0.1.0', newer: false, url: 'u', notes: null, publishedAt: null, assetUrl: null, assetName: null, error: null };
-    rerender(<Settings {...base} update={done} />);
+    rerender(<Settings {...base} initialTab="about" update={done} />);
     expect(screen.getByRole('status')).toHaveTextContent('up to date');
     expect(screen.getByText(/Relay Hub 0\.1\.0/)).toBeInTheDocument();
 
-    rerender(<Settings {...base} update={{ ...done, latest: '0.2.0', newer: true, notes: '- faster' }} />);
+    rerender(<Settings {...base} initialTab="about" update={{ ...done, latest: '0.2.0', newer: true, notes: '- faster' }} />);
     expect(screen.getByRole('status')).toHaveTextContent('Version 0.2.0 is available');
     expect(screen.getByRole('link', { name: 'Open the release' })).toHaveAttribute('target', '_blank');
     expect(screen.getByText('- faster')).toBeInTheDocument();
 
-    rerender(<Settings {...base} update={{ ...done, latest: null }} />);
+    rerender(<Settings {...base} initialTab="about" update={{ ...done, latest: null }} />);
     expect(screen.getByRole('status')).toHaveTextContent('No release has been published yet');
 
-    rerender(<Settings {...base} update={{ ...done, error: 'GitHub answered 403' }} />);
+    rerender(<Settings {...base} initialTab="about" update={{ ...done, error: 'GitHub answered 403' }} />);
     expect(screen.getByRole('status')).toHaveTextContent('Couldn’t check: GitHub answered 403');
   });
 });
@@ -103,7 +107,7 @@ describe('Settings update button', () => {
 
   it('offers the download, shows the version on offer and what is new', async () => {
     const onDownloadUpdate = vi.fn();
-    render(<Settings {...base} update={offered} onDownloadUpdate={onDownloadUpdate} />);
+    render(<Settings {...base} initialTab="about" update={offered} onDownloadUpdate={onDownloadUpdate} />);
     expect(screen.getByRole('status')).toHaveTextContent('Version 0.2.0 is available');
     expect(screen.getByText('- faster')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Download the new version' }));
@@ -111,25 +115,25 @@ describe('Settings update button', () => {
   });
 
   it('says where the build landed and that it cannot replace itself', () => {
-    render(<Settings {...base} update={offered} downloadedTo="/Users/me/Downloads/Relay-0.2.0.zip" />);
+    render(<Settings {...base} initialTab="about" update={offered} downloadedTo="/Users/me/Downloads/Relay-0.2.0.zip" />);
     const done = screen.getAllByRole('status').map((n) => n.textContent).join(' ');
     expect(done).toContain('/Users/me/Downloads/Relay-0.2.0.zip');
     expect(done).toMatch(/cannot replace itself while running/);
   });
 
   it('reports a download that failed rather than looking like it worked', () => {
-    render(<Settings {...base} update={offered} downloadError="the download answered 404" />);
+    render(<Settings {...base} initialTab="about" update={offered} downloadError="the download answered 404" />);
     expect(screen.getByRole('alert')).toHaveTextContent('answered 404');
   });
 
   it('says so when the release has no build attached, instead of a button that does nothing', () => {
-    render(<Settings {...base} update={{ ...offered, assetUrl: null, assetName: null }} />);
+    render(<Settings {...base} initialTab="about" update={{ ...offered, assetUrl: null, assetName: null }} />);
     expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
     expect(screen.getByText(/no build attached/)).toBeInTheDocument();
   });
 
   it('always says which version is running', () => {
-    render(<Settings {...base} update={{ ...offered, newer: false, latest: '0.1.0' }} />);
+    render(<Settings {...base} initialTab="about" update={{ ...offered, newer: false, latest: '0.1.0' }} />);
     expect(screen.getByText(/Relay Hub 0\.1\.0/)).toBeInTheDocument();
   });
 });
@@ -144,7 +148,7 @@ describe('Settings in a git working copy', () => {
 
   it('says what it will pull, and from where, before doing it', async () => {
     const onPull = vi.fn();
-    render(<Settings {...base} {...checkout} checkoutPlan={ready} onPull={onPull} />);
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={ready} onPull={onPull} />);
     expect(screen.getByText(/2 commits to pull from/)).toBeInTheDocument();
     expect(screen.getByText(/first thing/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Pull and update this working copy' }));
@@ -152,12 +156,12 @@ describe('Settings in a git working copy', () => {
   });
 
   it('warns that the dependencies will be reinstalled when they changed', () => {
-    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, needsInstall: true }} />);
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={{ ...ready, needsInstall: true }} />);
     expect(screen.getByText(/dependencies will be installed again/)).toBeInTheDocument();
   });
 
   it('refuses with the reason, and offers no button at all', () => {
-    render(<Settings {...base} {...checkout} checkoutPlan={{
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={{
       ...ready, kind: 'refused', commits: [],
       reason: '2 files changed but not committed. Commit or put them aside yourself first — Relay will not touch them.',
     }} />);
@@ -166,7 +170,7 @@ describe('Settings in a git working copy', () => {
   });
 
   it('says what was pulled and to restart', () => {
-    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
       checkoutResult={{ pulled: [{ sha: 'a', subject: 'x' }], installed: true, error: null }} />);
     const said = screen.getAllByRole('status').map((n) => n.textContent).join(' ');
     expect(said).toMatch(/Pulled 1 commit/);
@@ -175,13 +179,13 @@ describe('Settings in a git working copy', () => {
   });
 
   it('says when the pull worked but installing did not', () => {
-    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
       checkoutResult={{ pulled: [{ sha: 'a', subject: 'x' }], installed: false, error: 'The changes were pulled, but installing the dependencies failed: network down. Run pnpm install yourself.' }} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/pulled, but installing/);
   });
 
   it('never offers the packaged path in a working copy', () => {
-    render(<Settings {...base} {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
+    render(<Settings {...base} initialTab="about" {...checkout} checkoutPlan={{ ...ready, kind: 'up-to-date', commits: [] }}
       update={{ current: '0.1.0', latest: '0.2.0', newer: true, url: 'u', notes: null, publishedAt: null, assetUrl: 'https://x/z.zip', assetName: 'z.zip', error: null }} />);
     expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument();
     expect(screen.getByText(/level with origin\/main/)).toBeInTheDocument();
@@ -190,13 +194,13 @@ describe('Settings in a git working copy', () => {
 
 describe('Settings says which kind of copy this is', () => {
   it('names a checkout, and what a checkout gives you that a build does not', () => {
-    render(<Settings {...base} updateMode="checkout" />);
+    render(<Settings {...base} initialTab="about" updateMode="checkout" />);
     expect(screen.getByText('running from a checkout')).toBeInTheDocument();
     expect(screen.getByText(/its own message box/)).toBeInTheDocument();
   });
 
   it('names an installed build, without the checkout note', () => {
-    render(<Settings {...base} updateMode="packaged" />);
+    render(<Settings {...base} initialTab="about" updateMode="packaged" />);
     expect(screen.getByText('installed build')).toBeInTheDocument();
     expect(screen.queryByText(/its own message box/)).not.toBeInTheDocument();
   });
@@ -209,17 +213,17 @@ describe('Settings tells apart pulling, rebuilding and an unmerged change', () =
   });
 
   it('says to pull when commits are waiting', () => {
-    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({ commits: [{ sha: 'a', subject: 'x' }] })} />);
+    render(<Settings {...base} initialTab="about" updateMode="checkout" checkoutPlan={plan({ commits: [{ sha: 'a', subject: 'x' }] })} />);
     expect(screen.getByText(/1 commit waiting on main/)).toBeInTheDocument();
   });
 
   it('says to restart when the checkout moved under the running app', () => {
-    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({ runningSha: 'old1234', headSha: 'new5678' })} />);
+    render(<Settings {...base} initialTab="about" updateMode="checkout" checkoutPlan={plan({ runningSha: 'old1234', headSha: 'new5678' })} />);
     expect(screen.getByText(/restart it to run new5678/)).toBeInTheDocument();
   });
 
   it('says nothing is missing locally, which leaves only an unmerged change', () => {
-    render(<Settings {...base} updateMode="checkout" checkoutPlan={plan({})} />);
+    render(<Settings {...base} initialTab="about" updateMode="checkout" checkoutPlan={plan({})} />);
     expect(screen.getByText(/has not been merged yet/)).toBeInTheDocument();
   });
 });
@@ -268,5 +272,67 @@ describe('Settings and the model new sessions start on', () => {
   it('says so plainly when the model list could not be read, rather than naming a model it is not sure of', () => {
     render(<Settings {...base} models={[]} newSessionModel={{ id: null, resolvedModel: null, source: 'unknown' }} />);
     expect(screen.getByText(/could not be read/)).toBeInTheDocument();
+  });
+});
+
+describe('Settings tabs and the usage tab', () => {
+  const usage = {
+    available: true,
+    plan: 'team',
+    checkedAt: '2026-10-02T08:30:00.000Z',
+    windows: [
+      { kind: 'five-hour' as const, percent: 26, resetsAt: '2026-10-02T12:29:59.000Z' },
+      { kind: 'seven-day' as const, percent: 53, resetsAt: '2026-10-06T03:59:59.000Z' },
+    ],
+  };
+
+  it('has three tabs and starts on the one it was opened for', () => {
+    render(<Settings {...base} initialTab="usage" usage={usage} />);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getByRole('tab', { name: 'Usage' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Usage' })).toBeVisible();
+  });
+
+  it('opens on General when nothing asked for a particular tab', () => {
+    render(<Settings {...base} usage={usage} />);
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('switches between tabs', async () => {
+    render(<Settings {...base} usage={usage} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Usage' }));
+    expect(screen.getByRole('tab', { name: 'Usage' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('shows every window with its share and when it comes back', () => {
+    render(<Settings {...base} initialTab="usage" usage={usage} />);
+    const panel = within(screen.getByRole('tabpanel', { name: 'Usage' }));
+    expect(panel.getByRole('meter', { name: 'Current session usage' })).toHaveAttribute('aria-valuenow', '26');
+    expect(panel.getByRole('meter', { name: 'This week usage' })).toHaveAttribute('aria-valuenow', '53');
+    expect(panel.getByText(/53% used/)).toBeInTheDocument();
+  });
+
+  it('says where the figure comes from, since that is what the room here is for', () => {
+    render(<Settings {...base} initialTab="usage" usage={usage} />);
+    const panel = within(screen.getByRole('tabpanel', { name: 'Usage' }));
+    expect(panel.getByText(/nothing here is estimated or inferred/)).toBeInTheDocument();
+    expect(panel.getByText(/experimental/)).toBeInTheDocument();
+  });
+
+  it('says it cannot read them rather than drawing an empty bar', () => {
+    render(
+      <Settings {...base} initialTab="usage" usage={{ available: false, plan: null, windows: [], checkedAt: 'x' }} />,
+    );
+    const panel = within(screen.getByRole('tabpanel', { name: 'Usage' }));
+    expect(panel.getByText(/cannot read your usage limits/)).toBeInTheDocument();
+    expect(panel.queryByRole('meter')).toBeNull();
+  });
+
+  it('can be asked to check again', async () => {
+    const onRefreshUsage = vi.fn();
+    render(<Settings {...base} initialTab="usage" usage={usage} onRefreshUsage={onRefreshUsage} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Check now' }));
+    expect(onRefreshUsage).toHaveBeenCalled();
   });
 });
