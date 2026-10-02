@@ -112,7 +112,8 @@ export interface RelayApi {
   watchCreate(sessionId: string): Promise<PrWatch>;
   watchDelete(watchId: string): Promise<void>;
   listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
-  createSession(req: { project: string; branch: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
+  /** Without `inPlace`, `branch` names a new worktree; with it, the session works in `project` as it stands. */
+  createSession(req: { project: string; branch: string; prompt: string; inPlace?: boolean }): Promise<{ sessionId: string; cwd: string }>;
   listCommands(sessionId: string): Promise<Invocable[]>;
   takeOver(sessionId: string): Promise<number[]>;
   settings(): Promise<RelaySettings>;
