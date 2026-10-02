@@ -168,3 +168,68 @@ describe('OrchestratorChat', () => {
     expect(screen.getByRole('button', { name: 'deadbeef' })).toBeInTheDocument();
   });
 });
+
+describe('OrchestratorChat send button', () => {
+  const chat = (onSend = vi.fn()) => {
+    render(
+      <OrchestratorChat
+        history={[]}
+        liveEntries={[]}
+        state={undefined}
+        onSend={onSend}
+        onInterrupt={vi.fn()}
+        bulkRuns={[]}
+        onBulkConfirm={vi.fn()}
+        onBulkCancel={vi.fn()}
+        approvals={[]}
+        sessions={[]}
+        onOpenSession={vi.fn()}
+      />,
+    );
+    return { onSend, box: screen.getByPlaceholderText('Ask Relay…'), button: screen.getByRole('button', { name: 'Send' }) };
+  };
+
+  it('offers nothing to press until there is something to send', () => {
+    const { button } = chat();
+    expect(button).toBeDisabled();
+  });
+
+  it('becomes pressable once something is typed, and sends on click', async () => {
+    const { onSend, box, button } = chat();
+    await userEvent.type(box, 'what is running?');
+    expect(button).toBeEnabled();
+    await userEvent.click(button);
+    expect(onSend).toHaveBeenCalledWith('what is running?');
+  });
+
+  it('stays disabled for whitespace alone, which the keyboard also refuses', async () => {
+    const { box, button } = chat();
+    await userEvent.type(box, '   ');
+    expect(button).toBeDisabled();
+  });
+
+  it('clears the box after sending, as the keyboard does', async () => {
+    const { box, button } = chat();
+    await userEvent.type(box, 'go');
+    await userEvent.click(button);
+    expect(box).toHaveValue('');
+  });
+
+  it('leaves the keyboard exactly as it was: Enter sends, Shift+Enter makes a newline', async () => {
+    const { onSend, box } = chat();
+    await userEvent.type(box, 'first{Shift>}{Enter}{/Shift}second');
+    expect(onSend).not.toHaveBeenCalled();
+    expect(box).toHaveValue('first\nsecond');
+    await userEvent.type(box, '{Enter}');
+    expect(onSend).toHaveBeenCalledWith('first\nsecond');
+  });
+
+  it('sits below the box rather than inside it, so no typing space is lost', () => {
+    const { box, button } = chat();
+    const row = button.closest('.chat-input__row');
+    expect(row).not.toBeNull();
+    // the box is not in that row, so the button takes none of its width
+    expect(row).not.toContainElement(box);
+    expect(box.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

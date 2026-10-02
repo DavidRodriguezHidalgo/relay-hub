@@ -244,6 +244,8 @@
   .relay-update { @apply my-1 mb-3 border-l-2 border-accent pl-2 text-[12px] text-muted; }
   .chat-input { @apply bg-bg py-3; }
   .chat-input textarea { @apply w-full text-[15px]; }
+  /* its own row beneath the box, matching the session panel's send row */
+  .chat-input__row { @apply mt-1 flex justify-end; }
 
   .bulk-card { @apply mb-3 rounded-lg border border-line bg-surface px-3 py-2; }
   .bulk-card h3 { @apply m-0 mb-2 text-[13px] font-semibold; }
