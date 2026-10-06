@@ -133,6 +133,12 @@ export function OrchestratorChat({
             setDraft((d) => withPaths(d, paths));
           }}
         />
+        {/* under the box, not inside it: the full width stays available to type in */}
+        <div className="chat-input__row">
+          <button type="button" className="btn-primary" disabled={!draft.trim()} onClick={submit}>
+            Send
+          </button>
+        </div>
       </div>
     </>
   );
