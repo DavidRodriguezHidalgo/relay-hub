@@ -11,7 +11,7 @@ interface Props {
   listProjects: () => Promise<Project[]>;
   /** What this session will come up on; null while it is still being looked up. */
   model: NewSessionModel | null;
-  onCreate: (req: { project: string; branch: string; prompt: string }) => Promise<{ sessionId: string; cwd: string }>;
+  onCreate: (req: { project: string; branch: string; prompt: string; inPlace: boolean }) => Promise<{ sessionId: string; cwd: string }>;
   onCreated: (sessionId: string) => void;
   onCancel: () => void;
 }
@@ -27,6 +27,8 @@ export function NewSessionForm({ listProjects, model, onCreate, onCreated, onCan
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState('');
   const [branch, setBranch] = useState('');
+  /** Worktree by default: two sessions in one directory is what loses work. */
+  const [inPlace, setInPlace] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,13 +37,13 @@ export function NewSessionForm({ listProjects, model, onCreate, onCreated, onCan
     void listProjects().then(setProjects, (e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [listProjects]);
 
-  const ready = project !== '' && branch.trim() !== '' && prompt.trim() !== '' && !busy;
+  const ready = project !== '' && (inPlace || branch.trim() !== '') && prompt.trim() !== '' && !busy;
   const submit = async () => {
     if (!ready) return;
     setBusy(true);
     setError(null);
     try {
-      const created = await onCreate({ project, branch: branch.trim(), prompt: prompt.trim() });
+      const created = await onCreate({ project, branch: inPlace ? '' : branch.trim(), prompt: prompt.trim(), inPlace });
       onCreated(created.sessionId);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -69,11 +71,31 @@ export function NewSessionForm({ listProjects, model, onCreate, onCreated, onCan
           ))}
         </select>
       </label>
-      <label>
-        Branch
-        <input aria-label="Branch" placeholder="feat/my-change" value={branch} onChange={(e) => setBranch(e.target.value)} />
-      </label>
-      {project && branch.trim() && <p className="new-session__where">New worktree: {previewPath(project, branch.trim())}</p>}
+      <fieldset className="new-session__where-to">
+        <legend>Where it works</legend>
+        <label>
+          <input type="radio" name="workspace" checked={!inPlace} onChange={() => setInPlace(false)} /> New worktree
+        </label>
+        <label>
+          <input type="radio" name="workspace" checked={inPlace} onChange={() => setInPlace(true)} /> This checkout
+        </label>
+      </fieldset>
+      {!inPlace && (
+        <label>
+          Branch
+          <input aria-label="Branch" placeholder="feat/my-change" value={branch} onChange={(e) => setBranch(e.target.value)} />
+        </label>
+      )}
+      {!inPlace && project && branch.trim() && (
+        <p className="new-session__where">New worktree: {previewPath(project, branch.trim())}</p>
+      )}
+      {inPlace && (
+        <p className="new-session__risk">
+          It will edit the same files you have open, on whatever branch is checked out. Anything else working
+          there — you, or another session — can double-apply edits or leave the tree dirty. Useful when you want
+          to run the branch yourself while it works.
+        </p>
+      )}
       {/* said before the session exists, so the model is never a surprise found out afterwards —
           including when it is bad news, which is exactly when this used to render nothing at all */}
       {model && (

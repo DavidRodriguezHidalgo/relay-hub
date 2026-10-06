@@ -34,7 +34,7 @@ export interface RelayToolDeps {
   /** By session id: stops that session's active watch. */
   deleteWatch(sessionId: string): Promise<void>;
   listProjects(): Promise<{ name: string; root: string; sessions: number }[]>;
-  createSession(req: { project: string; branch?: string; prompt: string }): Promise<{ sessionId: string; cwd: string }>;
+  createSession(req: { project: string; branch?: string; prompt: string; inPlace?: boolean }): Promise<{ sessionId: string; cwd: string }>;
 }
 
 /** One of the user's open PRs, joined to the session working on its branch. */
@@ -327,17 +327,20 @@ export function createRelayTools(deps: RelayToolDeps): AgentTool[] {
     project: z.ZodString;
     branch: z.ZodOptional<z.ZodString>;
     prompt: z.ZodString;
+    inPlace: z.ZodOptional<z.ZodBoolean>;
   }> = {
     name: 'create_session',
     description:
       'Start a new Claude session. project: a name from list_projects or an absolute directory. ' +
       'branch: the branch to create a fresh git worktree for (normal case; an existing origin branch is checked out). ' +
       'Without a branch, project must be the absolute path of an existing worktree: main checkouts are refused. ' +
+      'inPlace: work in that directory as it stands, main checkout included, making no branch and no worktree. ' +
+      'Only when the user has asked for it — two sessions editing one directory double-apply edits. ' +
       'prompt: its first instruction, complete on its own.',
-    input: { project: z.string(), branch: z.string().optional(), prompt: z.string() },
-    handler: async ({ project, branch, prompt }) => {
+    input: { project: z.string(), branch: z.string().optional(), prompt: z.string(), inPlace: z.boolean().optional() },
+    handler: async ({ project, branch, prompt, inPlace }) => {
       try {
-        const created = await deps.createSession({ project, ...(branch ? { branch } : {}), prompt });
+        const created = await deps.createSession({ project, ...(branch ? { branch } : {}), prompt, ...(inPlace ? { inPlace } : {}) });
         return ok({ created: true, ...created });
       } catch (err) {
         return fail(err);
