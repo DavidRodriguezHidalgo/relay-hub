@@ -47,3 +47,24 @@ describe('stalenessOf', () => {
     expect(stalenessOf({ missingChannels: 0, shown: null, current: s({}) })).toBeNull();
   });
 });
+
+describe('stalenessOf and a directory that is already gone', () => {
+  const s = (over: Partial<SessionSummary> = {}): SessionSummary => ({
+    id: 'x', filePath: '/f', cwd: '/code/wt-a', cwdExists: true, repo: 'repo', branch: 'feat/a', title: 'T',
+    lastActivity: '2026-10-02T00:00:00.000Z', messageCount: 1, prNumber: null, prUrl: null, continuedIn: null,
+    context: null, isStale: false, ...over,
+  });
+
+  it('names the missing directory for a session opened after the worktree was removed', () => {
+    const gone = s({ cwdExists: false });
+    // nothing vanished while it was on screen: it was already gone when it was opened
+    expect(stalenessOf({ missingChannels: 0, shown: gone, current: gone })).toEqual({
+      kind: 'moved',
+      message: 'The directory this session works in is gone: /code/wt-a. It cannot be driven until it is back.',
+    });
+  });
+
+  it('still names it when it vanishes while the session is on screen', () => {
+    expect(stalenessOf({ missingChannels: 0, shown: s(), current: s({ cwdExists: false }) })?.kind).toBe('moved');
+  });
+});

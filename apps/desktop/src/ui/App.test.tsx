@@ -237,7 +237,7 @@ describe('App', () => {
     await userEvent.type(screen.getByLabelText('Branch'), 'feat/x');
     await userEvent.type(screen.getByLabelText('First instruction'), 'Add a CSV export');
     await userEvent.click(screen.getByRole('button', { name: 'Create session' }));
-    expect(relay.createSession).toHaveBeenCalledWith({ project: '/code/factorial', branch: 'feat/x', prompt: 'Add a CSV export' });
+    expect(relay.createSession).toHaveBeenCalledWith({ project: '/code/factorial', branch: 'feat/x', prompt: 'Add a CSV export', inPlace: false });
     expect(screen.queryByLabelText('Branch')).not.toBeInTheDocument();
   });
 

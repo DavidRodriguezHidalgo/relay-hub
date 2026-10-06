@@ -33,10 +33,11 @@ export function stalenessOf(state: SeenState): Staleness | null {
   const { shown, current } = state;
   if (!shown || !current) return null;
 
-  if (shown.cwdExists && !current.cwdExists) {
+  // not only when it vanishes under you: a session opened after the fact has to say so too
+  if (!current.cwdExists) {
     return {
       kind: 'moved',
-      message: `The directory this session works in is gone: ${shown.cwd}. It cannot be driven until it is back.`,
+      message: `The directory this session works in is gone: ${current.cwd}. It cannot be driven until it is back.`,
     };
   }
   if (shown.cwd !== current.cwd) {

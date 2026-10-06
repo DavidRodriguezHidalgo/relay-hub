@@ -102,7 +102,7 @@ export function registerEngineIpc(engine: RelayEngine): () => void {
   handle(IPC.attachTodo, (id: string, sessionId: string) => engine.attachTodo(id, sessionId));
   handle(IPC.detachTodo, (id: string) => engine.detachTodo(id));
   handle(IPC.contextUse, (sessionId: string) => engine.contextUse(sessionId));
-  handle(IPC.createSession, (req: { project: string; branch: string; prompt: string }) =>
+  handle(IPC.createSession, (req: { project: string; branch: string; prompt: string; inPlace?: boolean }) =>
     engine.createSession({ ...req, origin: 'user' }),
   );
 
